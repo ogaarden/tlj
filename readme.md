@@ -29,5 +29,9 @@ Notes:
 1) Ricochet ability (spretter videre, svakere per sprett)
 2) Rot ability (AOE aura, lav skade hver frame)
 3) Damage numbers over fiender
+4) Hver karakter har en unik (innate) ability + 4 ledige ability slots
+5) HUD med 5 ability slots (mørke til de låses opp)
+6) Abilities går fra level 1-9 med forhåndsbestemte oppgraderinger (abilities.cpp)
+7) Nye abilities: Magic Missile, Dagger, Orbit Blades, Lightning
 
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

@@ -13,6 +13,7 @@
 #include "enemy.hpp"
 #include "weapon.hpp"
 #include "damage_numbers.hpp"
+#include "abilities.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -23,31 +24,6 @@ enum GameState {
     LEVEL_UP,
     ITEM_SELECT
 };
-
-struct UpgradeOption {
-    std::string title;
-    std::string description;
-    int weaponId;
-};
-
-std::vector<UpgradeOption> GetRandomUpgrades() {
-    std::vector<UpgradeOption> allPossibleUpgrades = {
-        { "Standard Gun", "Skyter kuler mot nærmeste fiende.", 0 },
-        { "Melee Sword", "Svinger et sverd rundt deg i nærkamp.", 1 },
-        { "Weapon Upgrade", "Øker skade og reduserer cooldown.", 2 },
-        { "Ricochet", "Kule som spretter videre til neste fiende (svakere per sprett).", 3 },
-        { "Rot", "Giftaura som skader alle fiender rundt deg hele tiden.", 4 }
-    };
-
-    std::vector<UpgradeOption> chosenUpgrades;
-    while (chosenUpgrades.size() < 3 && !allPossibleUpgrades.empty()) {
-        int randomIndex = rand() % allPossibleUpgrades.size();
-        chosenUpgrades.push_back(allPossibleUpgrades[randomIndex]);
-        allPossibleUpgrades.erase(allPossibleUpgrades.begin() + randomIndex);
-    }
-    return chosenUpgrades;
-}
-
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
@@ -77,7 +53,7 @@ int main() {
     Camera2D camera{};
 
     int lastPlayerLevel = 1;
-    std::vector<UpgradeOption> activeUpgradeChoices;
+    std::vector<AbilityChoice> activeUpgradeChoices;
     int selectedUpgradeOption = 0;
 
     // --- SPAWNER OG FIENDER ---
@@ -130,16 +106,22 @@ int main() {
                 player.cooldownReduction = 0.0f;
                 player.projectileCount = 1;
 
+                // Nullstill progresjon fra forrige runde
+                player.position = { 0.0f, 0.0f };
+                player.level = 1;
+                player.currentXp = 0;
+                player.xpToNextLevel = 100;
+                player.weapons.clear();
+                lastPlayerLevel = 1;
+
                 // 2. La shoppen påføre arvede basestats + shop-multiplikatorer
                 shop.applyToPlayer(choice, player);
 
                 player.texture = characterTextures[selectedCharacter];
 
-                player.addWeapon(std::make_unique<ProjectileWeapon>(choice.weaponName, choice.cooldown, choice.weaponSpeed, choice.weaponDamage));
-
-                for (auto& w : player.weapons) {
-                    w->update(deltaTime, player.position, enemies, xpOrbs, player.projectileCount);
-                }
+                // Karakterens unike ability tar alltid første slot
+                player.innateAbility = choice.innateAbility;
+                player.addWeapon(CreateAbility(choice.innateAbility));
 
                 // Kamera-oppsett
                 camera.target = player.position;
@@ -151,6 +133,7 @@ int main() {
                 spawner.gameTime = 0.0f;
                 spawner.spawnTimer = 0.0f;
                 enemies.clear();
+                xpOrbs.clear();
                 ClearDamageNumbers();
 
                 currentState = GAMEPLAY;
@@ -176,7 +159,7 @@ int main() {
                 lastPlayerLevel = player.level;
                 currentState = LEVEL_UP;
                 selectedUpgradeOption = 0;
-                activeUpgradeChoices = GetRandomUpgrades();
+                activeUpgradeChoices = GenerateLevelUpChoices(player);
             }
 
             // 1. INPUT & OPPDRATERING
@@ -221,9 +204,12 @@ int main() {
                 }
             }
 
-            //Våpen tegn og oppdatering
+            // Oppdater alle abilities
+            CombatModifiers mods;
+            mods.extraProjectiles = player.projectileCount - 1;
+            mods.damageMult = player.spellAmp;
             for (auto& w : player.weapons) {
-                w->update(deltaTime, player.position, enemies, xpOrbs, player.projectileCount);
+                w->update(deltaTime, player.position, enemies, xpOrbs, mods);
             }
 
             UpdateDamageNumbers(deltaTime);
@@ -248,42 +234,7 @@ int main() {
             }
             // Bekreft valg
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                UpgradeOption chosen = activeUpgradeChoices[selectedUpgradeOption];
-
-                if (chosen.weaponId == 0) {
-                    if (player.weapons.size() < (size_t)player.maxWeapons) {
-                        player.addWeapon(std::make_unique<ProjectileWeapon>("Standard Gun", 0.3f, 500.0f, 25.0f));
-                    }
-                } 
-                else if (chosen.weaponId == 1) {
-                    if (player.weapons.size() < (size_t)player.maxWeapons) {
-                        player.addWeapon(std::make_unique<MeleeWeapon>("Melee Sword", 0.5f, 120.0f, 35.0f));
-                    }
-                } 
-                else if (chosen.weaponId == 2) {
-                    if (!player.weapons.empty()) {
-                        player.weapons[0]->upgrade();
-                    }
-                }
-                else if (chosen.weaponId == 3 || chosen.weaponId == 4) {
-                    // Har vi allerede våpenet? Da oppgraderer vi det i stedet for å legge til et nytt
-                    Weapon* existing = nullptr;
-                    for (auto& w : player.weapons) {
-                        if (w->name == chosen.title) existing = w.get();
-                    }
-
-                    if (existing) {
-                        existing->upgrade();
-                    } else if (player.weapons.size() < (size_t)player.maxWeapons) {
-                        if (chosen.weaponId == 3) {
-                            // navn, cooldown, fart, skade, antall sprett, sprett-rekkevidde
-                            player.addWeapon(std::make_unique<RicochetWeapon>("Ricochet", 0.9f, 550.0f, 40.0f, 3, 250.0f));
-                        } else {
-                            // navn, skade per sekund, radius
-                            player.addWeapon(std::make_unique<RotWeapon>("Rot", 60.0f, 110.0f));
-                        }
-                    }
-                }
+                ApplyAbilityChoice(player, activeUpgradeChoices[selectedUpgradeOption]);
 
                 currentState = GAMEPLAY; // Tilbake til spillet!
             }
@@ -417,6 +368,10 @@ int main() {
             DrawRectangle((int)barX, (int)barY, (int)barWidth, (int)barHeight, DARKGRAY);
             DrawRectangle((int)barX, (int)barY, (int)(barWidth * xpProgress), (int)barHeight, BLUE);
             DrawRectangleLines((int)barX, (int)barY, (int)barWidth, (int)barHeight, WHITE);
+            DrawText(TextFormat("Lv %d", player.level), (int)(barX + barWidth + 10), (int)barY - 2, 16, WHITE);
+
+            // --- ABILITY-SLOTS (5 stk, låste er mørke) ---
+            DrawAbilityHud(player, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT);
 
             if (currentState == LEVEL_UP) {
                 // Mørklegg skjermen bak menyen
@@ -435,6 +390,9 @@ int main() {
                     // Tegn boks
                     DrawRectangle(Settings::SCREEN_WIDTH / 2 - cardWidth / 2, cardY, cardWidth, cardHeight, isSelected ? DARKGRAY : BLACK);
                     DrawRectangleLines(Settings::SCREEN_WIDTH / 2 - cardWidth / 2, cardY, cardWidth, cardHeight, isSelected ? YELLOW : GRAY);
+
+                    // Fargestripe som viser hvilken ability det gjelder
+                    DrawRectangle(Settings::SCREEN_WIDTH / 2 - cardWidth / 2, cardY, 6, cardHeight, activeUpgradeChoices[i].color);
 
                     // Innhold i boksen
                     Color textColor = isSelected ? YELLOW : WHITE;

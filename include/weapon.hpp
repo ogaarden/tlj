@@ -5,69 +5,82 @@
 #include <vector>
 #include <memory>
 #include <string>
+#include <unordered_map>
 #include "enemy.hpp"
+#include "ability_types.hpp"
 
-// Baseklassen for ALLE våpen
+// Bonuser fra spilleren som gjelder alle abilities
+struct CombatModifiers {
+    int extraProjectiles = 0; // Fra shop ("Projectile count")
+    float damageMult = 1.0f;  // Spillerens spellAmp
+};
+
+// Baseklassen for ALLE abilities/våpen.
+// Alle tall ligger i `stats`, som settes og oppgraderes fra level-tabellene i abilities.cpp.
 class Weapon {
 protected:
     float fireTimer = 0.0f;
-    float fireRate = 0.3f;
-    int damage = 25;
+
+    int scaledDamage(const CombatModifiers& mods) const { return (int)(stats.damage * mods.damageMult); }
 
 public:
+    AbilityId id = AbilityId::TREFORK;
     std::string name;
+    Color color = WHITE;
     int level = 1;
+    AbilityStats stats;
 
     // Virtuell destruktør er obligatorisk når man bruker arv i C++
     virtual ~Weapon() = default;
 
-    // "Pure virtual" funksjoner betyr at subklassene Må skrive sin egen versjon av disse!
-    virtual void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, int projectileCount = 1) = 0;
+    // "Pure virtual" funksjoner betyr at subklassene MÅ skrive sin egen versjon av disse!
+    virtual void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) = 0;
     virtual void draw() const = 0;
-    virtual void upgrade() {
-        level++;
-        damage += 10.0;
-        fireRate *= 0.9f; // Standard oppgradering: litt raskere
+
+    // 0.0 = nettopp brukt, 1.0 = klar. Brukes av HUD-en.
+    virtual float cooldownProgress() const {
+        if (stats.cooldown <= 0.0f) return 1.0f;
+        float p = fireTimer / stats.cooldown;
+        return p > 1.0f ? 1.0f : p;
     }
 };
 
-// Subklasse for vanlige avstandsvåpen som skyter kuler/prosjektiler
+// --- Rette prosjektiler (Trefork, Dagger) ---
 struct Projectile {
     Vector2 position;
     Vector2 direction;
     float speed;
     int damage;
     float lifetime;
+    int pierceLeft;
+    std::vector<int> hitEnemyIds;
 };
 
 class ProjectileWeapon : public Weapon {
 private:
-    float projectileSpeed;
+    bool spread; // true = vifte mot nærmeste fiende (Trefork), false = én kule per nærmeste fiende (Dagger)
     std::vector<Projectile> projectiles;
 
 public:
-    ProjectileWeapon(std::string weaponName, float rate, float speed, float dmg);
+    explicit ProjectileWeapon(bool fireInSpread);
 
-    // Override betyr at vi implementerer logikken spesifikt for avstandsvåpen
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, int projectileCount = 1) override;
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
     void draw() const override;
 };
 
+// --- AOE-slag rundt spilleren (Ground Slam) ---
 class MeleeWeapon : public Weapon {
-private: 
-    float radius;
-    Vector2 lastPlayerPos; // Lagrer spillerens posisjon slik at draw() kan bruke den
+private:
+    Vector2 lastPlayerPos = { 0, 0 }; // Lagrer spillerens posisjon slik at draw() kan bruke den
+    float effectTimer = 0.0f;
 
 public:
-    MeleeWeapon(std::string weaponName, float rate, float hitRadius, float dmg);
-
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, int projectileCount = 1) override;
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
     void draw() const override;
 };
 
-// Prosjektil som spretter videre til nærmeste fiende når det treffer.
-// Hvert sprett gjør mindre skade og har kortere rekkevidde enn det forrige.
-struct RicochetProjectile {
+// --- Prosjektiler som spretter videre ved treff (Ricochet, Magic Missile) ---
+struct BouncingProjectile {
     Vector2 position;
     Vector2 direction;
     float speed;
@@ -75,42 +88,68 @@ struct RicochetProjectile {
     float lifetime;
     int bouncesLeft;
     float bounceRange;
+    int targetId;                 // Fienden vi styrer mot (kun homing)
     std::vector<int> hitEnemyIds; // Så den ikke spretter tilbake til samme fiende
 };
 
-class RicochetWeapon : public Weapon {
+class BouncingProjectileWeapon : public Weapon {
 private:
-    float projectileSpeed;
-    int maxBounces;
-    float bounceRange;
-    float damageFalloff; // Skade-multiplikator per sprett (0.7 = -30% per sprett)
-    float rangeFalloff;  // Rekkevidde-multiplikator per sprett
-    std::vector<RicochetProjectile> projectiles;
+    bool homing; // true = svinger mot målet (Magic Missile), false = flyr rett (Ricochet)
+    std::vector<BouncingProjectile> projectiles;
 
 public:
-    RicochetWeapon(std::string weaponName, float rate, float speed, float dmg, int bounces, float range);
+    explicit BouncingProjectileWeapon(bool isHoming);
 
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, int projectileCount = 1) override;
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
     void draw() const override;
-    void upgrade() override;
 };
 
-// Aura rundt spilleren som gjør lav skade på alle fiender innenfor radius HVER FRAME.
-// Skaden er definert som skade per sekund og akkumuleres, slik at den blir lik uansett FPS.
+// --- Aura som gjør skade HVER FRAME (Rot) ---
+// stats.damage er skade per sekund, og akkumuleres slik at den blir lik uansett FPS.
 class RotWeapon : public Weapon {
 private:
-    float radius;
-    float damagePerSecond;
     float damageAccumulator = 0.0f;
     float pulseTimer = 0.0f;
     Vector2 lastPlayerPos = { 0, 0 };
 
 public:
-    RotWeapon(std::string weaponName, float dps, float auraRadius);
-
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, int projectileCount = 1) override;
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
     void draw() const override;
-    void upgrade() override;
+    float cooldownProgress() const override { return 1.0f; }
+};
+
+// --- Blader som sirkler rundt spilleren (Orbiting Blades) ---
+class OrbitWeapon : public Weapon {
+private:
+    float angle = 0.0f;
+    float time = 0.0f;
+    int bladeCount = 0;
+    Vector2 lastPlayerPos = { 0, 0 };
+    std::unordered_map<int, float> lastHitTime; // Fiende-id -> tidspunkt for siste treff
+
+    Vector2 bladePosition(int index) const;
+
+public:
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void draw() const override;
+    float cooldownProgress() const override { return 1.0f; }
+};
+
+// --- Lyn som slår ned på tilfeldige fiender i nærheten (Lightning) ---
+struct LightningBolt {
+    Vector2 target;
+    float radius;
+    float timer;
+    std::vector<Vector2> points;
+};
+
+class LightningWeapon : public Weapon {
+private:
+    std::vector<LightningBolt> bolts;
+
+public:
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void draw() const override;
 };
 
 #endif // WEAPON_HPP

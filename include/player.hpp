@@ -34,8 +34,9 @@ struct Player {
     int currentXp = 0;
     int xpToNextLevel = 100;
 
+    // Abilities: weapons[0] er alltid karakterens innate ability, resten låses opp via level up
     std::vector<std::unique_ptr<Weapon>> weapons;
-    int maxWeapons = 5;
+    AbilityId innateAbility = AbilityId::TREFORK;
 
     float facingRotation = 0.0f;
 
@@ -45,6 +46,7 @@ struct Player {
     void addXP(int amount);
 
     void addWeapon(std::unique_ptr<Weapon> newWeapon);
+    Weapon* findAbility(AbilityId id) const;
 };
 
 #endif // PLAYER_HPP

@@ -71,9 +71,16 @@ bool Player::takeDamage(float rawDamage)
 }
 
 void Player::addWeapon(std::unique_ptr<Weapon> newWeapon) {
-    if (weapons.size() < maxWeapons) {
+    if (newWeapon && (int)weapons.size() < MAX_ABILITY_SLOTS) {
         weapons.push_back(std::move(newWeapon));
     }
+}
+
+Weapon* Player::findAbility(AbilityId id) const {
+    for (const auto& w : weapons) {
+        if (w->id == id) return w.get();
+    }
+    return nullptr;
 }
 
 // Behandle oppsamling av XP

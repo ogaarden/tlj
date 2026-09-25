@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include "ability_types.hpp"
 
 struct CharacterData {
     std::string name;
@@ -18,12 +19,11 @@ struct CharacterData {
     float size;
     float xpMultiplier; // Unik trait (1.0f er normal, 1.5f er +50% XP osv.)
 
-    std::string weaponName;
-    float cooldown;
-    float weaponSpeed;
-    float weaponDamage;
+    // Unik ability som bare denne karakteren kan ha. Den tar alltid slot 1 av 5,
+    // og kan aldri dukke opp som valg for de andre karakterene.
+    // Stats og level-oppgraderinger for abilityen ligger i abilities.cpp.
+    AbilityId innateAbility;
 };
-//Jester går fra pinne til trefork
 // Enkel hjelpefunksjon som returnerer alle karakterene
 inline std::vector<CharacterData> GetAvailableCharacters() {
     return {
@@ -39,11 +39,7 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .lootRadius   = 120.0f,
             .size         = 1.0f,
             .xpMultiplier = 1.0f,
-
-            .weaponName = "Trefork",
-            .cooldown = 1.0f, //i sekunder
-            .weaponSpeed = 500.0f,
-            .weaponDamage = 200.0f,
+            .innateAbility = AbilityId::TREFORK,
         },
 
         // --- WESTER ---
@@ -58,11 +54,7 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .lootRadius   = 100.0f,
             .size         = 2.3f, // Feitere/større
             .xpMultiplier = 1.0f,
-
-            .weaponName = "Trefork",
-            .cooldown = 2.0f, //i sekunder
-            .weaponSpeed = 500.0f,
-            .weaponDamage = 200.0f,
+            .innateAbility = AbilityId::GROUND_SLAM,
         },
 
         // --- TOK GEEK ---
@@ -77,11 +69,7 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .lootRadius   = 150.0f,
             .size         = 0.9f,
             .xpMultiplier = 1.5f,  // Høyere XP-rate som sin unike trait
-            
-            .weaponName = "Trefork",
-            .cooldown = 1.0f, //i sekunder
-            .weaponSpeed = 500.0f,
-            .weaponDamage = 200.0f,
+            .innateAbility = AbilityId::RICOCHET,
         }
     };
 }
