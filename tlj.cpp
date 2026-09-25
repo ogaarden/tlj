@@ -16,10 +16,14 @@
 #include "abilities.hpp"
 #include "echelon.hpp"
 #include "save.hpp"
+#include "curses.hpp"
+#include "explosions.hpp"
 
 enum GameState {
     MAIN_MENU,
     CHARACTER_SELECT,
+    ECHELON_SELECT,
+    CURSE_SELECT,
     SHOP,
     SETTINGS,
     GAMEPLAY,
@@ -122,9 +126,16 @@ int main() {
 
     // --- ECHELON OG BOSS-ARENA ---
     int selectedEchelon = saveData.unlockedEchelon; // Starter på den dypeste man har låst opp
+    EchelonModifiers runModifiers;                  // Alle stackede effekter for denne runden
     bool inBossArena = false;
     int bossId = -1;
     float arenaIntroTimer = 0.0f;
+
+    // --- CURSES (echelon 5+) ---
+    std::vector<CurseId> activeCurses;
+    std::vector<CurseId> curseChoices;
+    int selectedCurse = 0;
+    int cursesToPick = 0;
 
     int runCoins = 0;       // Mynter plukket opp denne runden
     RunSummary lastRun;     // Vises på game over-skjermen
@@ -140,6 +151,66 @@ int main() {
     WaveSpawner spawner;
     std::vector<std::unique_ptr<Enemy>> enemies;
     std::vector<Pickup> pickups;
+
+    // Gjør klar en ny runde med valgt karakter og echelon
+    auto startRun = [&]() {
+        const CharacterData& choice = characters[selectedCharacter];
+        runModifiers = GetEchelonModifiers(selectedEchelon);
+
+        // 1. Nullstill progresjon fra forrige runde
+        player.position = { 0.0f, 0.0f };
+        player.level = 1;
+        player.currentXp = 0;
+        player.xpToNextLevel = 100;
+        player.weapons.clear();
+        player.invulnerableTimer = 0.0f;
+        player.slowTimer = 0.0f;
+        lastPlayerLevel = 1;
+        runCoins = 0;
+        Enemy::killCount = 0;
+        inBossArena = false;
+        bossId = -1;
+        arenaIntroTimer = 0.0f;
+        activeCurses.clear();
+
+        // 2. La shoppen påføre arvede basestats + shop-bonuser, deretter echelon-effekter
+        shop.applyToPlayer(choice, player);
+        player.xpMultiplier *= runModifiers.xpMult;
+        if (runModifiers.noRegen) player.hpRegen = 0.0f;
+
+        player.texture = characterTextures[selectedCharacter];
+
+        // Karakterens unike ability tar alltid første slot
+        player.innateAbility = choice.innateAbility;
+        player.addWeapon(CreateAbility(choice.innateAbility));
+
+        // Kamera-oppsett
+        camera.target = player.position;
+        camera.offset = { Settings::SCREEN_WIDTH / 2.0f, Settings::SCREEN_HEIGHT / 2.0f };
+        camera.zoom = 1.0f;
+        camera.rotation = 0.0f;
+
+        // 3. Tilbakestill spawner og fiender for ny runde
+        spawner.reset(runModifiers);
+        enemies.clear();
+        pickups.clear();
+        ClearDamageNumbers();
+        ClearExplosions();
+    };
+
+    // Skade på spilleren fra fiender (kontakt og eksplosjoner)
+    auto hurtPlayer = [&](float rawDamage) {
+        float taken = player.takeDamage(rawDamage);
+        if (taken > 0.0f) {
+            SpawnDamageNumber(player.position, std::max(1, (int)(taken + 0.5f)), RED);
+            // Echelon 3+: fiender slower deg ved treff
+            if (runModifiers.slowOnHit > 0.0f) {
+                player.slowTimer = runModifiers.slowDuration;
+                player.slowAmount = runModifiers.slowOnHit;
+            }
+        }
+        player.invulnerableTimer = 0.5f; // Kort pause så man ikke smeltes av en klump fiender
+    };
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
@@ -170,60 +241,62 @@ int main() {
                 selectedCharacter = (selectedCharacter - 1 + static_cast<int>(characters.size())) % static_cast<int>(characters.size());
             }
 
-            // Velg echelon (bare de man har låst opp)
-            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
-                selectedEchelon = std::min(selectedEchelon + 1, saveData.unlockedEchelon);
-            }
-            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
-                selectedEchelon = std::max(selectedEchelon - 1, 1);
-            }
-
             // Gå tilbake til Hovedmeny med P eller ESC
             if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
                 currentState = MAIN_MENU;
             }
 
-            // Start spillet med valgt karakter!
+            // Videre til echelon-menyen
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
-                CharacterData choice = characters[selectedCharacter];
+                currentState = ECHELON_SELECT;
+            }
+        }
+        else if (currentState == ECHELON_SELECT) {
+            // Bare opplåste echelons kan velges
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+                selectedEchelon = std::min(selectedEchelon + 1, saveData.unlockedEchelon);
+            }
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+                selectedEchelon = std::max(selectedEchelon - 1, 1);
+            }
 
-                // 1. Nullstill progresjon fra forrige runde
-                player.position = { 0.0f, 0.0f };
-                player.level = 1;
-                player.currentXp = 0;
-                player.xpToNextLevel = 100;
-                player.weapons.clear();
-                player.invulnerableTimer = 0.0f;
-                lastPlayerLevel = 1;
-                runCoins = 0;
-                Enemy::killCount = 0;
-                inBossArena = false;
-                bossId = -1;
-                arenaIntroTimer = 0.0f;
+            if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
+                currentState = CHARACTER_SELECT;
+            }
 
-                // 2. La shoppen påføre arvede basestats + shop-multiplikatorer
-                shop.applyToPlayer(choice, player);
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                startRun();
+                cursesToPick = runModifiers.curses;
+                if (cursesToPick > 0) {
+                    curseChoices = GetCurseChoices(activeCurses);
+                    selectedCurse = 0;
+                    currentState = CURSE_SELECT;
+                } else {
+                    currentState = GAMEPLAY;
+                }
+            }
+        }
+        else if (currentState == CURSE_SELECT) {
+            int count = (int)curseChoices.size();
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) selectedCurse = (selectedCurse + 1) % count;
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) selectedCurse = (selectedCurse - 1 + count) % count;
 
-                player.texture = characterTextures[selectedCharacter];
+            if (IsKeyPressed(KEY_ESCAPE)) {
+                currentState = ECHELON_SELECT; // startRun() nullstiller alt når man prøver igjen
+            }
 
-                // Karakterens unike ability tar alltid første slot
-                player.innateAbility = choice.innateAbility;
-                player.addWeapon(CreateAbility(choice.innateAbility));
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                CurseId chosen = curseChoices[selectedCurse];
+                GetCurse(chosen).apply(player);
+                activeCurses.push_back(chosen);
+                cursesToPick--;
 
-                // Kamera-oppsett
-                camera.target = player.position;
-                camera.offset = { Settings::SCREEN_WIDTH / 2.0f, Settings::SCREEN_HEIGHT / 2.0f };
-                camera.zoom = 1.0f;
-                camera.rotation = 0.0f;
-
-                // 3. Tilbakestill spawner og fiender for ny runde
-                spawner.gameTime = 0.0f;
-                spawner.spawnTimer = 0.0f;
-                enemies.clear();
-                pickups.clear();
-                ClearDamageNumbers();
-
-                currentState = GAMEPLAY;
+                if (cursesToPick > 0) {
+                    curseChoices = GetCurseChoices(activeCurses);
+                    selectedCurse = 0;
+                } else {
+                    currentState = GAMEPLAY;
+                }
             }
         }
         else if (currentState == SHOP) {
@@ -257,10 +330,8 @@ int main() {
             // Oppdater spilleren (sender inn gjeldende kamerarotasjon så WASD matcher skjermen)
             player.update(camera.rotation);
 
-            const EchelonData& echelon = GetEchelon(selectedEchelon);
-
             // --- TIMEREN ER FERDIG: TELEPORTER TIL BOSS-ARENAEN ---
-            if (!inBossArena && spawner.gameTime >= echelon.bossTimerSeconds) {
+            if (!inBossArena && spawner.gameTime >= GetBossTimer(selectedEchelon)) {
                 inBossArena = true;
                 arenaIntroTimer = Arena::INTRO_TIME;
 
@@ -271,12 +342,14 @@ int main() {
                 }
                 pickups.clear();
                 enemies.clear();
+                ClearExplosions();
 
                 // Spilleren nederst i arenaen, bossen øverst
                 player.position = { Arena::CENTER.x, Arena::CENTER.y + Arena::RADIUS * 0.6f };
                 player.invulnerableTimer = Arena::INTRO_TIME;
 
-                auto boss = std::make_unique<Boss>(Vector2{ Arena::CENTER.x, Arena::CENTER.y - Arena::RADIUS * 0.6f }, enemyTexture, selectedEchelon);
+                auto boss = std::make_unique<Boss>(Vector2{ Arena::CENTER.x, Arena::CENTER.y - Arena::RADIUS * 0.6f }, enemyTexture);
+                boss->applyEchelonModifiers(runModifiers.enemyHpMult, runModifiers.enemyDamageMult, runModifiers.enemySpeedMult);
                 bossId = boss->id;
                 enemies.push_back(std::move(boss));
             }
@@ -304,10 +377,9 @@ int main() {
             const float playerHitRadius = 20.0f;
             if (player.invulnerableTimer <= 0.0f) {
                 for (auto& enemy : enemies) {
+                    if (enemy->contactDamage() <= 0) continue; // F.eks. kamikaze skader bare med eksplosjonen
                     if (CheckCollisionCircles(player.position, playerHitRadius, enemy->position, enemy->hitRadius)) {
-                        float taken = player.takeDamage((float)enemy->damage);
-                        if (taken > 0.0f) SpawnDamageNumber(player.position, std::max(1, (int)(taken + 0.5f)), RED);
-                        player.invulnerableTimer = 0.5f; // Kort pause så man ikke smeltes av en klump fiender
+                        hurtPlayer((float)enemy->contactDamage());
                         break;
                     }
                 }
@@ -363,12 +435,21 @@ int main() {
 
             UpdateDamageNumbers(deltaTime);
 
-            // Fjerne døde fiender
+            // Fjerne døde fiender (f.eks. kamikaze som har sprengt seg selv)
+            for (auto& e : enemies) {
+                if (e->isDead()) e->onDeath();
+            }
             enemies.erase(
                 std::remove_if(enemies.begin(), enemies.end(),
                     [](const std::unique_ptr<Enemy>& e) { return e->isDead(); }),
                 enemies.end()
             );
+
+            // Eksplosjoner som treffer spilleren
+            float explosionDamage = UpdateExplosions(deltaTime, player.position, playerHitRadius);
+            if (explosionDamage > 0.0f && player.invulnerableTimer <= 0.0f) {
+                hurtPlayer(explosionDamage);
+            }
 
             // Bossen er slått når den ikke lenger finnes i fiende-lista
             bool bossDefeated = inBossArena && bossId >= 0 &&
@@ -466,17 +547,71 @@ int main() {
                 DrawText(TextFormat("Aegis: +%d", shop.aegisBonus()), posX + 15, 370, 16, GREEN);
             }
 
-            // --- ECHELON-VELGER ---
-            const EchelonData& echelonInfo = GetEchelon(selectedEchelon);
-            int timerMin = (int)echelonInfo.bossTimerSeconds / 60;
-            int timerSec = (int)echelonInfo.bossTimerSeconds % 60;
-            const char* echelonText = TextFormat("%s  %s  %s", selectedEchelon > 1 ? "<" : " ", echelonInfo.name.c_str(),
-                                                 selectedEchelon < saveData.unlockedEchelon ? ">" : " ");
-            DrawText(echelonText, Settings::SCREEN_WIDTH / 2 - MeasureText(echelonText, 28) / 2, 490, 28, ORANGE);
-            const char* echelonSub = TextFormat("Boss etter %02d:%02d   |   Laast opp: %d / %d", timerMin, timerSec, saveData.unlockedEchelon, MAX_ECHELON);
-            DrawText(echelonSub, Settings::SCREEN_WIDTH / 2 - MeasureText(echelonSub, 18) / 2, 528, 18, LIGHTGRAY);
+            DrawText("[A/D] Velg karakter   |   [ENTER] Videre   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 290, 480, 20, GRAY);
+        }
+        else if (currentState == ECHELON_SELECT) {
+            DrawText("VELG ECHELON", Settings::SCREEN_WIDTH / 2 - MeasureText("VELG ECHELON", 32) / 2, 30, 32, ORANGE);
 
-            DrawText("[A/D] Karakter   [W/S] Echelon   [ENTER] Start   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 300, 600, 20, GRAY);
+            // --- Liste over alle 10 echelons (låste er mørke) ---
+            const int listX = 60;
+            const int rowHeight = 50;
+            const int listY = 90;
+            for (int e = 1; e <= MAX_ECHELON; e++) {
+                const EchelonData& info = GetEchelon(e);
+                bool unlocked = e <= saveData.unlockedEchelon;
+                bool isSelected = e == selectedEchelon;
+                int y = listY + (e - 1) * rowHeight;
+
+                Color bg = isSelected ? Fade(ORANGE, 0.25f) : Fade(DARKGRAY, unlocked ? 0.35f : 0.15f);
+                DrawRectangle(listX, y, 620, rowHeight - 6, bg);
+                if (isSelected) DrawRectangleLines(listX, y, 620, rowHeight - 6, ORANGE);
+
+                if (unlocked) {
+                    int bossTime = (int)GetBossTimer(e);
+                    DrawText(info.name.c_str(), listX + 12, y + 6, 20, isSelected ? YELLOW : WHITE);
+                    DrawText(info.description.c_str(), listX + 12, y + 27, 14, LIGHTGRAY);
+                    const char* timeText = TextFormat("Boss %02d:%02d", bossTime / 60, bossTime % 60);
+                    DrawText(timeText, listX + 610 - MeasureText(timeText, 16), y + 14, 16, GRAY);
+                } else {
+                    DrawText(info.name.c_str(), listX + 12, y + 12, 20, Fade(GRAY, 0.4f));
+                    DrawText("LAAST", listX + 610 - MeasureText("LAAST", 18), y + 12, 18, Fade(GRAY, 0.4f));
+                }
+            }
+
+            // --- Alle effekter som gjelder for valgt echelon (de stacker) ---
+            const int panelX = 730;
+            DrawText(TextFormat("%s - aktive effekter:", GetEchelon(selectedEchelon).name.c_str()), panelX, 90, 20, WHITE);
+            int lineY = 125;
+            for (int e = 1; e <= selectedEchelon; e++) {
+                Color c = (e == selectedEchelon) ? YELLOW : LIGHTGRAY;
+                DrawText(TextFormat("E%d: %s", e, GetEchelon(e).description.c_str()), panelX, lineY, 18, c);
+                lineY += 28;
+            }
+            int bossTime = (int)GetBossTimer(selectedEchelon);
+            DrawText(TextFormat("Boss etter %02d:%02d", bossTime / 60, bossTime % 60), panelX, lineY + 15, 20, ORANGE);
+
+            DrawText("[W/S] Velg   |   [ENTER] Start   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 230, Settings::SCREEN_HEIGHT - 45, 20, GRAY);
+        }
+        else if (currentState == CURSE_SELECT) {
+            const char* title = TextFormat("VELG EN CURSE (%d igjen)", cursesToPick);
+            DrawText(title, Settings::SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2, 110, 32, PURPLE);
+            DrawText(GetEchelon(selectedEchelon).name.c_str(), Settings::SCREEN_WIDTH / 2 - MeasureText(GetEchelon(selectedEchelon).name.c_str(), 20) / 2, 155, 20, ORANGE);
+
+            int cardWidth = 450;
+            int cardHeight = 80;
+            for (size_t i = 0; i < curseChoices.size(); i++) {
+                const Curse& curse = GetCurse(curseChoices[i]);
+                bool isSelected = (int)i == selectedCurse;
+                int x = Settings::SCREEN_WIDTH / 2 - cardWidth / 2;
+                int y = 220 + (int)i * (cardHeight + 20);
+
+                DrawRectangle(x, y, cardWidth, cardHeight, isSelected ? Fade(PURPLE, 0.3f) : BLACK);
+                DrawRectangleLines(x, y, cardWidth, cardHeight, isSelected ? VIOLET : GRAY);
+                DrawText(curse.name.c_str(), x + 20, y + 15, 24, isSelected ? VIOLET : WHITE);
+                DrawText(curse.description.c_str(), x + 20, y + 48, 16, LIGHTGRAY);
+            }
+
+            DrawText("[W/S] Velg   |   [ENTER] Bekreft   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 240, Settings::SCREEN_HEIGHT - 60, 20, GRAY);
         }
         else if (currentState == SHOP) {
             shop.draw(totalGold);
@@ -533,6 +668,7 @@ int main() {
                 for (auto& enemy : enemies) {
                     enemy->draw();
                 }
+                DrawExplosions();
 
 
 
@@ -549,6 +685,9 @@ int main() {
             DrawText(TextFormat("Aegis: %d", player.aegis), 20, 130, 18, GREEN);
             DrawText(TextFormat("Gull: %d", runCoins), 20, 155, 18, GOLD);
             DrawText(TextFormat("Kills: %d", Enemy::killCount), 20, 180, 18, LIGHTGRAY);
+            for (size_t i = 0; i < activeCurses.size(); i++) {
+                DrawText(TextFormat("Curse: %s", GetCurse(activeCurses[i]).name.c_str()), 20, 205 + (int)i * 22, 16, VIOLET);
+            }
 
             float barWidth = 400.0f;
             float barHeight = 12.0f;
@@ -654,20 +793,12 @@ int main() {
         }
 
         if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
-            // --- KLOKKE: TELLER NED TIL BOSSEN ---
+            // --- KLOKKE: TELLER ALLTID OPP FRA 0 ---
             int fontSize = 32;
-            if (inBossArena) {
-                const char* bossText = "BOSS";
-                DrawText(bossText, (Settings::SCREEN_WIDTH / 2) - MeasureText(bossText, fontSize) / 2, 20, fontSize, RED);
-            } else {
-                float remaining = std::max(0.0f, GetEchelon(selectedEchelon).bossTimerSeconds - spawner.gameTime);
-                int minutes = (int)remaining / 60;
-                int seconds = (int)remaining % 60;
-                const char* timeText = TextFormat("%02d:%02d", minutes, seconds);
-                // Blinker rødt det siste halve minuttet
-                Color timeColor = (remaining < 30.0f && ((int)(remaining * 2.0f) % 2 == 0)) ? RED : WHITE;
-                DrawText(timeText, (Settings::SCREEN_WIDTH / 2) - MeasureText(timeText, fontSize) / 2, 20, fontSize, timeColor);
-            }
+            int minutes = (int)spawner.gameTime / 60;
+            int seconds = (int)spawner.gameTime % 60;
+            const char* timeText = TextFormat("%02d:%02d", minutes, seconds);
+            DrawText(timeText, (Settings::SCREEN_WIDTH / 2) - MeasureText(timeText, fontSize) / 2, 20, fontSize, inBossArena ? RED : WHITE);
             const char* echelonLabel = GetEchelon(selectedEchelon).name.c_str();
             DrawText(echelonLabel, Settings::SCREEN_WIDTH - MeasureText(echelonLabel, 20) - 20, 20, 20, ORANGE);
 

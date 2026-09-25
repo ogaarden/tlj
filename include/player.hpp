@@ -35,6 +35,10 @@ struct Player {
 
     float invulnerableTimer = 0.0f; // Kort udødelighet etter å ha tatt skade
 
+    // Slow fra fiender (echelon 3+)
+    float slowTimer = 0.0f;
+    float slowAmount = 0.0f; // 0.4 = 40% tregere
+
     int projectileCount = 1;
     int aegis = 0;
 

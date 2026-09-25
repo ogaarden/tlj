@@ -9,7 +9,8 @@
 enum class EnemyType {
     FOOTMAN,
     GOON,
-    LACKEY
+    LACKEY,
+    EXPLODER
 };
 
 struct Pickup;
@@ -48,6 +49,11 @@ public:
     void takeDamage(int amount, Color numberColor = WHITE, bool isDamageOverTime = false);
     bool isDead() const;
     void dropLoot(std::vector<Pickup>& pickups) const; // XP + evt. gull når fienden dør
+    virtual void onDeath() {}                          // Kalles når fienden dør (uansett årsak)
+    virtual int contactDamage() const { return damage; } // Skade ved berøring
+
+    // Echelon-effekter som gjør fienden sterkere (kalles når den spawner)
+    virtual void applyEchelonModifiers(float hpMult, float damageMult, float speedMult);
     virtual void draw() const;
 };
 
@@ -83,21 +89,28 @@ private:
     Vector2 lastPlayerPos = { 0, 0 };
 
 public:
-    Boss(Vector2 spawnPos, Texture2D tex, int echelon);
+    Boss(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw() const override;
 };
 
+// Kamikaze-fiende (echelon 2+): løper mot spilleren, stopper opp og blinker
+// når den er nær, og eksploderer. Den eksploderer OGSÅ hvis du dreper den,
+// så pass på å ikke drepe den rett ved siden av deg!
 class Exploder : public Enemy {
 private:
-    bool hasExploded = false;
-    float explosionTimer = 0.0f;
-    float explosionRadius = 80.0f; // Hvor stor radius eksplosjonen har
+    bool fuseLit = false;
+    float fuseTimer = 0.0f;
+    float explosionRadius = 80.0f;
+    float explosionDamage = 25.0f;
 
 public:
     Exploder(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
-    // Vi kan også override draw hvis vi vil at den skal lyse oransje/rødt
+    void draw() const override;
+    void onDeath() override;
+    int contactDamage() const override { return 0; } // Skader bare med eksplosjonen
+    void applyEchelonModifiers(float hpMult, float damageMult, float speedMult) override;
 };
 
 enum class PickupType {

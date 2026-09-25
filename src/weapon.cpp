@@ -9,6 +9,7 @@ namespace {
 // Dropp loot (XP/gull), tell drapet og fjern død fiende
 void removeDeadEnemy(std::vector<std::unique_ptr<Enemy>>& enemies, size_t index, std::vector<Pickup>& pickups) {
     enemies[index]->dropLoot(pickups);
+    enemies[index]->onDeath();
     Enemy::killCount++;
     enemies.erase(enemies.begin() + index);
 }

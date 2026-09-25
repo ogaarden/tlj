@@ -10,6 +10,7 @@ void Player::update(float cameraRotation)
     float deltaTime = GetFrameTime();
 
     if (invulnerableTimer > 0.0f) invulnerableTimer -= deltaTime;
+    if (slowTimer > 0.0f) slowTimer -= deltaTime;
     if (hpRegen > 0.0f && hp > 0.0f) hp = std::min(maxHp, hp + hpRegen * deltaTime);
 
     // 1. Les inn tastetrykk basert på SKJERM-retninger
@@ -38,8 +39,9 @@ void Player::update(float cameraRotation)
     };
 
     // 3. Oppdater posisjonen i verden
-    position.x += worldMovement.x * speed * deltaTime;
-    position.y += worldMovement.y * speed * deltaTime;
+    float currentSpeed = speed * (slowTimer > 0.0f ? (1.0f - slowAmount) : 1.0f);
+    position.x += worldMovement.x * currentSpeed * deltaTime;
+    position.y += worldMovement.y * currentSpeed * deltaTime;
 }
 
 void Player::draw(float cameraRotation)
@@ -52,7 +54,7 @@ void Player::draw(float cameraRotation)
     Vector2 origin = { (float)texture.width / 2.0f, (float)texture.height / 2.0f };
 
     // Blink rødt mens spilleren er udødelig etter et treff
-    Color tint = WHITE;
+    Color tint = (slowTimer > 0.0f) ? SKYBLUE : WHITE; // Blålig når man er slowet
     if (invulnerableTimer > 0.0f && ((int)(invulnerableTimer * 20.0f) % 2 == 0)) tint = RED;
 
     DrawTexturePro(texture, source, dest, origin, -finalDrawAngle, tint);

@@ -1,5 +1,6 @@
 #include "enemy.hpp"
 #include "damage_numbers.hpp"
+#include "explosions.hpp"
 
 // --- Baseklasse ---
 void Enemy::draw() const {
@@ -42,6 +43,13 @@ void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
     }
 }
 bool Enemy::isDead() const { return hp <= 0; }
+
+void Enemy::applyEchelonModifiers(float hpMult, float damageMult, float speedMult) {
+    hp = (int)(hp * hpMult);
+    maxHp = hp;
+    damage = (int)(damage * damageMult);
+    speed *= speedMult;
+}
 
 void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
     pickups.push_back({ position, xpValue, orbColor, orbRadius, 15.0f, PickupType::XP });
@@ -127,12 +135,11 @@ namespace {
     constexpr float BOSS_DASH_SPEED = 700.0f;
 }
 
-Boss::Boss(Vector2 spawnPos, Texture2D tex, int echelon) {
+Boss::Boss(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 90.0f;
-    // Bossen blir tøffere for hver echelon
-    // E1: 30 000 HP (~20-30 sek for en typisk build ved 10 min), +60% per echelon
-    hp = (int)(30000.0f * (1.0f + 0.6f * (echelon - 1)));
+    // ~20-30 sek for en typisk build ved 10 min. Echelon-effekter (f.eks. +HP på E9) legges på i tillegg.
+    hp = 30000;
     maxHp = hp;
     damage = 30;
     xpValue = 0;
@@ -188,4 +195,66 @@ void Boss::draw() const {
     DrawCircleLines((int)position.x, (int)position.y, hitRadius, BLACK);
     DrawCircleLines((int)position.x, (int)position.y, hitRadius + 4.0f, Fade(RED, 0.6f));
     // HP-baren til bossen tegnes i HUD-en øverst på skjermen
+}
+
+// --- Exploder (kamikaze) ---
+namespace {
+    constexpr float EXPLODER_FUSE_TIME = 0.6f;    // Tid fra den stopper til den smeller
+    constexpr float EXPLODER_TRIGGER_RANGE = 55.0f;
+}
+
+Exploder::Exploder(Vector2 spawnPos, Texture2D tex) {
+    position = spawnPos;
+    speed = 200.0f;
+    hp = 30;
+    maxHp = 30;
+    damage = 25;
+    xpValue = 12;
+    orbColor = ORANGE;
+    orbRadius = 5.0f;
+    goldChance = 0.04f;
+    goldValue = 1;
+    texture = tex;
+}
+
+void Exploder::update(Vector2 playerPosition) {
+    float dt = GetFrameTime();
+
+    if (fuseLit) {
+        fuseTimer -= dt;
+        if (fuseTimer <= 0.0f) hp = 0; // Sprenger seg selv – onDeath() lager eksplosjonen
+        return;
+    }
+
+    if (Vector2Distance(position, playerPosition) <= EXPLODER_TRIGGER_RANGE) {
+        fuseLit = true;
+        fuseTimer = EXPLODER_FUSE_TIME;
+        return;
+    }
+
+    Vector2 dir = Vector2Normalize(Vector2Subtract(playerPosition, position));
+    position = Vector2Add(position, Vector2Scale(dir, speed * dt));
+}
+
+void Exploder::draw() const {
+    // Blinker mens lunta brenner
+    bool flash = fuseLit && ((int)(fuseTimer * 20.0f) % 2 == 0);
+    Color body = flash ? WHITE : orbColor;
+
+    if (fuseLit) {
+        // Viser hvor stor eksplosjonen blir
+        DrawCircleLines((int)position.x, (int)position.y, explosionRadius, Fade(RED, 0.6f));
+    }
+    DrawCircleV(position, 13.0f, body);
+    DrawCircleLines((int)position.x, (int)position.y, 13.0f, RED);
+    DrawCircleV(position, 4.0f, RED);
+}
+
+void Exploder::onDeath() {
+    SpawnExplosion(position, explosionRadius, explosionDamage);
+}
+
+void Exploder::applyEchelonModifiers(float hpMult, float damageMult, float speedMult) {
+    Enemy::applyEchelonModifiers(hpMult, damageMult, speedMult);
+    explosionDamage *= damageMult;
 }
