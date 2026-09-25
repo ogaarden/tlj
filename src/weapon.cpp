@@ -75,7 +75,6 @@ Vector2 rotateDegrees(Vector2 v, float degrees) {
 }
 
 constexpr float PROJECTILE_HIT_RADIUS = 5.0f;
-constexpr float ENEMY_HIT_RADIUS = 16.0f;
 
 } // namespace
 
@@ -137,7 +136,7 @@ void ProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std:
         for (size_t j = 0; j < enemies.size() && !destroyed; ) {
             Enemy* enemy = enemies[j].get();
             if (containsId(p.hitEnemyIds, enemy->id) ||
-                !CheckCollisionCircles(p.position, PROJECTILE_HIT_RADIUS, enemy->position, ENEMY_HIT_RADIUS)) {
+                !CheckCollisionCircles(p.position, PROJECTILE_HIT_RADIUS, enemy->position, enemy->hitRadius)) {
                 j++;
                 continue;
             }
@@ -267,7 +266,7 @@ void BouncingProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vec
         for (size_t j = 0; j < enemies.size(); j++) {
             Enemy* enemy = enemies[j].get();
             if (containsId(p.hitEnemyIds, enemy->id) ||
-                !CheckCollisionCircles(p.position, PROJECTILE_HIT_RADIUS, enemy->position, ENEMY_HIT_RADIUS)) continue;
+                !CheckCollisionCircles(p.position, PROJECTILE_HIT_RADIUS, enemy->position, enemy->hitRadius)) continue;
 
             enemy->takeDamage((int)p.damage, color);
             p.hitEnemyIds.push_back(enemy->id);
@@ -374,7 +373,7 @@ void OrbitWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
 
         for (size_t j = 0; j < enemies.size(); ) {
             Enemy* enemy = enemies[j].get();
-            if (!CheckCollisionCircles(bladePos, 10.0f, enemy->position, ENEMY_HIT_RADIUS)) { j++; continue; }
+            if (!CheckCollisionCircles(bladePos, 10.0f, enemy->position, enemy->hitRadius)) { j++; continue; }
 
             // Samme fiende kan bare treffes én gang per cooldown
             auto it = lastHitTime.find(enemy->id);

@@ -1,8 +1,7 @@
 #include "shop.hpp"
 #include "settings.hpp"
 #include <cmath>
-#include <fstream>
-#include <sstream>
+#include <algorithm>
 
 // =====================================================================
 // BALANSE
@@ -139,35 +138,20 @@ void Shop::draw(int totalGold) {
     DrawText("[W/S] naviger   [ENTER] kjoep   [ESC/B] tilbake", Settings::SCREEN_WIDTH / 2 - 250, Settings::SCREEN_HEIGHT - 60, 18, LIGHTGRAY);
 }
 
-void Shop::save(const std::string& path, int totalGold) const {
-    std::ofstream file(path);
-    if (!file) return;
-
-    file << "gold " << totalGold << "\n";
+void Shop::writeLevels(std::ostream& out) const {
     for (const auto& item : items) {
-        file << item.saveKey << " " << item.currentLevel << "\n";
+        out << item.saveKey << " " << item.currentLevel << "\n";
     }
 }
 
-void Shop::load(const std::string& path, int& totalGold) {
-    std::ifstream file(path);
-    if (!file) return; // Ingen lagring ennå – ny spiller
-
-    std::string line;
-    while (std::getline(file, line)) {
-        std::istringstream in(line);
-        std::string key;
-        int value = 0;
-        if (!(in >> key >> value)) continue;
-
-        if (key == "gold") {
-            totalGold = value;
-            continue;
-        }
-        for (auto& item : items) {
-            if (item.saveKey == key) item.currentLevel = std::max(0, std::min(value, item.maxLevel));
+bool Shop::readLevel(const std::string& key, int value) {
+    for (auto& item : items) {
+        if (item.saveKey == key) {
+            item.currentLevel = std::max(0, std::min(value, item.maxLevel));
+            return true;
         }
     }
+    return false;
 }
 
 int Shop::totalCostOfEverything() const {

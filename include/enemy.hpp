@@ -38,6 +38,7 @@ public:
     float goldChance = 0.0f;  // Sjanse (0-1) for at fienden dropper en mynt
     Color orbColor;
     float orbRadius;
+    float hitRadius = 16.0f;  // Kollisjonsradius for treff og kontaktskade
     Texture2D texture;
 
     virtual ~Enemy() = default;
@@ -69,6 +70,22 @@ private:
 public:
     Lackey(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
+};
+
+// Boss som venter i boss-arenaen når echelon-timeren er ferdig.
+// Jager spilleren, stopper opp for å varsle, og dasher så mot spilleren.
+class Boss : public Enemy {
+private:
+    enum class Phase { CHASE, WINDUP, DASH };
+    Phase phase = Phase::CHASE;
+    float phaseTimer = 0.0f;
+    Vector2 dashDirection = { 0, 0 };
+    Vector2 lastPlayerPos = { 0, 0 };
+
+public:
+    Boss(Vector2 spawnPos, Texture2D tex, int echelon);
+    void update(Vector2 playerPosition) override;
+    void draw() const override;
 };
 
 class Exploder : public Enemy {

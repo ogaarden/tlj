@@ -119,3 +119,73 @@ void Lackey::update(Vector2 playerPosition) {
     position.x += (dir.x * speed + perp.x * offset) * GetFrameTime();
     position.y += (dir.y * speed + perp.y * offset) * GetFrameTime();
 }
+// --- Boss ---
+namespace {
+    constexpr float BOSS_CHASE_TIME = 3.0f;
+    constexpr float BOSS_WINDUP_TIME = 0.8f; // Tid spilleren har til å se dashen komme
+    constexpr float BOSS_DASH_TIME = 0.5f;
+    constexpr float BOSS_DASH_SPEED = 700.0f;
+}
+
+Boss::Boss(Vector2 spawnPos, Texture2D tex, int echelon) {
+    position = spawnPos;
+    speed = 90.0f;
+    // Bossen blir tøffere for hver echelon
+    // E1: 30 000 HP (~20-30 sek for en typisk build ved 10 min), +60% per echelon
+    hp = (int)(30000.0f * (1.0f + 0.6f * (echelon - 1)));
+    maxHp = hp;
+    damage = 30;
+    xpValue = 0;
+    orbColor = MAROON;
+    orbRadius = 0.0f;
+    hitRadius = 40.0f;
+    texture = tex;
+}
+
+void Boss::update(Vector2 playerPosition) {
+    float dt = GetFrameTime();
+    lastPlayerPos = playerPosition;
+    phaseTimer += dt;
+
+    switch (phase) {
+        case Phase::CHASE: {
+            Vector2 dir = Vector2Normalize(Vector2Subtract(playerPosition, position));
+            position = Vector2Add(position, Vector2Scale(dir, speed * dt));
+            if (phaseTimer >= BOSS_CHASE_TIME) {
+                phase = Phase::WINDUP;
+                phaseTimer = 0.0f;
+            }
+            break;
+        }
+        case Phase::WINDUP:
+            // Står stille og sikter – retningen låses når dashen starter
+            dashDirection = Vector2Normalize(Vector2Subtract(playerPosition, position));
+            if (phaseTimer >= BOSS_WINDUP_TIME) {
+                phase = Phase::DASH;
+                phaseTimer = 0.0f;
+            }
+            break;
+        case Phase::DASH:
+            position = Vector2Add(position, Vector2Scale(dashDirection, BOSS_DASH_SPEED * dt));
+            if (phaseTimer >= BOSS_DASH_TIME) {
+                phase = Phase::CHASE;
+                phaseTimer = 0.0f;
+            }
+            break;
+    }
+}
+
+void Boss::draw() const {
+    // Varsel-linje mens bossen lader opp dashen
+    if (phase == Phase::WINDUP) {
+        float t = phaseTimer / BOSS_WINDUP_TIME;
+        Vector2 end = Vector2Add(position, Vector2Scale(dashDirection, BOSS_DASH_SPEED * BOSS_DASH_TIME));
+        DrawLineEx(position, end, hitRadius * 2.0f, Fade(RED, 0.15f + 0.25f * t));
+    }
+
+    Color body = (phase == Phase::WINDUP) ? RED : orbColor;
+    DrawCircleV(position, hitRadius, body);
+    DrawCircleLines((int)position.x, (int)position.y, hitRadius, BLACK);
+    DrawCircleLines((int)position.x, (int)position.y, hitRadius + 4.0f, Fade(RED, 0.6f));
+    // HP-baren til bossen tegnes i HUD-en øverst på skjermen
+}

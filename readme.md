@@ -40,4 +40,10 @@ Notes:
 3) Game over-skjerm med oppsummering av gull
 4) Shop med 14 oppgraderinger, lagres i save.txt mellom økter
 
+// 27 september
+1) Echelon-struktur (1-10), velges i karaktervalg. Neste låses opp ved å slå bossen
+2) Timer teller ned til boss (10 min på E1, lenger for dypere echelons)
+3) Teleport til boss-arena når timeren er ferdig + enkel boss (jage + dash)
+4) TODO: echelon-modifikatorer (f.eks. E3 slow on hit, E4 mindre XP)
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

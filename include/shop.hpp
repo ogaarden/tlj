@@ -4,6 +4,7 @@
 #include <raylib.h>
 #include <vector>
 #include <string>
+#include <ostream>
 #include "character.hpp"
 #include "player.hpp"
 
@@ -57,9 +58,9 @@ public:
     float armorBonus() const;
     int aegisBonus() const;
 
-    // Lagring av gull + kjøpte nivåer mellom økter
-    void save(const std::string& path, int totalGold) const;
-    void load(const std::string& path, int& totalGold);
+    // Lagring av kjøpte nivåer (brukes av save.cpp)
+    void writeLevels(std::ostream& out) const;
+    bool readLevel(const std::string& key, int value);
 
     // Totalpris for å kjøpe ALT (nyttig for balansering)
     int totalCostOfEverything() const;

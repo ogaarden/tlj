@@ -14,6 +14,8 @@
 #include "weapon.hpp"
 #include "damage_numbers.hpp"
 #include "abilities.hpp"
+#include "echelon.hpp"
+#include "save.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -36,24 +38,49 @@ enum GameState {
 namespace Rewards {
     constexpr float GOLD_PER_MINUTE = 10.0f;
     constexpr int GOLD_PER_LEVEL = 3;
+    constexpr int BOSS_GOLD_PER_ECHELON = 100; // Bonus for å slå bossen (x echelon-nummer)
     const char* SAVE_FILE = "save.txt";
+}
+
+// Boss-arenaen ligger langt unna vanlig spillområde, og er en sirkel man ikke kan gå ut av
+namespace Arena {
+    const Vector2 CENTER = { 0.0f, 20000.0f };
+    constexpr float RADIUS = 650.0f;
+    constexpr float INTRO_TIME = 2.0f; // Hvor lenge "BOSS ARENA"-teksten vises
+}
+
+// Holder en posisjon innenfor arenaen
+Vector2 ClampToArena(Vector2 pos, float margin) {
+    Vector2 offset = Vector2Subtract(pos, Arena::CENTER);
+    float maxDist = Arena::RADIUS - margin;
+    if (Vector2Length(offset) > maxDist) {
+        offset = Vector2Scale(Vector2Normalize(offset), maxDist);
+    }
+    return Vector2Add(Arena::CENTER, offset);
 }
 
 struct RunSummary {
     bool died = false;
+    bool bossDefeated = false;
+    int echelon = 1;
+    bool unlockedNewEchelon = false;
     float timeSurvived = 0.0f;
     int level = 1;
     int kills = 0;
     int coinGold = 0;     // Mynter plukket opp
     int survivalGold = 0; // Bonus for overlevd tid
     int levelGold = 0;    // Bonus for level
+    int bossGold = 0;     // Bonus for å slå bossen
     float greedMult = 1.0f;
     int totalGold = 0;
 };
 
-RunSummary CalculateRunSummary(bool died, float time, int level, int kills, int coins, float greedMult) {
+RunSummary CalculateRunSummary(bool died, bool bossDefeated, int echelon, float time, int level, int kills, int coins, float greedMult) {
     RunSummary r;
     r.died = died;
+    r.bossDefeated = bossDefeated;
+    r.echelon = echelon;
+    r.bossGold = bossDefeated ? Rewards::BOSS_GOLD_PER_ECHELON * echelon : 0;
     r.timeSurvived = time;
     r.level = level;
     r.kills = kills;
@@ -61,7 +88,7 @@ RunSummary CalculateRunSummary(bool died, float time, int level, int kills, int 
     r.survivalGold = (int)(time / 60.0f * Rewards::GOLD_PER_MINUTE);
     r.levelGold = (level - 1) * Rewards::GOLD_PER_LEVEL;
     r.greedMult = greedMult;
-    r.totalGold = (int)((r.coinGold + r.survivalGold + r.levelGold) * greedMult);
+    r.totalGold = (int)((r.coinGold + r.survivalGold + r.levelGold + r.bossGold) * greedMult);
     return r;
 }
 
@@ -86,11 +113,18 @@ int main() {
     // Last inn felles tekstur for fiender
     Texture2D enemyTexture = LoadTexture("assets/jester_real.png"); // Bytt ut med egen enemy.png om du har
 
-    // Instans av shoppen og permanent gull
-    // Gull og kjøp lagres i save.txt slik at de akkumuleres over runs og økter
+    // Gull, shop-kjøp og opplåste echelons lagres i save.txt slik at de akkumuleres over runs og økter
     Shop shop;
-    int totalGold = 0;
-    shop.load(Rewards::SAVE_FILE, totalGold);
+    SaveData saveData;
+    LoadGame(Rewards::SAVE_FILE, saveData, shop);
+    int& totalGold = saveData.gold;
+    auto saveProgress = [&]() { SaveGame(Rewards::SAVE_FILE, saveData, shop); };
+
+    // --- ECHELON OG BOSS-ARENA ---
+    int selectedEchelon = saveData.unlockedEchelon; // Starter på den dypeste man har låst opp
+    bool inBossArena = false;
+    int bossId = -1;
+    float arenaIntroTimer = 0.0f;
 
     int runCoins = 0;       // Mynter plukket opp denne runden
     RunSummary lastRun;     // Vises på game over-skjermen
@@ -136,6 +170,14 @@ int main() {
                 selectedCharacter = (selectedCharacter - 1 + static_cast<int>(characters.size())) % static_cast<int>(characters.size());
             }
 
+            // Velg echelon (bare de man har låst opp)
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+                selectedEchelon = std::min(selectedEchelon + 1, saveData.unlockedEchelon);
+            }
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+                selectedEchelon = std::max(selectedEchelon - 1, 1);
+            }
+
             // Gå tilbake til Hovedmeny med P eller ESC
             if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
                 currentState = MAIN_MENU;
@@ -155,6 +197,9 @@ int main() {
                 lastPlayerLevel = 1;
                 runCoins = 0;
                 Enemy::killCount = 0;
+                inBossArena = false;
+                bossId = -1;
+                arenaIntroTimer = 0.0f;
 
                 // 2. La shoppen påføre arvede basestats + shop-multiplikatorer
                 shop.applyToPlayer(choice, player);
@@ -184,7 +229,7 @@ int main() {
         else if (currentState == SHOP) {
             // Tilbake til Hovedmeny
             if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_B) || IsKeyPressed(KEY_ESCAPE)) {
-                shop.save(Rewards::SAVE_FILE, totalGold);
+                saveProgress();
                 currentState = MAIN_MENU;
             }
 
@@ -211,21 +256,55 @@ int main() {
 
             // Oppdater spilleren (sender inn gjeldende kamerarotasjon så WASD matcher skjermen)
             player.update(camera.rotation);
+
+            const EchelonData& echelon = GetEchelon(selectedEchelon);
+
+            // --- TIMEREN ER FERDIG: TELEPORTER TIL BOSS-ARENAEN ---
+            if (!inBossArena && spawner.gameTime >= echelon.bossTimerSeconds) {
+                inBossArena = true;
+                arenaIntroTimer = Arena::INTRO_TIME;
+
+                // Alt som ligger igjen på bakken suges opp automatisk
+                for (const auto& p : pickups) {
+                    if (p.type == PickupType::COIN) runCoins += p.value;
+                    else player.addXP(static_cast<int>(p.value * player.xpMultiplier));
+                }
+                pickups.clear();
+                enemies.clear();
+
+                // Spilleren nederst i arenaen, bossen øverst
+                player.position = { Arena::CENTER.x, Arena::CENTER.y + Arena::RADIUS * 0.6f };
+                player.invulnerableTimer = Arena::INTRO_TIME;
+
+                auto boss = std::make_unique<Boss>(Vector2{ Arena::CENTER.x, Arena::CENTER.y - Arena::RADIUS * 0.6f }, enemyTexture, selectedEchelon);
+                bossId = boss->id;
+                enemies.push_back(std::move(boss));
+            }
+
+            if (inBossArena) {
+                // Ingen vanlige fiender i arenaen, men klokka går fortsatt (teller for gull)
+                spawner.gameTime += deltaTime;
+                if (arenaIntroTimer > 0.0f) arenaIntroTimer -= deltaTime;
+                player.position = ClampToArena(player.position, 20.0f);
+            } else {
+                // Oppdater spawneren (spawner fiender rundt spilleren)
+                spawner.update(deltaTime, player.position, enemies, enemyTexture);
+            }
             camera.target = player.position;
 
-            // Oppdater spawneren (spawner fiender rundt spilleren)
-            spawner.update(deltaTime, player.position, enemies, enemyTexture);
-
-            // Oppdater alle fiender
-            for (auto& enemy : enemies) {
-                enemy->update(player.position);
+            // Oppdater alle fiender (bossen står stille mens intro-teksten vises)
+            if (arenaIntroTimer <= 0.0f) {
+                for (auto& enemy : enemies) {
+                    enemy->update(player.position);
+                    if (inBossArena) enemy->position = ClampToArena(enemy->position, enemy->hitRadius);
+                }
             }
 
             // --- FIENDER SKADER SPILLEREN VED KONTAKT ---
             const float playerHitRadius = 20.0f;
             if (player.invulnerableTimer <= 0.0f) {
                 for (auto& enemy : enemies) {
-                    if (CheckCollisionCircles(player.position, playerHitRadius, enemy->position, 15.0f)) {
+                    if (CheckCollisionCircles(player.position, playerHitRadius, enemy->position, enemy->hitRadius)) {
                         float taken = player.takeDamage((float)enemy->damage);
                         if (taken > 0.0f) SpawnDamageNumber(player.position, std::max(1, (int)(taken + 0.5f)), RED);
                         player.invulnerableTimer = 0.5f; // Kort pause så man ikke smeltes av en klump fiender
@@ -237,12 +316,12 @@ int main() {
             bool runEnded = false;
             if (player.hp <= 0.0f) {
                 if (player.aegis > 0) {
-                    // Aegis: gjenoppstå med halv HP og blås bort fiender rundt deg
+                    // Aegis: gjenoppstå med halv HP og blås bort fiender rundt deg (men ikke bossen!)
                     player.aegis--;
                     player.hp = player.maxHp * 0.5f;
                     player.invulnerableTimer = 2.0f;
                     enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](const std::unique_ptr<Enemy>& e) {
-                        return Vector2Distance(e->position, player.position) < 250.0f;
+                        return e->id != bossId && Vector2Distance(e->position, player.position) < 250.0f;
                     }), enemies.end());
                 } else {
                     runEnded = true;
@@ -291,13 +370,25 @@ int main() {
                 enemies.end()
             );
 
+            // Bossen er slått når den ikke lenger finnes i fiende-lista
+            bool bossDefeated = inBossArena && bossId >= 0 &&
+                std::none_of(enemies.begin(), enemies.end(), [&](const std::unique_ptr<Enemy>& e) { return e->id == bossId; });
+
             // ESC/P avslutter runden (man får fortsatt gullet man har tjent)
             bool gaveUp = IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE);
 
-            if (runEnded || gaveUp) {
-                lastRun = CalculateRunSummary(runEnded, spawner.gameTime, player.level, Enemy::killCount, runCoins, player.goldMultiplier);
+            if (runEnded || gaveUp || bossDefeated) {
+                lastRun = CalculateRunSummary(runEnded, bossDefeated, selectedEchelon, spawner.gameTime, player.level, Enemy::killCount, runCoins, player.goldMultiplier);
                 totalGold += lastRun.totalGold;
-                shop.save(Rewards::SAVE_FILE, totalGold);
+
+                // Slå bossen på den dypeste echelonen -> lås opp neste
+                if (bossDefeated && selectedEchelon == saveData.unlockedEchelon && saveData.unlockedEchelon < MAX_ECHELON) {
+                    saveData.unlockedEchelon++;
+                    selectedEchelon = saveData.unlockedEchelon;
+                    lastRun.unlockedNewEchelon = true;
+                }
+
+                saveProgress();
                 currentState = GAME_OVER;
             }
         }
@@ -375,7 +466,17 @@ int main() {
                 DrawText(TextFormat("Aegis: +%d", shop.aegisBonus()), posX + 15, 370, 16, GREEN);
             }
 
-            DrawText("[ENTER] Start Game   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 180, 480, 20, GRAY);
+            // --- ECHELON-VELGER ---
+            const EchelonData& echelonInfo = GetEchelon(selectedEchelon);
+            int timerMin = (int)echelonInfo.bossTimerSeconds / 60;
+            int timerSec = (int)echelonInfo.bossTimerSeconds % 60;
+            const char* echelonText = TextFormat("%s  %s  %s", selectedEchelon > 1 ? "<" : " ", echelonInfo.name.c_str(),
+                                                 selectedEchelon < saveData.unlockedEchelon ? ">" : " ");
+            DrawText(echelonText, Settings::SCREEN_WIDTH / 2 - MeasureText(echelonText, 28) / 2, 490, 28, ORANGE);
+            const char* echelonSub = TextFormat("Boss etter %02d:%02d   |   Laast opp: %d / %d", timerMin, timerSec, saveData.unlockedEchelon, MAX_ECHELON);
+            DrawText(echelonSub, Settings::SCREEN_WIDTH / 2 - MeasureText(echelonSub, 18) / 2, 528, 18, LIGHTGRAY);
+
+            DrawText("[A/D] Karakter   [W/S] Echelon   [ENTER] Start   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 300, 600, 20, GRAY);
         }
         else if (currentState == SHOP) {
             shop.draw(totalGold);
@@ -389,15 +490,30 @@ int main() {
             // 2. TEGNING PÅ SKJERMEN
             BeginMode2D(camera);
 
-                // --- TEGN BAKGRUNN (GRID) ---
-                int gridSize = 100;
-                int gridExtent = 2000;
+                if (inBossArena) {
+                    // --- BOSS-ARENA ---
+                    DrawCircleV(Arena::CENTER, Arena::RADIUS, Color{ 40, 10, 10, 255 });
+                    for (float r = 100.0f; r < Arena::RADIUS; r += 100.0f) {
+                        DrawCircleLines((int)Arena::CENTER.x, (int)Arena::CENTER.y, r, Fade(MAROON, 0.4f));
+                    }
+                    DrawCircleLines((int)Arena::CENTER.x, (int)Arena::CENTER.y, Arena::RADIUS, RED);
+                    DrawCircleLines((int)Arena::CENTER.x, (int)Arena::CENTER.y, Arena::RADIUS + 6.0f, MAROON);
+                } else {
+                    // --- TEGN BAKGRUNN (GRID) ---
+                    int gridSize = 100;
+                    int gridExtent = 2000;
 
-                for (int x = -gridExtent; x <= gridExtent; x += gridSize) {
-                    DrawLine(x, -gridExtent, x, gridExtent, DARKGRAY);
-                }
-                for (int y = -gridExtent; y <= gridExtent; y += gridSize) {
-                    DrawLine(-gridExtent, y, gridExtent, y, DARKGRAY);
+                    for (int x = -gridExtent; x <= gridExtent; x += gridSize) {
+                        DrawLine(x, -gridExtent, x, gridExtent, DARKGRAY);
+                    }
+                    for (int y = -gridExtent; y <= gridExtent; y += gridSize) {
+                        DrawLine(-gridExtent, y, gridExtent, y, DARKGRAY);
+                    }
+
+                    // --- REFRENSERUBRIKKER / OBJEKTER I VERDEN ---
+                    DrawRectangle(-300, -300, 80, 80, RED);
+                    DrawRectangle(400, 200, 100, 100, GREEN);
+                    DrawCircle(0, -500, 60.0f, PURPLE);
                 }
 
                 for (const auto& pickup : pickups) {
@@ -406,11 +522,6 @@ int main() {
                         DrawCircleLines((int)pickup.position.x, (int)pickup.position.y, pickup.radius, ORANGE);
                     }
                 }
-
-                // --- REFRENSERUBRIKKER / OBJEKTER I VERDEN ---
-                DrawRectangle(-300, -300, 80, 80, RED);
-                DrawRectangle(400, 200, 100, 100, GREEN);
-                DrawCircle(0, -500, 60.0f, PURPLE);
 
                 // --- SPILLER OG VÅPEN ---
                 player.draw(camera.rotation);
@@ -459,6 +570,22 @@ int main() {
             // --- ABILITY-SLOTS (5 stk, låste er mørke) ---
             DrawAbilityHud(player, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT);
 
+            // --- BOSS HP-BAR ---
+            if (inBossArena) {
+                for (const auto& e : enemies) {
+                    if (e->id != bossId) continue;
+                    float bossBarWidth = 600.0f;
+                    float bossBarX = Settings::SCREEN_WIDTH / 2.0f - bossBarWidth / 2.0f;
+                    float bossBarY = 100.0f;
+                    float pct = std::max(0.0f, (float)e->hp / (float)e->maxHp);
+                    DrawRectangle((int)bossBarX, (int)bossBarY, (int)bossBarWidth, 18, Fade(BLACK, 0.7f));
+                    DrawRectangle((int)bossBarX, (int)bossBarY, (int)(bossBarWidth * pct), 18, RED);
+                    DrawRectangleLines((int)bossBarX, (int)bossBarY, (int)bossBarWidth, 18, WHITE);
+                    const char* bossName = TextFormat("BOSS - %s", GetEchelon(selectedEchelon).name.c_str());
+                    DrawText(bossName, Settings::SCREEN_WIDTH / 2 - MeasureText(bossName, 16) / 2, (int)bossBarY + 22, 16, WHITE);
+                }
+            }
+
             if (currentState == LEVEL_UP) {
                 // Mørklegg skjermen bak menyen
                 DrawRectangle(0, 0, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, Fade(BLACK, 0.85f));
@@ -492,8 +619,14 @@ int main() {
 
         else if (currentState == GAME_OVER) {
             int cx = Settings::SCREEN_WIDTH / 2;
-            const char* heading = lastRun.died ? "DU DOEDE" : "RUN AVSLUTTET";
-            DrawText(heading, cx - MeasureText(heading, 44) / 2, 90, 44, lastRun.died ? RED : YELLOW);
+            const char* heading = lastRun.bossDefeated ? TextFormat("%s FULLFOERT!", GetEchelon(lastRun.echelon).name.c_str())
+                                : lastRun.died ? "DU DOEDE" : "RUN AVSLUTTET";
+            Color headingColor = lastRun.bossDefeated ? GREEN : (lastRun.died ? RED : YELLOW);
+            DrawText(heading, cx - MeasureText(heading, 44) / 2, 70, 44, headingColor);
+            if (lastRun.unlockedNewEchelon) {
+                const char* unlockText = TextFormat("%s er laast opp!", GetEchelon(lastRun.echelon + 1).name.c_str());
+                DrawText(unlockText, cx - MeasureText(unlockText, 24) / 2, 125, 24, ORANGE);
+            }
 
             int minutes = (int)lastRun.timeSurvived / 60;
             int seconds = (int)lastRun.timeSurvived % 60;
@@ -504,24 +637,49 @@ int main() {
             DrawText(TextFormat("Mynter plukket opp:   %d g", lastRun.coinGold), cx - 200, y, 22, LIGHTGRAY);
             DrawText(TextFormat("Overlevd tid:              %d g", lastRun.survivalGold), cx - 200, y + 35, 22, LIGHTGRAY);
             DrawText(TextFormat("Level-bonus:                %d g", lastRun.levelGold), cx - 200, y + 70, 22, LIGHTGRAY);
-            if (lastRun.greedMult > 1.0f) {
-                DrawText(TextFormat("Greed:                          x%.1f", lastRun.greedMult), cx - 200, y + 105, 22, LIGHTGRAY);
+            int nextLine = y + 105;
+            if (lastRun.bossGold > 0) {
+                DrawText(TextFormat("Boss-bonus:                  %d g", lastRun.bossGold), cx - 200, nextLine, 22, GREEN);
+                nextLine += 35;
             }
-            DrawLine(cx - 200, y + 140, cx + 200, y + 140, GRAY);
-            DrawText(TextFormat("TOTALT:  +%d g", lastRun.totalGold), cx - 200, y + 155, 30, GOLD);
-            DrawText(TextFormat("Gull i banken: %d g", totalGold), cx - 200, y + 200, 20, GOLD);
+            if (lastRun.greedMult > 1.0f) {
+                DrawText(TextFormat("Greed:                          x%.1f", lastRun.greedMult), cx - 200, nextLine, 22, LIGHTGRAY);
+                nextLine += 35;
+            }
+            DrawLine(cx - 200, nextLine, cx + 200, nextLine, GRAY);
+            DrawText(TextFormat("TOTALT:  +%d g", lastRun.totalGold), cx - 200, nextLine + 15, 30, GOLD);
+            DrawText(TextFormat("Gull i banken: %d g", totalGold), cx - 200, nextLine + 60, 20, GOLD);
 
             DrawText("[ENTER] Tilbake til menyen", cx - 140, Settings::SCREEN_HEIGHT - 80, 20, GRAY);
         }
 
         if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
-            // --- KLOKKE / TIMER ØVERST I MIDTEN ---
-            int minutes = (int)spawner.gameTime / 60;
-            int seconds = (int)spawner.gameTime % 60;
-            const char* timeText = TextFormat("%02d:%02d", minutes, seconds);
+            // --- KLOKKE: TELLER NED TIL BOSSEN ---
             int fontSize = 32;
-            int textWidth = MeasureText(timeText, fontSize);
-            DrawText(timeText, (Settings::SCREEN_WIDTH / 2) - (textWidth / 2), 20, fontSize, WHITE);
+            if (inBossArena) {
+                const char* bossText = "BOSS";
+                DrawText(bossText, (Settings::SCREEN_WIDTH / 2) - MeasureText(bossText, fontSize) / 2, 20, fontSize, RED);
+            } else {
+                float remaining = std::max(0.0f, GetEchelon(selectedEchelon).bossTimerSeconds - spawner.gameTime);
+                int minutes = (int)remaining / 60;
+                int seconds = (int)remaining % 60;
+                const char* timeText = TextFormat("%02d:%02d", minutes, seconds);
+                // Blinker rødt det siste halve minuttet
+                Color timeColor = (remaining < 30.0f && ((int)(remaining * 2.0f) % 2 == 0)) ? RED : WHITE;
+                DrawText(timeText, (Settings::SCREEN_WIDTH / 2) - MeasureText(timeText, fontSize) / 2, 20, fontSize, timeColor);
+            }
+            const char* echelonLabel = GetEchelon(selectedEchelon).name.c_str();
+            DrawText(echelonLabel, Settings::SCREEN_WIDTH - MeasureText(echelonLabel, 20) - 20, 20, 20, ORANGE);
+
+            // --- "BOSS ARENA"-INTRO ETTER TELEPORT ---
+            if (inBossArena && arenaIntroTimer > 0.0f) {
+                float t = arenaIntroTimer / Arena::INTRO_TIME; // 1 -> 0
+                // Hvitt blink som fader ut, så teksten
+                DrawRectangle(0, 0, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, Fade(WHITE, std::max(0.0f, (t - 0.7f) / 0.3f)));
+                const char* introText = "BOSS ARENA";
+                int introSize = 64;
+                DrawText(introText, Settings::SCREEN_WIDTH / 2 - MeasureText(introText, introSize) / 2, Settings::SCREEN_HEIGHT / 2 - 80, introSize, Fade(RED, std::min(1.0f, t * 2.0f)));
+            }
         }
 
         EndDrawing();
@@ -533,7 +691,7 @@ int main() {
     }
     UnloadTexture(enemyTexture);
 
-    shop.save(Rewards::SAVE_FILE, totalGold);
+    saveProgress();
     CloseWindow();
     return 0;
 }
