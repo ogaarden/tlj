@@ -12,6 +12,7 @@
 #include "spawner.hpp"
 #include "enemy.hpp"
 #include "weapon.hpp"
+#include "damage_numbers.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -33,7 +34,9 @@ std::vector<UpgradeOption> GetRandomUpgrades() {
     std::vector<UpgradeOption> allPossibleUpgrades = {
         { "Standard Gun", "Skyter kuler mot nærmeste fiende.", 0 },
         { "Melee Sword", "Svinger et sverd rundt deg i nærkamp.", 1 },
-        { "Weapon Upgrade", "Øker skade og reduserer cooldown.", 2 }
+        { "Weapon Upgrade", "Øker skade og reduserer cooldown.", 2 },
+        { "Ricochet", "Kule som spretter videre til neste fiende (svakere per sprett).", 3 },
+        { "Rot", "Giftaura som skader alle fiender rundt deg hele tiden.", 4 }
     };
 
     std::vector<UpgradeOption> chosenUpgrades;
@@ -148,6 +151,7 @@ int main() {
                 spawner.gameTime = 0.0f;
                 spawner.spawnTimer = 0.0f;
                 enemies.clear();
+                ClearDamageNumbers();
 
                 currentState = GAMEPLAY;
             }
@@ -222,6 +226,8 @@ int main() {
                 w->update(deltaTime, player.position, enemies, xpOrbs, player.projectileCount);
             }
 
+            UpdateDamageNumbers(deltaTime);
+
             // Fjerne døde fiender
             enemies.erase(
                 std::remove_if(enemies.begin(), enemies.end(),
@@ -257,6 +263,25 @@ int main() {
                 else if (chosen.weaponId == 2) {
                     if (!player.weapons.empty()) {
                         player.weapons[0]->upgrade();
+                    }
+                }
+                else if (chosen.weaponId == 3 || chosen.weaponId == 4) {
+                    // Har vi allerede våpenet? Da oppgraderer vi det i stedet for å legge til et nytt
+                    Weapon* existing = nullptr;
+                    for (auto& w : player.weapons) {
+                        if (w->name == chosen.title) existing = w.get();
+                    }
+
+                    if (existing) {
+                        existing->upgrade();
+                    } else if (player.weapons.size() < (size_t)player.maxWeapons) {
+                        if (chosen.weaponId == 3) {
+                            // navn, cooldown, fart, skade, antall sprett, sprett-rekkevidde
+                            player.addWeapon(std::make_unique<RicochetWeapon>("Ricochet", 0.9f, 550.0f, 40.0f, 3, 250.0f));
+                        } else {
+                            // navn, skade per sekund, radius
+                            player.addWeapon(std::make_unique<RotWeapon>("Rot", 60.0f, 110.0f));
+                        }
                     }
                 }
 
@@ -366,6 +391,9 @@ int main() {
 
 
             EndMode2D();
+
+            // --- SKADETALL (tegnes i skjerm-koordinater så de ikke roterer med kameraet) ---
+            DrawDamageNumbers(camera);
 
             // --- UI / TEKST (Festet til skjermen, roterer ikke) ---
             DrawText("GAMEPLAY (ESC for meny)", 20, 20, 20, GREEN);

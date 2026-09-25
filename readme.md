@@ -25,4 +25,9 @@ Notes:
 2) Støtte ulike type våpen
 3) Når spiller levler opp, skal ability menu komme
 
+// 25 september
+1) Ricochet ability (spretter videre, svakere per sprett)
+2) Rot ability (AOE aura, lav skade hver frame)
+3) Damage numbers over fiender
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

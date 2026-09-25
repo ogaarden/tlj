@@ -1,4 +1,5 @@
 #include "enemy.hpp"
+#include "damage_numbers.hpp"
 
 // --- Baseklasse ---
 void Enemy::draw() const {
@@ -21,7 +22,25 @@ void Enemy::draw() const {
     }
 }
 
-void Enemy::takeDamage(int amount) { hp -= amount; }
+void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
+    if (amount <= 0) return;
+    hp -= amount;
+
+    if (!isDamageOverTime) {
+        SpawnDamageNumber(position, amount, numberColor);
+        return;
+    }
+
+    // DoT: samle opp skaden og vis den som ett tall ca. 4 ganger i sekundet
+    pendingDotDamage += amount;
+    dotColor = numberColor;
+    double now = GetTime();
+    if (now - lastDotPopupTime >= 0.25 || isDead()) {
+        SpawnDamageNumber(position, pendingDotDamage, dotColor);
+        pendingDotDamage = 0;
+        lastDotPopupTime = now;
+    }
+}
 bool Enemy::isDead() const { return hp <= 0; }
 
 // --- Footman ---

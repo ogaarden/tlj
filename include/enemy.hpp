@@ -12,7 +12,17 @@ enum class EnemyType {
 };
 
 class Enemy {
+private:
+    static inline int nextId = 0;
+
+    // Damage-over-time (f.eks. Rot) samles opp og vises som ett tall
+    // med jevne mellomrom, i stedet for ett tall per frame.
+    int pendingDotDamage = 0;
+    double lastDotPopupTime = 0.0;
+    Color dotColor = WHITE;
+
 public:
+    const int id = nextId++; // Unik ID, brukes f.eks. av ricochet for å huske hvem som er truffet
     Vector2 position;
     float speed;
     int hp;
@@ -27,7 +37,7 @@ public:
 
     // Kun deklarasjoner – ingen { ... } her
     virtual void update(Vector2 playerPosition) = 0;
-    void takeDamage(int amount);
+    void takeDamage(int amount, Color numberColor = WHITE, bool isDamageOverTime = false);
     bool isDead() const;
     virtual void draw() const;
 };

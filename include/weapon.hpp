@@ -65,4 +65,52 @@ public:
     void draw() const override;
 };
 
+// Prosjektil som spretter videre til nærmeste fiende når det treffer.
+// Hvert sprett gjør mindre skade og har kortere rekkevidde enn det forrige.
+struct RicochetProjectile {
+    Vector2 position;
+    Vector2 direction;
+    float speed;
+    float damage;
+    float lifetime;
+    int bouncesLeft;
+    float bounceRange;
+    std::vector<int> hitEnemyIds; // Så den ikke spretter tilbake til samme fiende
+};
+
+class RicochetWeapon : public Weapon {
+private:
+    float projectileSpeed;
+    int maxBounces;
+    float bounceRange;
+    float damageFalloff; // Skade-multiplikator per sprett (0.7 = -30% per sprett)
+    float rangeFalloff;  // Rekkevidde-multiplikator per sprett
+    std::vector<RicochetProjectile> projectiles;
+
+public:
+    RicochetWeapon(std::string weaponName, float rate, float speed, float dmg, int bounces, float range);
+
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, int projectileCount = 1) override;
+    void draw() const override;
+    void upgrade() override;
+};
+
+// Aura rundt spilleren som gjør lav skade på alle fiender innenfor radius HVER FRAME.
+// Skaden er definert som skade per sekund og akkumuleres, slik at den blir lik uansett FPS.
+class RotWeapon : public Weapon {
+private:
+    float radius;
+    float damagePerSecond;
+    float damageAccumulator = 0.0f;
+    float pulseTimer = 0.0f;
+    Vector2 lastPlayerPos = { 0, 0 };
+
+public:
+    RotWeapon(std::string weaponName, float dps, float auraRadius);
+
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, int projectileCount = 1) override;
+    void draw() const override;
+    void upgrade() override;
+};
+
 #endif // WEAPON_HPP
