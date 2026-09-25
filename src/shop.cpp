@@ -1,95 +1,181 @@
 #include "shop.hpp"
 #include "settings.hpp"
+#include <cmath>
+#include <fstream>
+#include <sstream>
 
-Shop::Shop() : selectedOption(0), scrollOffset(0) {
-    // Øker HP med +10% per nivå (1.10x, 1.20x ...)
-    items.push_back({ "Health Boost", "+10% Max HP", 100, 0, 5, [this]() { hpMult += 0.10f; } });
-    
-    // Øker Speed med +10% per nivå
-    items.push_back({ "Swift Boots", "+5% Speed", 110, 0, 5, [this]() { speedMult += 0.10f; } });
-    
-    // Øker Armor med +15% per nivå
-    items.push_back({ "Reinforced Armor", "+10% Armor", 120, 0, 5, [this]() { armorMult += 0.15f; } });
-    
-    // Universell ekstra-stat som gjelder Player uavhengig av karakter
-    items.push_back({ "Aegis Protection", "+1 Ekstra liv (Aegis)", 1000, 0, 1, [this]() { aegisBonus += 1; } });
-
-    // Øker loot radius med 50
-    items.push_back({"Loot Magnet", "+50 ekstra radius", 100, 0 ,5, [this]() {lootRadiusAdd += 50;} });
-
-    items.push_back({"Float like a butterfly", "+5% evasion", 100, 0 ,5, [this](){evasionAdd += 0.05f;} });
-
-    items.push_back({"Projecile count", "+1 projectile", 250, 0 ,3, [this](){extraProjectile += 1;} });
-   
+// =====================================================================
+// BALANSE
+// Gull er metaprogresjon: målet er at det tar ~30-40 gode runs å kjøpe alt,
+// og at spillet da er ganske enkelt. Prisen øker med COST_GROWTH per nivå.
+// =====================================================================
+namespace {
+    constexpr float COST_GROWTH = 1.4f;
 }
 
-void Shop::applyToPlayer(const CharacterData& baseChar, Player& player) const {
-    // 1. Player arver basestats fra Character og ganger med Shop-multiplikatorene
-    player.maxHp = baseChar.maxHp * hpMult;
-    player.hp = player.maxHp;
-    player.speed = baseChar.speed * speedMult;
-    player.armor = baseChar.armor * armorMult;
-    player.spellAmp = baseChar.spellAmp;
-    player.lootRadius = baseChar.lootRadius + lootRadiusAdd;
-    player.evasion = player.evasion + evasionAdd;
-    player.projectileCount = player.projectileCount + extraProjectile;
+int ShopItem::cost() const {
+    return (int)std::round(baseCost * std::pow(COST_GROWTH, (float)currentLevel));
+}
 
+Shop::Shop() {
+    //            oppgradering              lagringsnøkkel  navn                      beskrivelse (per nivå)          pris  maks
+    items.push_back({ ShopUpgrade::VITALITY,     "vitality",   "Vitality",               "+10% maks HP",                  60,  5 });
+    items.push_back({ ShopUpgrade::ARMOR,        "armor",      "Reinforced Armor",       "+3 armor",                      50,  5 });
+    items.push_back({ ShopUpgrade::REGEN,        "regen",      "Regeneration",           "+0.4 HP per sekund",            60,  5 });
+    items.push_back({ ShopUpgrade::EVASION,      "evasion",    "Float like a butterfly", "+4% evasion",                   60,  5 });
+    items.push_back({ ShopUpgrade::SPEED,        "speed",      "Swift Boots",            "+5% fart",                      50,  5 });
+    items.push_back({ ShopUpgrade::MIGHT,        "might",      "Might",                  "+10% skade",                    80,  5 });
+    items.push_back({ ShopUpgrade::HASTE,        "haste",      "Haste",                  "-5% cooldown",                  80,  5 });
+    items.push_back({ ShopUpgrade::AREA,         "area",       "Area",                   "+10% radius og treffomraade",   60,  5 });
+    items.push_back({ ShopUpgrade::PROJECTILE,   "projectile", "Projectile count",       "+1 prosjektil",                200,  3 });
+    items.push_back({ ShopUpgrade::MAGNET,       "magnet",     "Loot Magnet",            "+30 pickup-radius",             40,  5 });
+    items.push_back({ ShopUpgrade::GROWTH,       "growth",     "Growth",                 "+8% XP",                        60,  5 });
+    items.push_back({ ShopUpgrade::GREED,        "greed",      "Greed",                  "+10% gull",                     70,  5 });
+    items.push_back({ ShopUpgrade::EXTRA_CHOICE, "choice",     "Flere valg",             "+1 valg ved level up",         400,  1 });
+    items.push_back({ ShopUpgrade::AEGIS,        "aegis",      "Aegis Protection",       "+1 ekstra liv",                500,  1 });
+}
+
+int Shop::level(ShopUpgrade upgrade) const {
+    for (const auto& item : items) {
+        if (item.upgrade == upgrade) return item.currentLevel;
+    }
+    return 0;
+}
+
+float Shop::hpMult() const { return 1.0f + 0.10f * level(ShopUpgrade::VITALITY); }
+float Shop::speedMult() const { return 1.0f + 0.05f * level(ShopUpgrade::SPEED); }
+float Shop::armorBonus() const { return 3.0f * level(ShopUpgrade::ARMOR); }
+int Shop::aegisBonus() const { return level(ShopUpgrade::AEGIS); }
+
+void Shop::applyToPlayer(const CharacterData& baseChar, Player& player) const {
+    // 1. Player arver basestats fra Character og legger på shop-bonusene
+    player.maxHp = baseChar.maxHp * hpMult();
+    player.hp = player.maxHp;
+    player.speed = baseChar.speed * speedMult();
+    player.armor = baseChar.armor + armorBonus();
+    player.spellAmp = baseChar.spellAmp;
+    player.lootRadius = baseChar.lootRadius + 30.0f * level(ShopUpgrade::MAGNET);
+    player.xpMultiplier = baseChar.xpMultiplier * (1.0f + 0.08f * level(ShopUpgrade::GROWTH));
 
     // 2. Universelle shop-stats
-    player.aegis = aegisBonus;
+    player.evasion = 0.05f + 0.04f * level(ShopUpgrade::EVASION);
+    player.hpRegen = 0.4f * level(ShopUpgrade::REGEN);
+    player.damageMult = 1.0f + 0.10f * level(ShopUpgrade::MIGHT);
+    player.cooldownMult = std::pow(0.95f, (float)level(ShopUpgrade::HASTE));
+    player.areaMult = 1.0f + 0.10f * level(ShopUpgrade::AREA);
+    player.projectileCount = 1 + level(ShopUpgrade::PROJECTILE);
+    player.goldMultiplier = 1.0f + 0.10f * level(ShopUpgrade::GREED);
+    player.levelUpChoices = 3 + level(ShopUpgrade::EXTRA_CHOICE);
+    player.aegis = aegisBonus();
 }
 
 void Shop::handleInput(int& totalGold) {
+    int count = static_cast<int>(items.size());
     if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
-        selectedOption = (selectedOption + 1) % static_cast<int>(items.size());
+        selectedOption = (selectedOption + 1) % count;
     }
     if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
-        selectedOption = (selectedOption - 1 + static_cast<int>(items.size())) % static_cast<int>(items.size());
+        selectedOption = (selectedOption - 1 + count) % count;
     }
 
     if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
         ShopItem& item = items[selectedOption];
-        if (totalGold >= item.cost && item.currentLevel < item.maxLevel) {
-            totalGold -= item.cost;
+        if (!item.isMaxed() && totalGold >= item.cost()) {
+            totalGold -= item.cost();
             item.currentLevel++;
-            item.applyUpgrade(); // Øker multiplikatoren
-            item.cost = static_cast<int>(item.cost * 1.5f);
         }
     }
+
+    // DEBUG: gi deg selv gull for å teste shoppen. Fjern før release!
+    if (IsKeyPressed(KEY_F9)) totalGold += 500;
 }
 
 void Shop::draw(int totalGold) {
-    DrawText("POWER-UP SHOP", Settings::SCREEN_WIDTH / 2 - 140, 40, 32, GOLD);
-    DrawText(TextFormat("Ditt Gull: %d g", totalGold), Settings::SCREEN_WIDTH / 2 - 80, 80, 22, WHITE);
+    DrawText("POWER-UP SHOP", Settings::SCREEN_WIDTH / 2 - 140, 30, 32, GOLD);
+    DrawText(TextFormat("Ditt gull: %d g", totalGold), Settings::SCREEN_WIDTH / 2 - 80, 72, 22, WHITE);
 
-    int visibleCount = 8;
-    int startY = 120;
+    const int visibleCount = 11;
+    const int rowHeight = 40;
+    const int startY = 115;
+    const int left = 80;
+    const int right = Settings::SCREEN_WIDTH - 80;
 
     if (selectedOption < scrollOffset) scrollOffset = selectedOption;
     if (selectedOption >= scrollOffset + visibleCount) scrollOffset = selectedOption - visibleCount + 1;
 
     for (int i = 0; i < visibleCount && (scrollOffset + i) < static_cast<int>(items.size()); i++) {
         int idx = scrollOffset + i;
+        const ShopItem& item = items[idx];
         bool isSelected = (idx == selectedOption);
-        
-        bool isMax = (items[idx].currentLevel >= items[idx].maxLevel);
-        Color textColor = isMax ? GRAY : (isSelected ? YELLOW : WHITE);
-        const char* prefix = isSelected ? "> " : "  ";
+        bool canAfford = totalGold >= item.cost();
+        int y = startY + i * rowHeight;
 
-        std::string priceText = isMax ? "MAX" : TextFormat("%d g", items[idx].cost);
+        if (isSelected) {
+            DrawRectangle(left - 10, y - 6, right - left + 20, rowHeight - 4, Fade(DARKGRAY, 0.6f));
+            DrawRectangleLines(left - 10, y - 6, right - left + 20, rowHeight - 4, YELLOW);
+        }
 
-        std::string line = TextFormat("%s%s (%s) - Nivaa %d/%d - Pris: %s",
-            prefix,
-            items[idx].name.c_str(),
-            items[idx].description.c_str(),
-            items[idx].currentLevel,
-            items[idx].maxLevel,
-            priceText.c_str()
-        );
+        Color nameColor = item.isMaxed() ? GRAY : (isSelected ? YELLOW : WHITE);
+        DrawText(item.name.c_str(), left, y, 20, nameColor);
+        DrawText(item.description.c_str(), left + 280, y + 3, 16, LIGHTGRAY);
 
-        DrawText(line.c_str(), 100, startY + (i * 42), 18, textColor);
+        // Nivå-prikker
+        for (int l = 0; l < item.maxLevel; l++) {
+            Color pip = (l < item.currentLevel) ? GOLD : Fade(DARKGRAY, 0.9f);
+            DrawRectangle(left + 620 + l * 16, y + 5, 12, 12, pip);
+        }
+
+        // Pris
+        const char* priceText = item.isMaxed() ? "MAKS" : TextFormat("%d g", item.cost());
+        Color priceColor = item.isMaxed() ? GRAY : (canAfford ? GOLD : MAROON);
+        int priceWidth = MeasureText(priceText, 20);
+        DrawText(priceText, right - priceWidth, y, 20, priceColor);
     }
 
-    DrawText("Bruk WASD/Piltaster for a navigere, [ENTER] for a kjoope", Settings::SCREEN_WIDTH / 2 - 270, 480, 18, LIGHTGRAY);
-    DrawText("Trykk [ESC] eller [B] for a ga tilbake", Settings::SCREEN_WIDTH / 2 - 180, 510, 18, GRAY);
+    // Scroll-piler hvis det finnes flere rader
+    if (scrollOffset > 0) DrawText("^", Settings::SCREEN_WIDTH / 2, startY - 22, 20, GRAY);
+    if (scrollOffset + visibleCount < (int)items.size()) DrawText("v", Settings::SCREEN_WIDTH / 2, startY + visibleCount * rowHeight - 8, 20, GRAY);
+
+    DrawText("[W/S] naviger   [ENTER] kjoep   [ESC/B] tilbake", Settings::SCREEN_WIDTH / 2 - 250, Settings::SCREEN_HEIGHT - 60, 18, LIGHTGRAY);
+}
+
+void Shop::save(const std::string& path, int totalGold) const {
+    std::ofstream file(path);
+    if (!file) return;
+
+    file << "gold " << totalGold << "\n";
+    for (const auto& item : items) {
+        file << item.saveKey << " " << item.currentLevel << "\n";
+    }
+}
+
+void Shop::load(const std::string& path, int& totalGold) {
+    std::ifstream file(path);
+    if (!file) return; // Ingen lagring ennå – ny spiller
+
+    std::string line;
+    while (std::getline(file, line)) {
+        std::istringstream in(line);
+        std::string key;
+        int value = 0;
+        if (!(in >> key >> value)) continue;
+
+        if (key == "gold") {
+            totalGold = value;
+            continue;
+        }
+        for (auto& item : items) {
+            if (item.saveKey == key) item.currentLevel = std::max(0, std::min(value, item.maxLevel));
+        }
+    }
+}
+
+int Shop::totalCostOfEverything() const {
+    int total = 0;
+    for (ShopItem item : items) {
+        for (item.currentLevel = 0; item.currentLevel < item.maxLevel; item.currentLevel++) {
+            total += item.cost();
+        }
+    }
+    return total;
 }

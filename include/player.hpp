@@ -26,6 +26,15 @@ struct Player {
     float spellAmp = 1.0f;
     float cooldownReduction = 0.0f;
 
+    // Bonuser fra shoppen (metaprogresjon)
+    float damageMult = 1.0f;   // "Might"
+    float cooldownMult = 1.0f; // "Haste"
+    float areaMult = 1.0f;     // "Area"
+    float hpRegen = 0.0f;      // HP per sekund
+    int levelUpChoices = 3;    // Antall valg i level-up-menyen
+
+    float invulnerableTimer = 0.0f; // Kort udødelighet etter å ha tatt skade
+
     int projectileCount = 1;
     int aegis = 0;
 
@@ -42,7 +51,8 @@ struct Player {
 
     void update(float cameraRotation = 0.0f);
     void draw(float rotation = 0.0f);
-    bool takeDamage(float rawDamage);
+    float takeDamage(float rawDamage); // Returnerer faktisk skade (0 hvis dodge)
+    CombatModifiers combatModifiers() const;
     void addXP(int amount);
 
     void addWeapon(std::unique_ptr<Weapon> newWeapon);

@@ -6,28 +6,23 @@
 // --- Felles hjelpefunksjoner ---
 namespace {
 
-// Dropp XP og fjern død fiende
-void removeDeadEnemy(std::vector<std::unique_ptr<Enemy>>& enemies, size_t index, std::vector<XPorb>& xpOrbs) {
-    xpOrbs.push_back({
-        enemies[index]->position,
-        enemies[index]->xpValue,
-        enemies[index]->orbColor,
-        enemies[index]->orbRadius,
-        15.0f
-    });
+// Dropp loot (XP/gull), tell drapet og fjern død fiende
+void removeDeadEnemy(std::vector<std::unique_ptr<Enemy>>& enemies, size_t index, std::vector<Pickup>& pickups) {
+    enemies[index]->dropLoot(pickups);
+    Enemy::killCount++;
     enemies.erase(enemies.begin() + index);
 }
 
 // Gjør skade på alle fiender innenfor radius. Returnerer antall fiender som ble truffet.
 int damageEnemiesInRadius(Vector2 center, float radius, int damage, Color color, bool isDamageOverTime,
-                          std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs) {
+                          std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) {
     int hits = 0;
     for (size_t j = 0; j < enemies.size(); ) {
         if (Vector2Distance(center, enemies[j]->position) <= radius) {
             enemies[j]->takeDamage(damage, color, isDamageOverTime);
             hits++;
             if (enemies[j]->isDead()) {
-                removeDeadEnemy(enemies, j, xpOrbs);
+                removeDeadEnemy(enemies, j, pickups);
                 continue;
             }
         }
@@ -90,13 +85,13 @@ constexpr float ENEMY_HIT_RADIUS = 16.0f;
 
 ProjectileWeapon::ProjectileWeapon(bool fireInSpread) : spread(fireInSpread) {}
 
-void ProjectileWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods)
+void ProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups)
 {
     fireTimer += deltaTime;
 
-    if (fireTimer >= stats.cooldown && !enemies.empty()) {
+    if (fireTimer >= cooldown() && !enemies.empty()) {
         int count = stats.projectiles + mods.extraProjectiles;
-        int dmg = scaledDamage(mods);
+        int dmg = scaledDamage();
 
         auto fire = [&](Vector2 dir) {
             projectiles.push_back({
@@ -150,7 +145,7 @@ void ProjectileWeapon::update(float deltaTime, Vector2 playerPos, std::vector<st
             enemy->takeDamage(p.damage, color);
             p.hitEnemyIds.push_back(enemy->id);
 
-            if (enemy->isDead()) removeDeadEnemy(enemies, j, xpOrbs);
+            if (enemy->isDead()) removeDeadEnemy(enemies, j, pickups);
             else j++;
 
             if (p.pierceLeft <= 0) destroyed = true;
@@ -181,34 +176,34 @@ void ProjectileWeapon::draw() const {
 // MeleeWeapon (Ground Slam)
 // =====================================================================
 
-void MeleeWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods)
+void MeleeWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups)
 {
     fireTimer += deltaTime;
     lastPlayerPos = playerPos; // Oppdaterer posisjonen hver frame slik at draw() vet hvor spilleren er
     if (effectTimer > 0.0f) effectTimer -= deltaTime;
 
-    if (fireTimer < stats.cooldown) return;
+    if (fireTimer < cooldown()) return;
 
     // Slå bare når minst én fiende er innenfor rekkevidde – ellers holdes angrepet klart
     bool anyInRange = std::any_of(enemies.begin(), enemies.end(), [&](const auto& e) {
-        return Vector2Distance(playerPos, e->position) <= stats.radius;
+        return Vector2Distance(playerPos, e->position) <= radius();
     });
     if (!anyInRange) return;
 
-    damageEnemiesInRadius(playerPos, stats.radius, scaledDamage(mods), color, false, enemies, xpOrbs);
+    damageEnemiesInRadius(playerPos, radius(), scaledDamage(), color, false, enemies, pickups);
     effectTimer = 0.3f;
     fireTimer = 0.0f;
 }
 
 void MeleeWeapon::draw() const {
     // Svak ring som viser rekkevidden
-    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, stats.radius, Fade(color, 0.3f));
+    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius(), Fade(color, 0.3f));
 
     // Sjokkbølge som vokser utover når slaget treffer
     if (effectTimer > 0.0f) {
         float t = 1.0f - effectTimer / 0.3f; // 0 -> 1
-        DrawCircleV(lastPlayerPos, stats.radius * t, Fade(color, 0.35f * (1.0f - t)));
-        DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, stats.radius * t, Fade(color, 1.0f - t));
+        DrawCircleV(lastPlayerPos, radius() * t, Fade(color, 0.35f * (1.0f - t)));
+        DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius() * t, Fade(color, 1.0f - t));
     }
 }
 
@@ -218,11 +213,11 @@ void MeleeWeapon::draw() const {
 
 BouncingProjectileWeapon::BouncingProjectileWeapon(bool isHoming) : homing(isHoming) {}
 
-void BouncingProjectileWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods)
+void BouncingProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups)
 {
     fireTimer += deltaTime;
 
-    if (fireTimer >= stats.cooldown && !enemies.empty()) {
+    if (fireTimer >= cooldown() && !enemies.empty()) {
         int count = stats.projectiles + mods.extraProjectiles;
         std::vector<Enemy*> targets = nearestEnemies(playerPos, enemies, count);
 
@@ -278,7 +273,7 @@ void BouncingProjectileWeapon::update(float deltaTime, Vector2 playerPos, std::v
             p.hitEnemyIds.push_back(enemy->id);
             Vector2 hitPos = enemy->position;
 
-            if (enemy->isDead()) removeDeadEnemy(enemies, j, xpOrbs);
+            if (enemy->isDead()) removeDeadEnemy(enemies, j, pickups);
 
             // Finn neste mål: nærmeste fiende innenfor rekkevidde som ikke er truffet
             Enemy* nextTarget = (p.bouncesLeft > 0) ? nearestUnhitEnemy(hitPos, p.bounceRange, p.hitEnemyIds, enemies) : nullptr;
@@ -335,7 +330,7 @@ void BouncingProjectileWeapon::draw() const {
 // RotWeapon
 // =====================================================================
 
-void RotWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods)
+void RotWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups)
 {
     lastPlayerPos = playerPos;
     pulseTimer += deltaTime;
@@ -347,14 +342,14 @@ void RotWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::uniq
     if (tickDamage <= 0) return;
     damageAccumulator -= tickDamage;
 
-    damageEnemiesInRadius(playerPos, stats.radius, tickDamage, color, true, enemies, xpOrbs);
+    damageEnemiesInRadius(playerPos, radius(), tickDamage, color, true, enemies, pickups);
 }
 
 void RotWeapon::draw() const {
     // Pulserende giftsky rundt spilleren
     float pulse = 0.5f + 0.5f * sinf(pulseTimer * 4.0f);
-    DrawCircleV(lastPlayerPos, stats.radius, Fade(DARKGREEN, 0.15f + 0.08f * pulse));
-    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, stats.radius - 2.0f * pulse, Fade(color, 0.6f));
+    DrawCircleV(lastPlayerPos, radius(), Fade(DARKGREEN, 0.15f + 0.08f * pulse));
+    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius() - 2.0f * pulse, Fade(color, 0.6f));
 }
 
 // =====================================================================
@@ -363,16 +358,16 @@ void RotWeapon::draw() const {
 
 Vector2 OrbitWeapon::bladePosition(int index) const {
     float a = (angle + 360.0f / bladeCount * index) * DEG2RAD;
-    return { lastPlayerPos.x + cosf(a) * stats.radius, lastPlayerPos.y + sinf(a) * stats.radius };
+    return { lastPlayerPos.x + cosf(a) * radius(), lastPlayerPos.y + sinf(a) * radius() };
 }
 
-void OrbitWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods)
+void OrbitWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups)
 {
     lastPlayerPos = playerPos;
     time += deltaTime;
     angle = fmodf(angle + stats.speed * deltaTime, 360.0f);
     bladeCount = stats.projectiles + mods.extraProjectiles;
-    int dmg = scaledDamage(mods);
+    int dmg = scaledDamage();
 
     for (int b = 0; b < bladeCount; b++) {
         Vector2 bladePos = bladePosition(b);
@@ -383,12 +378,12 @@ void OrbitWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::un
 
             // Samme fiende kan bare treffes én gang per cooldown
             auto it = lastHitTime.find(enemy->id);
-            if (it != lastHitTime.end() && time - it->second < stats.cooldown) { j++; continue; }
+            if (it != lastHitTime.end() && time - it->second < cooldown()) { j++; continue; }
 
             enemy->takeDamage(dmg, color);
             lastHitTime[enemy->id] = time;
 
-            if (enemy->isDead()) removeDeadEnemy(enemies, j, xpOrbs);
+            if (enemy->isDead()) removeDeadEnemy(enemies, j, pickups);
             else j++;
         }
     }
@@ -396,7 +391,7 @@ void OrbitWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::un
     // Rydd bort gamle oppføringer så mappet ikke vokser for alltid
     if (lastHitTime.size() > 256) {
         for (auto it = lastHitTime.begin(); it != lastHitTime.end(); ) {
-            if (time - it->second >= stats.cooldown) it = lastHitTime.erase(it);
+            if (time - it->second >= cooldown()) it = lastHitTime.erase(it);
             else ++it;
         }
     }
@@ -415,7 +410,7 @@ void OrbitWeapon::draw() const {
 // LightningWeapon
 // =====================================================================
 
-void LightningWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods)
+void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups)
 {
     fireTimer += deltaTime;
 
@@ -425,12 +420,12 @@ void LightningWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std
         else i++;
     }
 
-    if (fireTimer < stats.cooldown) return;
+    if (fireTimer < cooldown()) return;
 
     // Finn fiender innenfor rekkevidde
     std::vector<Vector2> candidates;
     for (const auto& e : enemies) {
-        if (Vector2Distance(playerPos, e->position) <= stats.radius) candidates.push_back(e->position);
+        if (Vector2Distance(playerPos, e->position) <= radius()) candidates.push_back(e->position);
     }
     if (candidates.empty()) return; // Hold lynet klart til noen kommer nær nok
 
@@ -444,12 +439,12 @@ void LightningWeapon::update(float deltaTime, Vector2 playerPos, std::vector<std
         candidates.erase(candidates.begin() + idx);
     }
 
-    int dmg = scaledDamage(mods);
+    int dmg = scaledDamage();
     for (Vector2 pos : strikePositions) {
-        damageEnemiesInRadius(pos, stats.area, dmg, color, false, enemies, xpOrbs);
+        damageEnemiesInRadius(pos, area(), dmg, color, false, enemies, pickups);
 
         // Lag en hakkete lynstrek fra "himmelen" ned til treffpunktet
-        LightningBolt bolt{ pos, stats.area, 0.25f, {} };
+        LightningBolt bolt{ pos, area(), 0.25f, {} };
         Vector2 start = { pos.x + (float)GetRandomValue(-40, 40), pos.y - 350.0f };
         const int segments = 7;
         for (int s = 0; s <= segments; s++) {

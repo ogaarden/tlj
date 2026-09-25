@@ -34,4 +34,10 @@ Notes:
 6) Abilities går fra level 1-9 med forhåndsbestemte oppgraderinger (abilities.cpp)
 7) Nye abilities: Magic Missile, Dagger, Orbit Blades, Lightning
 
+// 26 september
+1) Fiender gjør kontaktskade, spilleren kan dø (Aegis = ekstra liv)
+2) Gull som metaprogresjon: sjeldne mynter + bonus for tid og level
+3) Game over-skjerm med oppsummering av gull
+4) Shop med 14 oppgraderinger, lagres i save.txt mellom økter
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

@@ -43,6 +43,16 @@ void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
 }
 bool Enemy::isDead() const { return hp <= 0; }
 
+void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
+    pickups.push_back({ position, xpValue, orbColor, orbRadius, 15.0f, PickupType::XP });
+
+    // Gull er metaprogresjon, så sjansen er lav med vilje
+    if (goldChance > 0.0f && GetRandomValue(1, 10000) <= (int)(goldChance * 10000.0f)) {
+        Vector2 coinPos = { position.x + (float)GetRandomValue(-8, 8), position.y + (float)GetRandomValue(-8, 8) };
+        pickups.push_back({ coinPos, goldValue, GOLD, 5.0f, 30.0f, PickupType::COIN });
+    }
+}
+
 // --- Footman ---
 Footman::Footman(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
@@ -52,6 +62,8 @@ Footman::Footman(Vector2 spawnPos, Texture2D tex) {
     damage = 10;
     xpValue = 15;
     orbColor = BLUE;
+    goldChance = 0.05f;
+    goldValue = 1;
     orbRadius = 5.0f;
     texture = tex;
 }
@@ -71,6 +83,8 @@ Goon::Goon(Vector2 spawnPos, Texture2D tex) {
     damage = 25;
     xpValue = 40;
     orbColor = GREEN;
+    goldChance = 0.10f;
+    goldValue = 2;
     orbRadius = 10.0f;
     texture = tex;
 }
@@ -90,6 +104,8 @@ Lackey::Lackey(Vector2 spawnPos, Texture2D tex) {
     damage = 5;
     xpValue = 8;
     orbColor = YELLOW;
+    goldChance = 0.03f;
+    goldValue = 1;
     orbRadius = 4.0f;
     texture = tex;
 }

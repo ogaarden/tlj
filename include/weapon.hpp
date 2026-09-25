@@ -11,8 +11,10 @@
 
 // Bonuser fra spilleren som gjelder alle abilities
 struct CombatModifiers {
-    int extraProjectiles = 0; // Fra shop ("Projectile count")
-    float damageMult = 1.0f;  // Spillerens spellAmp
+    int extraProjectiles = 0;  // Fra shop ("Projectile count")
+    float damageMult = 1.0f;   // Spillerens spellAmp * shop "Might"
+    float cooldownMult = 1.0f; // Shop "Haste" (0.9 = 10% kortere cooldown)
+    float areaMult = 1.0f;     // Shop "Area" (radius og treffområde)
 };
 
 // Baseklassen for ALLE abilities/våpen.
@@ -20,8 +22,16 @@ struct CombatModifiers {
 class Weapon {
 protected:
     float fireTimer = 0.0f;
+    CombatModifiers mods; // Settes hver frame av update()
 
-    int scaledDamage(const CombatModifiers& mods) const { return (int)(stats.damage * mods.damageMult); }
+    // Stats med spillerens bonuser lagt på. Bruk disse i tick() i stedet for stats direkte.
+    int scaledDamage() const { return (int)(stats.damage * mods.damageMult); }
+    float cooldown() const { return stats.cooldown * mods.cooldownMult; }
+    float radius() const { return stats.radius * mods.areaMult; }
+    float area() const { return stats.area * mods.areaMult; }
+
+    // Hver ability implementerer sin egen logikk her
+    virtual void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) = 0;
 
 public:
     AbilityId id = AbilityId::TREFORK;
@@ -33,14 +43,18 @@ public:
     // Virtuell destruktør er obligatorisk når man bruker arv i C++
     virtual ~Weapon() = default;
 
-    // "Pure virtual" funksjoner betyr at subklassene MÅ skrive sin egen versjon av disse!
-    virtual void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) = 0;
+    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups, const CombatModifiers& modifiers) {
+        mods = modifiers;
+        tick(deltaTime, playerPos, enemies, pickups);
+    }
+
+    // "Pure virtual" betyr at subklassene MÅ skrive sin egen versjon
     virtual void draw() const = 0;
 
     // 0.0 = nettopp brukt, 1.0 = klar. Brukes av HUD-en.
     virtual float cooldownProgress() const {
-        if (stats.cooldown <= 0.0f) return 1.0f;
-        float p = fireTimer / stats.cooldown;
+        if (cooldown() <= 0.0f) return 1.0f;
+        float p = fireTimer / cooldown();
         return p > 1.0f ? 1.0f : p;
     }
 };
@@ -64,7 +78,7 @@ private:
 public:
     explicit ProjectileWeapon(bool fireInSpread);
 
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
 };
 
@@ -75,7 +89,7 @@ private:
     float effectTimer = 0.0f;
 
 public:
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
 };
 
@@ -100,7 +114,7 @@ private:
 public:
     explicit BouncingProjectileWeapon(bool isHoming);
 
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
 };
 
@@ -113,7 +127,7 @@ private:
     Vector2 lastPlayerPos = { 0, 0 };
 
 public:
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     float cooldownProgress() const override { return 1.0f; }
 };
@@ -130,7 +144,7 @@ private:
     Vector2 bladePosition(int index) const;
 
 public:
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     float cooldownProgress() const override { return 1.0f; }
 };
@@ -148,7 +162,7 @@ private:
     std::vector<LightningBolt> bolts;
 
 public:
-    void update(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<XPorb>& xpOrbs, const CombatModifiers& mods) override;
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
 };
 

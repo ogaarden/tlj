@@ -1,5 +1,6 @@
 #include "player.hpp"
 #include <cmath>
+#include <algorithm>
 #include <cstdlib>
 #include <vector>
 #include <memory>
@@ -7,6 +8,9 @@
 void Player::update(float cameraRotation)
 {
     float deltaTime = GetFrameTime();
+
+    if (invulnerableTimer > 0.0f) invulnerableTimer -= deltaTime;
+    if (hpRegen > 0.0f && hp > 0.0f) hp = std::min(maxHp, hp + hpRegen * deltaTime);
 
     // 1. Les inn tastetrykk basert på SKJERM-retninger
     Vector2 screenInput = { 0.0f, 0.0f };
@@ -47,17 +51,21 @@ void Player::draw(float cameraRotation)
     Rectangle dest = { position.x, position.y, (float)texture.width, (float)texture.height };
     Vector2 origin = { (float)texture.width / 2.0f, (float)texture.height / 2.0f };
 
-    DrawTexturePro(texture, source, dest, origin, -finalDrawAngle, WHITE);
+    // Blink rødt mens spilleren er udødelig etter et treff
+    Color tint = WHITE;
+    if (invulnerableTimer > 0.0f && ((int)(invulnerableTimer * 20.0f) % 2 == 0)) tint = RED;
+
+    DrawTexturePro(texture, source, dest, origin, -finalDrawAngle, tint);
 }
 
 // Beregn skade basert på Armor og Evasion
-bool Player::takeDamage(float rawDamage)
+float Player::takeDamage(float rawDamage)
 {
     // 1. Sjekk Evasion (f.eks. random tall mellom 0.0 og 1.0)
     float roll = static_cast<float>(rand()) / RAND_MAX;
     if (roll < evasion) {
         // Unngikk skade helt! (Dodge)
-        return false;
+        return 0.0f;
     }
 
     // 2. Beregn skadereduksjon basert på Armor
@@ -67,7 +75,16 @@ bool Player::takeDamage(float rawDamage)
     hp -= damageTaken;
     if (hp < 0.0f) hp = 0.0f;
 
-    return true; // Tok skade
+    return damageTaken;
+}
+
+CombatModifiers Player::combatModifiers() const {
+    CombatModifiers mods;
+    mods.extraProjectiles = projectileCount - 1;
+    mods.damageMult = spellAmp * damageMult;
+    mods.cooldownMult = cooldownMult;
+    mods.areaMult = areaMult;
+    return mods;
 }
 
 void Player::addWeapon(std::unique_ptr<Weapon> newWeapon) {

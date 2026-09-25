@@ -4,12 +4,15 @@
 #include <raylib.h>
 #include <raymath.h>
 #include <cmath>
+#include <vector>
 
 enum class EnemyType {
     FOOTMAN,
     GOON,
     LACKEY
 };
+
+struct Pickup;
 
 class Enemy {
 private:
@@ -22,6 +25,8 @@ private:
     Color dotColor = WHITE;
 
 public:
+    static inline int killCount = 0; // Antall drepte fiender denne runden
+
     const int id = nextId++; // Unik ID, brukes f.eks. av ricochet for å huske hvem som er truffet
     Vector2 position;
     float speed;
@@ -29,6 +34,8 @@ public:
     int maxHp;
     int damage;
     int xpValue;
+    int goldValue = 1;        // Hvor mye gull en mynt fra denne fienden er verdt
+    float goldChance = 0.0f;  // Sjanse (0-1) for at fienden dropper en mynt
     Color orbColor;
     float orbRadius;
     Texture2D texture;
@@ -39,6 +46,7 @@ public:
     virtual void update(Vector2 playerPosition) = 0;
     void takeDamage(int amount, Color numberColor = WHITE, bool isDamageOverTime = false);
     bool isDead() const;
+    void dropLoot(std::vector<Pickup>& pickups) const; // XP + evt. gull når fienden dør
     virtual void draw() const;
 };
 
@@ -75,12 +83,19 @@ public:
     // Vi kan også override draw hvis vi vil at den skal lyse oransje/rødt
 };
 
-struct XPorb {
+enum class PickupType {
+    XP,
+    COIN
+};
+
+// Ting som ligger på bakken og kan plukkes opp (XP-orbs og gullmynter)
+struct Pickup {
     Vector2 position;
     int value;
     Color color;
     float radius;
     float lifetime;
+    PickupType type = PickupType::XP;
 };
 
 #endif // ENEMY_HPP

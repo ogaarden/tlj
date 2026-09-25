@@ -22,13 +22,54 @@ enum GameState {
     SETTINGS,
     GAMEPLAY,
     LEVEL_UP,
-    ITEM_SELECT
+    ITEM_SELECT,
+    GAME_OVER
 };
+
+// =====================================================================
+// GULL-BELØNNING PER RUN (metaprogresjon)
+// Mynter fra fiender er sjeldne (se goldChance i enemy.cpp). I tillegg får man
+// litt gull for hvor lenge man overlevde og hvilket level man nådde.
+// Et typisk 10-minutters run gir ca. 250-300 gull (~120 mynter + 100 tid + ~60 level),
+// og alt i shoppen koster ~9100 gull -> ca. 30-35 gode runs for å kjøpe alt.
+// =====================================================================
+namespace Rewards {
+    constexpr float GOLD_PER_MINUTE = 10.0f;
+    constexpr int GOLD_PER_LEVEL = 3;
+    const char* SAVE_FILE = "save.txt";
+}
+
+struct RunSummary {
+    bool died = false;
+    float timeSurvived = 0.0f;
+    int level = 1;
+    int kills = 0;
+    int coinGold = 0;     // Mynter plukket opp
+    int survivalGold = 0; // Bonus for overlevd tid
+    int levelGold = 0;    // Bonus for level
+    float greedMult = 1.0f;
+    int totalGold = 0;
+};
+
+RunSummary CalculateRunSummary(bool died, float time, int level, int kills, int coins, float greedMult) {
+    RunSummary r;
+    r.died = died;
+    r.timeSurvived = time;
+    r.level = level;
+    r.kills = kills;
+    r.coinGold = coins;
+    r.survivalGold = (int)(time / 60.0f * Rewards::GOLD_PER_MINUTE);
+    r.levelGold = (level - 1) * Rewards::GOLD_PER_LEVEL;
+    r.greedMult = greedMult;
+    r.totalGold = (int)((r.coinGold + r.survivalGold + r.levelGold) * greedMult);
+    return r;
+}
 
 int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, "The Last Jester");
     SetTargetFPS(Settings::FPS);
+    SetExitKey(KEY_NULL); // ESC skal gå tilbake i menyer, ikke lukke hele spillet
 
     GameState currentState = MAIN_MENU;
     int mainOption = 0;
@@ -46,8 +87,13 @@ int main() {
     Texture2D enemyTexture = LoadTexture("assets/jester_real.png"); // Bytt ut med egen enemy.png om du har
 
     // Instans av shoppen og permanent gull
+    // Gull og kjøp lagres i save.txt slik at de akkumuleres over runs og økter
     Shop shop;
-    int totalGold = 500; // Starter med litt test-gull
+    int totalGold = 0;
+    shop.load(Rewards::SAVE_FILE, totalGold);
+
+    int runCoins = 0;       // Mynter plukket opp denne runden
+    RunSummary lastRun;     // Vises på game over-skjermen
 
     Player player{};
     Camera2D camera{};
@@ -59,7 +105,7 @@ int main() {
     // --- SPAWNER OG FIENDER ---
     WaveSpawner spawner;
     std::vector<std::unique_ptr<Enemy>> enemies;
-    std::vector<XPorb> xpOrbs;
+    std::vector<Pickup> pickups;
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
@@ -99,20 +145,16 @@ int main() {
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
                 CharacterData choice = characters[selectedCharacter];
 
-                // 1. Tilbakestill standard spillerspesifikke variabler
-                player.evasion = 0.05f;
-                player.xpMultiplier = 1.0f;
-                player.goldMultiplier = 1.0f;
-                player.cooldownReduction = 0.0f;
-                player.projectileCount = 1;
-
-                // Nullstill progresjon fra forrige runde
+                // 1. Nullstill progresjon fra forrige runde
                 player.position = { 0.0f, 0.0f };
                 player.level = 1;
                 player.currentXp = 0;
                 player.xpToNextLevel = 100;
                 player.weapons.clear();
+                player.invulnerableTimer = 0.0f;
                 lastPlayerLevel = 1;
+                runCoins = 0;
+                Enemy::killCount = 0;
 
                 // 2. La shoppen påføre arvede basestats + shop-multiplikatorer
                 shop.applyToPlayer(choice, player);
@@ -133,7 +175,7 @@ int main() {
                 spawner.gameTime = 0.0f;
                 spawner.spawnTimer = 0.0f;
                 enemies.clear();
-                xpOrbs.clear();
+                pickups.clear();
                 ClearDamageNumbers();
 
                 currentState = GAMEPLAY;
@@ -142,10 +184,10 @@ int main() {
         else if (currentState == SHOP) {
             // Tilbake til Hovedmeny
             if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_B) || IsKeyPressed(KEY_ESCAPE)) {
+                shop.save(Rewards::SAVE_FILE, totalGold);
                 currentState = MAIN_MENU;
             }
 
-            // Oppgraderer interne shop-multiplikatorer
             shop.handleInput(totalGold);
         }
         else if (currentState == SETTINGS) {
@@ -159,7 +201,7 @@ int main() {
                 lastPlayerLevel = player.level;
                 currentState = LEVEL_UP;
                 selectedUpgradeOption = 0;
-                activeUpgradeChoices = GenerateLevelUpChoices(player);
+                activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
             }
 
             // 1. INPUT & OPPDRATERING
@@ -179,8 +221,36 @@ int main() {
                 enemy->update(player.position);
             }
 
+            // --- FIENDER SKADER SPILLEREN VED KONTAKT ---
+            const float playerHitRadius = 20.0f;
+            if (player.invulnerableTimer <= 0.0f) {
+                for (auto& enemy : enemies) {
+                    if (CheckCollisionCircles(player.position, playerHitRadius, enemy->position, 15.0f)) {
+                        float taken = player.takeDamage((float)enemy->damage);
+                        if (taken > 0.0f) SpawnDamageNumber(player.position, std::max(1, (int)(taken + 0.5f)), RED);
+                        player.invulnerableTimer = 0.5f; // Kort pause så man ikke smeltes av en klump fiender
+                        break;
+                    }
+                }
+            }
+
+            bool runEnded = false;
+            if (player.hp <= 0.0f) {
+                if (player.aegis > 0) {
+                    // Aegis: gjenoppstå med halv HP og blås bort fiender rundt deg
+                    player.aegis--;
+                    player.hp = player.maxHp * 0.5f;
+                    player.invulnerableTimer = 2.0f;
+                    enemies.erase(std::remove_if(enemies.begin(), enemies.end(), [&](const std::unique_ptr<Enemy>& e) {
+                        return Vector2Distance(e->position, player.position) < 250.0f;
+                    }), enemies.end());
+                } else {
+                    runEnded = true;
+                }
+            }
+
             // --- OPPDATER OG PLUKK OPP XP-ORBS ---
-            for (auto it = xpOrbs.begin(); it != xpOrbs.end(); ) {
+            for (auto it = pickups.begin(); it != pickups.end(); ) {
                 float distance = Vector2Distance(it->position, player.position);
 
                 // Hvis orben er innenfor spillerens lootRadius, sug den til deg!
@@ -190,12 +260,14 @@ int main() {
 
                     // Når den er helt nær (f.eks. innenfor 15 piksler), saml den opp
                     if (distance < 15.0f) {
-                        // Multipliser gjerne med spillerens xpMultiplier om du vil ha utbytte av traits!
-                        int finalXp = static_cast<int>(it->value * player.xpMultiplier);
-                        player.addXP(finalXp);
+                        if (it->type == PickupType::COIN) {
+                            runCoins += it->value;
+                        } else {
+                            player.addXP(static_cast<int>(it->value * player.xpMultiplier));
+                        }
 
                         // Slett orben fra listen
-                        it = xpOrbs.erase(it);
+                        it = pickups.erase(it);
                     } else {
                         ++it;
                     }
@@ -205,11 +277,9 @@ int main() {
             }
 
             // Oppdater alle abilities
-            CombatModifiers mods;
-            mods.extraProjectiles = player.projectileCount - 1;
-            mods.damageMult = player.spellAmp;
+            CombatModifiers mods = player.combatModifiers();
             for (auto& w : player.weapons) {
-                w->update(deltaTime, player.position, enemies, xpOrbs, mods);
+                w->update(deltaTime, player.position, enemies, pickups, mods);
             }
 
             UpdateDamageNumbers(deltaTime);
@@ -221,8 +291,19 @@ int main() {
                 enemies.end()
             );
 
-            if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE)) {
-                currentState = MAIN_MENU; // Gå ut til menyen igjen
+            // ESC/P avslutter runden (man får fortsatt gullet man har tjent)
+            bool gaveUp = IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE);
+
+            if (runEnded || gaveUp) {
+                lastRun = CalculateRunSummary(runEnded, spawner.gameTime, player.level, Enemy::killCount, runCoins, player.goldMultiplier);
+                totalGold += lastRun.totalGold;
+                shop.save(Rewards::SAVE_FILE, totalGold);
+                currentState = GAME_OVER;
+            }
+        }
+        else if (currentState == GAME_OVER) {
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_ESCAPE)) {
+                currentState = MAIN_MENU;
             }
         }
             else if(currentState == LEVEL_UP) {
@@ -282,16 +363,16 @@ int main() {
                 DrawTexturePro(icon, srcRect, destRect, { 0.0f, 0.0f }, 0.0f, WHITE);
 
                 // Beskrivelse og oppgangende stats med Shop-bonuser
-                float finalHp = characters[i].maxHp * shop.hpMult;
-                float finalSpeed = characters[i].speed * shop.speedMult;
-                float finalArmor = characters[i].armor * shop.armorMult;
+                float finalHp = characters[i].maxHp * shop.hpMult();
+                float finalSpeed = characters[i].speed * shop.speedMult();
+                float finalArmor = characters[i].armor + shop.armorBonus();
 
                 DrawText(characters[i].description.c_str(), posX + 15, 240, 12, GRAY);
                 DrawText(TextFormat("HP: %.0f", finalHp), posX + 15, 270, 16, WHITE);
                 DrawText(TextFormat("Fart: %.0f", finalSpeed), posX + 15, 295, 16, WHITE);
                 DrawText(TextFormat("Armor: %.1f", finalArmor), posX + 15, 320, 16, WHITE);
                 DrawText(TextFormat("Radius: %.0f", characters[i].lootRadius), posX + 15, 345, 16, WHITE);
-                DrawText(TextFormat("Aegis: +%d", shop.aegisBonus), posX + 15, 370, 16, GREEN);
+                DrawText(TextFormat("Aegis: +%d", shop.aegisBonus()), posX + 15, 370, 16, GREEN);
             }
 
             DrawText("[ENTER] Start Game   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 180, 480, 20, GRAY);
@@ -319,8 +400,11 @@ int main() {
                     DrawLine(-gridExtent, y, gridExtent, y, DARKGRAY);
                 }
 
-                for (const auto& orb : xpOrbs) {
-                    DrawCircleV(orb.position, orb.radius, orb.color);
+                for (const auto& pickup : pickups) {
+                    DrawCircleV(pickup.position, pickup.radius, pickup.color);
+                    if (pickup.type == PickupType::COIN) {
+                        DrawCircleLines((int)pickup.position.x, (int)pickup.position.y, pickup.radius, ORANGE);
+                    }
                 }
 
                 // --- REFRENSERUBRIKKER / OBJEKTER I VERDEN ---
@@ -352,6 +436,8 @@ int main() {
             DrawText(TextFormat("Vinkel: %.1f deg", camera.rotation), 20, 75, 18, YELLOW);
             DrawText(TextFormat("HP: %.0f / %.0f", player.hp, player.maxHp), 20, 105, 18, RED);
             DrawText(TextFormat("Aegis: %d", player.aegis), 20, 130, 18, GREEN);
+            DrawText(TextFormat("Gull: %d", runCoins), 20, 155, 18, GOLD);
+            DrawText(TextFormat("Kills: %d", Enemy::killCount), 20, 180, 18, LIGHTGRAY);
 
             float barWidth = 400.0f;
             float barHeight = 12.0f;
@@ -377,14 +463,14 @@ int main() {
                 // Mørklegg skjermen bak menyen
                 DrawRectangle(0, 0, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, Fade(BLACK, 0.85f));
 
-                DrawText("LEVEL UP! VELG EN OPPDATERING", Settings::SCREEN_WIDTH / 2 - 210, 120, 30, YELLOW);
+                DrawText("LEVEL UP! VELG EN OPPDATERING", Settings::SCREEN_WIDTH / 2 - 210, 110, 30, YELLOW);
 
                 int cardWidth = 450;
                 int cardHeight = 80;
-                int startY = 220;
+                int startY = (activeUpgradeChoices.size() > 3) ? 170 : 220; // Plass til 4 valg med "Flere valg"-oppgraderingen
 
                 for (size_t i = 0; i < activeUpgradeChoices.size(); i++) {
-                    int cardY = startY + (int)i * (cardHeight + 20);
+                    int cardY = startY + (int)i * (cardHeight + 15);
                     bool isSelected = ((int)i == selectedUpgradeOption);
 
                     // Tegn boks
@@ -404,6 +490,31 @@ int main() {
             }
         }
 
+        else if (currentState == GAME_OVER) {
+            int cx = Settings::SCREEN_WIDTH / 2;
+            const char* heading = lastRun.died ? "DU DOEDE" : "RUN AVSLUTTET";
+            DrawText(heading, cx - MeasureText(heading, 44) / 2, 90, 44, lastRun.died ? RED : YELLOW);
+
+            int minutes = (int)lastRun.timeSurvived / 60;
+            int seconds = (int)lastRun.timeSurvived % 60;
+            DrawText(TextFormat("Tid: %02d:%02d    Level: %d    Kills: %d", minutes, seconds, lastRun.level, lastRun.kills),
+                     cx - 230, 170, 22, WHITE);
+
+            int y = 240;
+            DrawText(TextFormat("Mynter plukket opp:   %d g", lastRun.coinGold), cx - 200, y, 22, LIGHTGRAY);
+            DrawText(TextFormat("Overlevd tid:              %d g", lastRun.survivalGold), cx - 200, y + 35, 22, LIGHTGRAY);
+            DrawText(TextFormat("Level-bonus:                %d g", lastRun.levelGold), cx - 200, y + 70, 22, LIGHTGRAY);
+            if (lastRun.greedMult > 1.0f) {
+                DrawText(TextFormat("Greed:                          x%.1f", lastRun.greedMult), cx - 200, y + 105, 22, LIGHTGRAY);
+            }
+            DrawLine(cx - 200, y + 140, cx + 200, y + 140, GRAY);
+            DrawText(TextFormat("TOTALT:  +%d g", lastRun.totalGold), cx - 200, y + 155, 30, GOLD);
+            DrawText(TextFormat("Gull i banken: %d g", totalGold), cx - 200, y + 200, 20, GOLD);
+
+            DrawText("[ENTER] Tilbake til menyen", cx - 140, Settings::SCREEN_HEIGHT - 80, 20, GRAY);
+        }
+
+        if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
             // --- KLOKKE / TIMER ØVERST I MIDTEN ---
             int minutes = (int)spawner.gameTime / 60;
             int seconds = (int)spawner.gameTime % 60;
@@ -411,6 +522,7 @@ int main() {
             int fontSize = 32;
             int textWidth = MeasureText(timeText, fontSize);
             DrawText(timeText, (Settings::SCREEN_WIDTH / 2) - (textWidth / 2), 20, fontSize, WHITE);
+        }
 
         EndDrawing();
     }
@@ -421,6 +533,7 @@ int main() {
     }
     UnloadTexture(enemyTexture);
 
+    shop.save(Rewards::SAVE_FILE, totalGold);
     CloseWindow();
     return 0;
 }
