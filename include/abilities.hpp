@@ -41,7 +41,8 @@ std::vector<AbilityId> GetSharedAbilityPool();
 enum class ChoiceType {
     NEW_ABILITY,
     UPGRADE_ABILITY,
-    HEAL // Reserve når alt er fullt og maks-level
+    STAT, // Stat-oppgradering (maks HP, fart, skade ...)
+    HEAL  // Reserve når alt er fullt og maks-level
 };
 
 struct AbilityChoice {
@@ -50,7 +51,17 @@ struct AbilityChoice {
     std::string title;
     std::string description;
     Color color;
+    StatBoost stat = StatBoost::COUNT; // Bare for ChoiceType::STAT
 };
+
+// Navn, beskrivelse og farge for en stat-oppgradering
+struct StatBoostInfo {
+    const char* name;
+    const char* description;
+    Color color;
+};
+const StatBoostInfo& GetStatBoostInfo(StatBoost stat);
+void DrawStatBoostIcon(StatBoost stat, Vector2 center, float size); // Bruker shop-ikonene
 
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count = 3);
 void ApplyAbilityChoice(Player& player, const AbilityChoice& choice);

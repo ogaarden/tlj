@@ -32,6 +32,9 @@ private:
     int hordeSpawnedWave = -1;
 
     void spawnWave(int waveIndex);
+
+public:
+    // Lager én fiende med echelon- og tidsskalering (brukes også når kongen kaller inn hjelp)
     void spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture);
 
 public:

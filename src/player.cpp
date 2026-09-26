@@ -88,14 +88,20 @@ float Player::takeDamage(float rawDamage)
         return 0.0f;
     }
 
-    // 2. Beregn skadereduksjon basert på Armor
-    // Eksempel på avtagende skadereduksjons-formel: Damage = RawDamage * (100 / (100 + armor))
-    float damageTaken = rawDamage * (100.0f / (100.0f + armor));
+    // 2. Skadereduksjon fra armor (se armorReduction)
+    float damageTaken = rawDamage * (1.0f - armorReduction());
 
     hp -= damageTaken;
     if (hp < 0.0f) hp = 0.0f;
 
     return damageTaken;
+}
+
+// Armor med avtagende effekt: armor / (armor + 30).
+// 8 armor = 21 %, 23 armor = 43 %, 40 armor = 57 %. Aldri mer enn 75 %.
+float Player::armorReduction() const {
+    if (armor <= 0.0f) return 0.0f;
+    return std::min(0.75f, armor / (armor + 30.0f));
 }
 
 CombatModifiers Player::combatModifiers() const {

@@ -228,6 +228,7 @@ void Enemy::applyEchelonModifiers(float hpMult, float damageMult, float speedMul
 
 void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
     pickups.push_back({ position, xpValue, orbColor, orbRadius, 15.0f, PickupType::XP });
+    if (elite) pickups.push_back({ { position.x + 12.0f, position.y }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
 
     // Gull er metaprogresjon, så sjansen er lav med vilje
     if (goldChance > 0.0f && GetRandomValue(1, 10000) <= (int)(goldChance * 10000.0f)) {
@@ -240,8 +241,8 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
 Footman::Footman(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 140.0f;
-    hp = 200;
-    maxHp = 200;
+    hp = 110;       // Middels: vanlig fotsoldat
+    maxHp = 110;
     damage = 10;
     xpValue = 15;
     orbColor = BLUE;
@@ -262,10 +263,11 @@ void Footman::update(Vector2 playerPosition) {
 Goon::Goon(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 70.0f;
-    hp = 80;
-    maxHp = 80;
+    hp = 320;       // Tank: treg, men tåler mye og slår hardt
+    maxHp = 320;
     damage = 25;
     xpValue = 40;
+    hitRadius = 22.0f;
     orbColor = GREEN;
     goldChance = 0.10f;
     goldValue = 2;
@@ -332,11 +334,29 @@ void Boss::update(Vector2 playerPosition) {
     lastPlayerPos = playerPosition;
     phaseTimer += dt;
 
+    // Fase 2: rasende under halv HP
+    if (!enraged && hp <= maxHp / 2) {
+        enraged = true;
+        enragedAt = (float)GetTime();
+        speed *= 1.35f;
+        summonsRequested += 8;
+        summonTimer = 0.0f;
+        PlaySfx(Sfx::BOSS_GONG);
+        AddCameraShake(0.8f);
+        VfxShockwave(position, 220.0f, RED);
+    }
+    if (enraged) {
+        summonTimer += dt;
+        if (summonTimer >= 10.0f) { summonTimer = 0.0f; summonsRequested += 5; }
+    }
+    float chaseTime = enraged ? BOSS_CHASE_TIME * 0.55f : BOSS_CHASE_TIME;
+    float dashSpeed = enraged ? BOSS_DASH_SPEED * 1.3f : BOSS_DASH_SPEED;
+
     switch (phase) {
         case Phase::CHASE: {
             Vector2 dir = Vector2Normalize(Vector2Subtract(playerPosition, position));
             position = Vector2Add(position, Vector2Scale(dir, speed * dt));
-            if (phaseTimer >= BOSS_CHASE_TIME) {
+            if (phaseTimer >= chaseTime) {
                 phase = Phase::WINDUP;
                 phaseTimer = 0.0f;
                 PlaySfx(Sfx::BOSS_CHARGE);
@@ -352,7 +372,7 @@ void Boss::update(Vector2 playerPosition) {
             }
             break;
         case Phase::DASH:
-            position = Vector2Add(position, Vector2Scale(dashDirection, BOSS_DASH_SPEED * dt));
+            position = Vector2Add(position, Vector2Scale(dashDirection, dashSpeed * dt));
             if (phaseTimer >= BOSS_DASH_TIME) {
                 phase = Phase::CHASE;
                 phaseTimer = 0.0f;
@@ -370,7 +390,7 @@ void Boss::draw() const {
     // På gulvet: varsel-felt for Royal Charge + skygge
     if (phase == Phase::WINDUP) {
         float t = phaseTimer / BOSS_WINDUP_TIME;
-        Vector2 end = Vector2Add(position, Vector2Scale(dashDirection, BOSS_DASH_SPEED * BOSS_DASH_TIME));
+        Vector2 end = Vector2Add(position, Vector2Scale(dashDirection, BOSS_DASH_SPEED * (enraged ? 1.3f : 1.0f) * BOSS_DASH_TIME));
         DrawLineEx(position, end, hitRadius * 2.0f, Fade(RED, 0.2f + 0.3f * t));
         DrawCircleV(end, hitRadius, Fade(RED, 0.25f + 0.3f * t));
     }
@@ -396,7 +416,7 @@ void Boss::draw3D() const {
     Vector2 top = Vector2Add(position, lean);
 
     // Kappe (kjegle) med hermelinkant nederst
-    ShadedCylinder(ToWorld3D(position, 0.0f), ToWorld3D(top, 60.0f), 40.0f, 21.0f, windingUp ? ROBE_RAGE : ROBE, 20);
+    ShadedCylinder(ToWorld3D(position, 0.0f), ToWorld3D(top, 60.0f), 40.0f, 21.0f, (windingUp || enraged) ? ROBE_RAGE : ROBE, 20);
     ShadedCylinder(ToWorld3D(position, 0.0f), ToWorld3D(position, 6.0f), 41.5f, 40.5f, ERMINE, 20);
 
     // Hermelinkrage med svarte prikker
@@ -435,6 +455,13 @@ void Boss::drawVfx() const {
     // Mørk-rød aura rundt kongen, og septeret gløder når han lader opp
     float t = (float)GetTime();
     VfxDecal(VfxTex::GLOW, position, 150.0f, Color{ 90, 10, 20, 255 }, 0.0f, 1.0f);
+    if (enraged) {
+        // Rasende: brennende rød aura og glødende øyne
+        float pulse = 0.75f + 0.25f * sinf(t * 8.0f);
+        VfxDecal(VfxTex::SHOCKWAVE, position, 150.0f * pulse, Color{ 255, 60, 40, 255 }, -t * 120.0f, 1.3f);
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(position, 60.0f), 180.0f, Color{ (unsigned char)(120 * pulse), 20, 10, 255 });
+        if (GetRandomValue(0, 3) == 0) VfxBubble({ position.x + GetRandomValue(-35, 35), position.y + GetRandomValue(-35, 35) }, 10.0f, Color{ 255, 90, 40, 255 });
+    }
     if (phase == Phase::WINDUP) {
         Vector2 look = dashDirection;
         Vector2 side = { -look.y, look.x };

@@ -118,4 +118,17 @@ Notes:
 7) Ytelse: 3D-formene bruker ferdig utregnede tabeller, og detaljnivået senkes
    automatisk når det er mange fiender (SetShapeDetail)
 
+// 5 oktober
+1) Pausemeny (ESC/P): Fortsett eller Gi opp, med oversikt over alle stats.
+   Før avsluttet ESC runden med en gang!
+2) Ny armor-formel: armor / (armor + 30). 8 armor = -21 % skade, 23 = -43 %, maks -75 %.
+   Før ga 8 armor bare -7 %. Prosenten vises i karaktervalget og pausemenyen.
+3) Stat-oppgraderinger i level-up (maks 5 av hver): maks HP, fart, skade, cooldown,
+   område, magnet, armor og XP. Alltid minst ett stat-valg.
+4) Skattekister: elite-fiender slipper en kiste med lyssøyle -> gratis oppgraderingsvalg
+5) Fiendene har fått riktige roller: ogren (Goon) er tank med 320 HP, soldaten 110
+6) Slottsgulvet: gyllen kompassrose der løperne krysser, fyrfat med flammer og lys
+7) Tronsalen: fyrfat langs muren og emblem i midten. Kongen blir RASENDE under 50 % HP:
+   raskere, kortere pauser mellom dashene og kaller inn lakeier
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

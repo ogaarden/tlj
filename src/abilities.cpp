@@ -3,6 +3,7 @@
 #include "player.hpp"
 #include "ui.hpp"
 #include "icons.hpp"
+#include "shop.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -221,8 +222,40 @@ std::vector<AbilityId> GetSharedAbilityPool() {
 // LEVEL-UP-VALG
 // =====================================================================
 
+const StatBoostInfo& GetStatBoostInfo(StatBoost stat) {
+    static const StatBoostInfo infos[(int)StatBoost::COUNT] = {
+        { "Vitalitet",  "+15% maks HP, og fyller paa like mye", Color{ 230, 60, 70, 255 } },
+        { "Lette sko",  "+8% fart",                               Color{ 190, 130, 70, 255 } },
+        { "Styrke",     "+10% skade paa alle abilities",           Color{ 210, 210, 225, 255 } },
+        { "Hurtighet",  "-6% cooldown paa alle abilities",         Color{ 150, 200, 255, 255 } },
+        { "Rekkevidde", "+10% radius og treffomraade",             Color{ 255, 170, 70, 255 } },
+        { "Magnet",     "+35 radius for aa plukke opp XP og gull", Color{ 230, 60, 60, 255 } },
+        { "Rustning",   "+4 armor (mindre skade fra alt)",         Color{ 170, 180, 200, 255 } },
+        { "Visdom",     "+10% XP",                                 Color{ 90, 170, 255, 255 } },
+    };
+    return infos[(int)stat];
+}
+
+void DrawStatBoostIcon(StatBoost stat, Vector2 center, float size) {
+    static const ShopUpgrade icons[(int)StatBoost::COUNT] = {
+        ShopUpgrade::VITALITY, ShopUpgrade::SPEED, ShopUpgrade::MIGHT, ShopUpgrade::HASTE,
+        ShopUpgrade::AREA, ShopUpgrade::MAGNET, ShopUpgrade::ARMOR, ShopUpgrade::GROWTH,
+    };
+    DrawUpgradeIcon(icons[(int)stat], center, size);
+}
+
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count) {
     std::vector<AbilityChoice> candidates;
+    std::vector<AbilityChoice> statCandidates;
+
+    // 0. Stat-oppgraderinger som ikke er maksa
+    for (int i = 0; i < (int)StatBoost::COUNT; i++) {
+        if (player.statBoosts[i] >= MAX_STAT_BOOST) continue;
+        const StatBoostInfo& info = GetStatBoostInfo((StatBoost)i);
+        AbilityChoice c{ ChoiceType::STAT, AbilityId::COUNT, info.name, info.description, info.color };
+        c.stat = (StatBoost)i;
+        statCandidates.push_back(c);
+    }
 
     // 1. Oppgraderinger for abilities vi allerede har (inkl. innate)
     for (const auto& w : player.weapons) {
@@ -245,13 +278,23 @@ std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int coun
         }
     }
 
-    // Plukk tilfeldige valg
+    // Plukk tilfeldige valg. Abilities først, men minst ett (og maks to) stat-valg,
+    // så det alltid finnes noe nyttig selv om alle abilities er fulle.
     std::vector<AbilityChoice> chosen;
-    while ((int)chosen.size() < count && !candidates.empty()) {
+    int statSlots = candidates.empty() ? count : std::min(2, std::max(1, count - (int)candidates.size()));
+    int abilitySlots = count - std::min(statSlots, (int)statCandidates.size());
+    while ((int)chosen.size() < abilitySlots && !candidates.empty()) {
         int idx = GetRandomValue(0, (int)candidates.size() - 1);
         chosen.push_back(candidates[idx]);
         candidates.erase(candidates.begin() + idx);
     }
+    while ((int)chosen.size() < count && !statCandidates.empty()) {
+        int idx = GetRandomValue(0, (int)statCandidates.size() - 1);
+        chosen.push_back(statCandidates[idx]);
+        statCandidates.erase(statCandidates.begin() + idx);
+    }
+    // Bland rekkefølgen så stat-kortene ikke alltid ligger til høyre
+    for (int i = (int)chosen.size() - 1; i > 0; i--) std::swap(chosen[i], chosen[GetRandomValue(0, i)]);
 
     // Alt er maks-level og alle slots er fulle
     if (chosen.empty()) {
@@ -268,6 +311,20 @@ void ApplyAbilityChoice(Player& player, const AbilityChoice& choice) {
         case ChoiceType::UPGRADE_ABILITY:
             if (Weapon* w = player.findAbility(choice.ability)) LevelUpAbility(*w);
             break;
+        case ChoiceType::STAT: {
+            player.statBoosts[(int)choice.stat]++;
+            switch (choice.stat) {
+                case StatBoost::MAX_HP: { float gain = player.maxHp * 0.15f; player.maxHp += gain; player.hp += gain; } break;
+                case StatBoost::SPEED:  player.speed *= 1.08f; break;
+                case StatBoost::MIGHT:  player.damageMult *= 1.10f; break;
+                case StatBoost::HASTE:  player.cooldownMult *= 0.94f; break;
+                case StatBoost::AREA:   player.areaMult *= 1.10f; break;
+                case StatBoost::MAGNET: player.lootRadius += 35.0f; break;
+                case StatBoost::ARMOR:  player.armor += 4.0f; break;
+                case StatBoost::GROWTH: player.xpMultiplier *= 1.10f; break;
+                default: break;
+            }
+        } break;
         case ChoiceType::HEAL:
             player.hp = player.maxHp;
             break;

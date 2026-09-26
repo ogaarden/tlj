@@ -107,8 +107,14 @@ private:
     float phaseTimer = 0.0f;
     Vector2 dashDirection = { 0, 0 };
     Vector2 lastPlayerPos = { 0, 0 };
+    float summonTimer = 0.0f;
 
 public:
+    // Under 50 % HP blir kongen rasende: raskere dash, kortere pauser og hjelpere
+    bool enraged = false;
+    float enragedAt = -100.0f;  // Når raseriet startet (for varselteksten)
+    int summonsRequested = 0;   // Hvor mange lakeier spillet skal kalle inn rundt kongen
+
     Boss(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw() const override;
@@ -140,7 +146,8 @@ public:
 
 enum class PickupType {
     XP,
-    COIN
+    COIN,
+    CHEST // Skattekiste fra elite-fiender: gir et gratis oppgraderingsvalg
 };
 
 // Ting som ligger på bakken og kan plukkes opp (XP-orbs og gullmynter)

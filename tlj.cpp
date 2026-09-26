@@ -38,6 +38,7 @@ enum GameState {
     GAMEPLAY,
     LEVEL_UP,
     ITEM_SELECT,
+    PAUSED,
     GAME_OVER
 };
 
@@ -174,7 +175,11 @@ int main() {
     int lastPlayerLevel = 1;
     std::vector<AbilityChoice> activeUpgradeChoices;
     int selectedUpgradeOption = 0;
+    int pauseOption = 0;        // 0 = Fortsett, 1 = Gi opp
+    bool giveUpRequested = false;
     double levelUpStart = 0.0; // For animasjonen når level-up-kortene kommer inn
+    int chestsPending = 0;     // Skattekister som er plukket opp, men ikke åpnet ennå
+    bool levelUpFromChest = false;
 
     // --- SPAWNER OG FIENDER ---
     WaveSpawner spawner;
@@ -194,6 +199,7 @@ int main() {
         player.weapons.clear();
         player.invulnerableTimer = 0.0f;
         player.slowTimer = 0.0f;
+        for (int& b : player.statBoosts) b = 0;
         lastPlayerLevel = 1;
         runCoins = 0;
         Enemy::killCount = 0;
@@ -201,6 +207,7 @@ int main() {
         bossId = -1;
         arenaIntroTimer = 0.0f;
         activeCurses.clear();
+        chestsPending = 0;
 
         // 2. La shoppen påføre arvede basestats + shop-bonuser, deretter echelon-effekter
         shop.applyToPlayer(choice, player);
@@ -370,8 +377,19 @@ int main() {
             if(player.level > lastPlayerLevel){
                 lastPlayerLevel = player.level;
                 currentState = LEVEL_UP;
+                levelUpFromChest = false;
                 PlaySfx(Sfx::LEVEL_UP);
                 VfxShockwave(player.position, 90.0f, GOLD);
+                selectedUpgradeOption = 0;
+                levelUpStart = GetTime();
+                activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
+            } else if (chestsPending > 0) {
+                // Skattekiste: et gratis oppgraderingsvalg
+                chestsPending--;
+                currentState = LEVEL_UP;
+                levelUpFromChest = true;
+                PlaySfx(Sfx::VICTORY);
+                VfxShockwave(player.position, 110.0f, GOLD);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
@@ -395,6 +413,7 @@ int main() {
                 // Alt som ligger igjen på bakken suges opp automatisk
                 for (const auto& p : pickups) {
                     if (p.type == PickupType::COIN) runCoins += p.value;
+                    else if (p.type == PickupType::CHEST) chestsPending++;
                     else player.addXP(static_cast<int>(p.value * player.xpMultiplier));
                 }
                 pickups.clear();
@@ -435,6 +454,21 @@ int main() {
                 for (auto& enemy : enemies) {
                     enemy->update(player.position);
                     if (inBossArena) enemy->position = ClampToArena(enemy->position, enemy->hitRadius);
+                }
+            }
+
+            // Den rasende kongen kaller inn lakeier i en ring rundt seg
+            Boss* king = nullptr;
+            for (auto& e : enemies) if (e->id == bossId) king = static_cast<Boss*>(e.get());
+            if (king && king->summonsRequested > 0) {
+                int n = king->summonsRequested;
+                king->summonsRequested = 0;
+                Vector2 kingPos = king->position;
+                for (int i = 0; i < n; i++) {
+                    float a = (float)i / n * 2.0f * PI;
+                    Vector2 pos = ClampToArena({ kingPos.x + cosf(a) * 110.0f, kingPos.y + sinf(a) * 110.0f }, 20.0f);
+                    spawner.spawnEnemy(EnemyType::LACKEY, pos, enemies, enemyTexture);
+                    VfxDeath(pos, Color{ 255, 80, 60, 255 });
                 }
             }
 
@@ -479,6 +513,8 @@ int main() {
                         if (it->type == PickupType::COIN) {
                             runCoins += it->value;
                             PlaySfx(Sfx::COIN);
+                        } else if (it->type == PickupType::CHEST) {
+                            chestsPending++;
                         } else {
                             player.addXP(static_cast<int>(it->value * player.xpMultiplier));
                             PlaySfx(Sfx::XP);
@@ -523,8 +559,14 @@ int main() {
             bool bossDefeated = inBossArena && bossId >= 0 &&
                 std::none_of(enemies.begin(), enemies.end(), [&](const std::unique_ptr<Enemy>& e) { return e->id == bossId; });
 
-            // ESC/P avslutter runden (man får fortsatt gullet man har tjent)
-            bool gaveUp = IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE);
+            // ESC/P åpner pausemenyen. "Gi opp" der avslutter runden (man får fortsatt gullet man har tjent).
+            bool gaveUp = giveUpRequested;
+            giveUpRequested = false;
+            if (!gaveUp && (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_ESCAPE))) {
+                currentState = PAUSED;
+                pauseOption = 0;
+                PlaySfx(Sfx::UI_SELECT);
+            }
 
             if (runEnded || gaveUp || bossDefeated) {
                 lastRun = CalculateRunSummary(runEnded, bossDefeated, selectedEchelon, spawner.gameTime, player.level, Enemy::killCount, runCoins, player.goldMultiplier);
@@ -542,6 +584,14 @@ int main() {
 
                 saveProgress();
                 currentState = GAME_OVER;
+            }
+        }
+        else if (currentState == PAUSED) {
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) pauseOption = 1 - pauseOption;
+            if (IsKeyPressed(KEY_ESCAPE) || IsKeyPressed(KEY_P)) currentState = GAMEPLAY;
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
+                if (pauseOption == 1) giveUpRequested = true; // Håndteres i GAMEPLAY neste frame
+                currentState = GAMEPLAY;
             }
         }
         else if (currentState == GAME_OVER) {
@@ -599,7 +649,7 @@ int main() {
                 EndTextureMode();
             }
         }
-        if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
+        if (currentState == GAMEPLAY || currentState == LEVEL_UP || currentState == PAUSED) {
             // Portrett av klovnens hode til HUD-en
             float headHeight = (player.clown == ClownStyle::GEEK) ? 58.0f : 47.0f;
             Camera3D portraitCam{};
@@ -720,7 +770,7 @@ int main() {
                 DrawLineEx({ textX, textY + 24.0f }, { posX + cardWidth - 20.0f, textY + 24.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
                 DrawText(TextFormat("Innate: %s", GetAbilityDefinition(characters[i].innateAbility).name.c_str()), (int)textX, (int)textY + 34, 16, GOLD);
                 const char* labels[4] = { "HP", "Fart", "Armor", "Radius" };
-                const char* values[4] = { TextFormat("%.0f", finalHp), TextFormat("%.0f", finalSpeed), TextFormat("%.1f", finalArmor), TextFormat("%.0f", characters[i].lootRadius) };
+                const char* values[4] = { TextFormat("%.0f", finalHp), TextFormat("%.0f", finalSpeed), TextFormat("%.0f (-%.0f%%)", finalArmor, finalArmor / (finalArmor + 30.0f) * 100.0f), TextFormat("%.0f", characters[i].lootRadius) };
                 for (int k = 0; k < 4; k++) {
                     int ly = (int)textY + 62 + k * 24;
                     DrawText(labels[k], (int)textX, ly, 18, Color{ 190, 180, 165, 255 });
@@ -823,7 +873,7 @@ int main() {
             hint("Trykk [ESC] for aa gaa tilbake");
             UI::EndCanvas();
         }
-        else if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
+        else if (currentState == GAMEPLAY || currentState == LEVEL_UP || currentState == PAUSED) {
             // 2. TEGNING PÅ SKJERMEN (2.5D – se render3d.hpp)
             Camera3D view = MakeGameCamera(player.position, camera.rotation);
 
@@ -847,12 +897,21 @@ int main() {
             BeginMode3D(view);
                 DrawGroundLayer();
                 if (inBossArena) DrawThroneRoom3D(Arena::CENTER, Arena::RADIUS);
+                else DrawCastleProps3D(player.position, 1100.0f);
 
                 // Pickups svever og vipper litt opp og ned
                 float bob = (float)GetTime() * 4.0f;
                 for (const auto& pickup : pickups) {
                     float h = 8.0f + 3.0f * sinf(bob + pickup.position.x * 0.05f);
-                    if (pickup.type == PickupType::COIN) {
+                    if (pickup.type == PickupType::CHEST) {
+                        // Skattekiste som snurrer sakte på gulvet
+                        float yaw = (float)GetTime() * 40.0f;
+                        Color wood = { 120, 70, 35, 255 }, gold = { 235, 190, 60, 255 };
+                        ShadedCube(ToWorld3D(pickup.position, 7.0f), { 24.0f, 14.0f, 16.0f }, yaw, wood);
+                        ShadedCube(ToWorld3D(pickup.position, 16.0f), { 25.0f, 5.0f, 17.0f }, yaw, Color{ 140, 85, 40, 255 });
+                        ShadedCube(ToWorld3D(pickup.position, 10.0f), { 26.0f, 3.0f, 18.0f }, yaw, gold);
+                        ShadedCube(ToWorld3D(pickup.position, 12.0f), { 5.0f, 6.0f, 18.5f }, yaw, gold);
+                    } else if (pickup.type == PickupType::COIN) {
                         // Mynt som snurrer rundt seg selv
                         float spin = bob * 0.8f + pickup.position.y * 0.05f;
                         Vector3 axis = { cosf(spin) * 1.5f, 0.0f, sinf(spin) * 1.5f };
@@ -886,6 +945,8 @@ int main() {
 
                 // --- VFX: glød, lyn, sjokkbølger og partikler (additivt, etter alt solid) ---
                 VfxBegin(view);
+                    if (inBossArena) DrawThroneRoomVfx(Arena::CENTER, Arena::RADIUS);
+                    else DrawCastlePropsVfx(player.position, 1100.0f);
                     // Lysende ring under spilleren, så man finner seg selv i mylderet
                     {
                         float pulse = 0.85f + 0.15f * sinf(uiTime * 3.0f);
@@ -894,6 +955,15 @@ int main() {
                         VfxDecal(VfxTex::SHOCKWAVE, player.position, 62.0f, Color{ 110, 90, 40, 255 }, uiTime * 30.0f, 1.0f);
                     }
                     for (const auto& pickup : pickups) {
+                        if (pickup.type == PickupType::CHEST) {
+                            // Lyssøyle så kista synes på avstand
+                            float pulse = 0.7f + 0.3f * sinf(uiTime * 4.0f);
+                            Color beam = { (unsigned char)(180 * pulse), (unsigned char)(140 * pulse), 40, 255 };
+                            VfxBeam(VfxTex::GLOW, ToWorld3D(pickup.position, 0.0f), ToWorld3D(pickup.position, 260.0f), 50.0f, beam);
+                            VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, 14.0f), 70.0f, Color{ 200, 160, 60, 255 });
+                            VfxBillboard(VfxTex::SPARK, ToWorld3D(pickup.position, 22.0f), 40.0f, Color{ 255, 230, 150, 255 }, uiTime * 90.0f);
+                            continue;
+                        }
                         float h = 8.0f + 3.0f * sinf(bob + pickup.position.x * 0.05f);
                         Color glow = pickup.type == PickupType::COIN ? Color{ 255, 190, 60, 255 } : pickup.color;
                         VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, h), pickup.type == PickupType::COIN ? 26.0f : pickup.radius * 5.0f, Fade(glow, 0.55f));
@@ -949,6 +1019,18 @@ int main() {
                 UI::EndCanvas();
             }
 
+            // --- "KONGEN ER RASENDE!" ---
+            for (const auto& e : enemies) {
+                if (e->id != bossId) continue;
+                float since = (float)GetTime() - static_cast<const Boss*>(e.get())->enragedAt;
+                if (since >= 0.0f && since < 2.5f) {
+                    float a = since < 2.0f ? 1.0f : (2.5f - since) / 0.5f;
+                    UI::BeginCanvas();
+                    UI::DrawCenteredText("KONGEN ER RASENDE!", CX, 190.0f, 44.0f, Fade(Color{ 255, 70, 50, 255 }, a), 3.0f);
+                    UI::EndCanvas();
+                }
+            }
+
             // --- "KONGENS TRONSAL"-INTRO ETTER TELEPORT ---
             if (currentState == GAMEPLAY && inBossArena && arenaIntroTimer > 0.0f) {
                 float t = arenaIntroTimer / Arena::INTRO_TIME; // 1 -> 0
@@ -958,6 +1040,75 @@ int main() {
                 float a = std::min(1.0f, t * 2.0f);
                 UI::DrawCenteredText("KONGENS TRONSAL", CX, VH / 2.0f - 80.0f, 64.0f, Fade(Color{ 230, 40, 50, 255 }, a), 4.0f);
                 UI::DrawCenteredText("Kongen venter...", CX, VH / 2.0f, 24.0f, Fade(UI::GOLD_LIGHT, a));
+                UI::EndCanvas();
+            }
+
+            if (currentState == PAUSED) {
+                DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(Color{ 8, 6, 14, 255 }, 0.8f));
+                UI::BeginCanvas();
+                UI::DrawCenteredText("PAUSE", 290.0f, 120.0f, 44.0f, UI::GOLD_LIGHT, 3.0f);
+
+                // --- Valg til venstre ---
+                const char* options[2] = { "FORTSETT", "GI OPP" };
+                for (int i = 0; i < 2; i++) {
+                    bool sel = i == pauseOption;
+                    Rectangle r = { 140.0f, 200.0f + i * 70.0f, 300.0f, 52.0f };
+                    UI::DrawPanel(r, 1.0f, sel ? UI::GOLD_LIGHT : UI::PANEL_EDGE, sel ? Color{ 150, 24, 36, 235 } : Color{ 22, 18, 30, 220 });
+                    UI::DrawCenteredText(options[i], r.x + r.width / 2.0f, r.y + 14.0f, 26.0f, sel ? UI::GOLD_LIGHT : WHITE);
+                }
+                DrawText("Gi opp: du beholder gullet du har tjent", 140, 350, 16, Color{ 190, 180, 165, 255 });
+                DrawText(TextFormat("Tid %02d:%02d   Level %d   Kills %d", (int)spawner.gameTime / 60, (int)spawner.gameTime % 60, player.level, Enemy::killCount), 140, 380, 18, WHITE);
+
+                // --- Stats til høyre: alt som påvirker runden, med forklarte tall ---
+                Rectangle sp = { 520.0f, 130.0f, 620.0f, 480.0f };
+                UI::DrawPanel(sp);
+                UI::DrawCenteredText("DINE STATS", sp.x + sp.width / 2.0f, sp.y + 16.0f, 24.0f, UI::GOLD_LIGHT);
+                // NB: TextFormat gjenbruker noen få interne buffere, så verdiene må kopieres til std::string
+                struct Row { const char* label; std::string value; };
+                CombatModifiers cm = player.combatModifiers();
+                Row rows[] = {
+                    { "HP", TextFormat("%.0f / %.0f", player.hp, player.maxHp) },
+                    { "Armor", TextFormat("%.0f  (-%.0f%% skade)", player.armor, player.armorReduction() * 100.0f) },
+                    { "Dodge", TextFormat("%.0f%%", player.evasion * 100.0f) },
+                    { "Regen", TextFormat("%.1f HP/s", player.hpRegen) },
+                    { "Fart", TextFormat("%.0f", player.speed) },
+                    { "Skade", TextFormat("x%.2f", cm.damageMult) },
+                    { "Cooldown", TextFormat("x%.2f", cm.cooldownMult) },
+                    { "Omraade", TextFormat("x%.2f", cm.areaMult) },
+                    { "Ekstra prosjektiler", TextFormat("+%d", cm.extraProjectiles) },
+                    { "Pickup-radius", TextFormat("%.0f", player.lootRadius) },
+                    { "XP", TextFormat("x%.2f", player.xpMultiplier) },
+                    { "Aegis", TextFormat("%d", player.aegis) },
+                };
+                int rowCount = (int)(sizeof(rows) / sizeof(rows[0]));
+                for (int i = 0; i < rowCount; i++) {
+                    int col = i / 6, row = i % 6;
+                    float x = sp.x + 30.0f + col * 300.0f;
+                    float y = sp.y + 64.0f + row * 30.0f;
+                    DrawText(rows[i].label, (int)x, (int)y, 18, Color{ 190, 180, 165, 255 });
+                    DrawText(rows[i].value.c_str(), (int)(x + 270.0f) - MeasureText(rows[i].value.c_str(), 18), (int)y, 18, WHITE);
+                }
+
+                // Stat-oppgraderinger tatt denne runden (ikon + prikker)
+                DrawLineEx({ sp.x + 30.0f, sp.y + 256.0f }, { sp.x + sp.width - 30.0f, sp.y + 256.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
+                DrawText("Stat-oppgraderinger fra level up:", (int)sp.x + 30, (int)sp.y + 268, 16, Color{ 190, 180, 165, 255 });
+                for (int i = 0; i < (int)StatBoost::COUNT; i++) {
+                    int col = i % 4, row = i / 4;
+                    float x = sp.x + 30.0f + col * 145.0f;
+                    float y = sp.y + 300.0f + row * 86.0f;
+                    Vector2 ic = { x + 22.0f, y + 22.0f };
+                    bool has = player.statBoosts[i] > 0;
+                    DrawCircleV(ic, 22.0f, UI::INK);
+                    DrawCircleV(ic, 20.0f, has ? Color{ 70, 50, 70, 255 } : Color{ 40, 36, 48, 255 });
+                    DrawStatBoostIcon((StatBoost)i, ic, 15.0f);
+                    if (!has) DrawCircleV(ic, 20.0f, Fade(BLACK, 0.55f));
+                    DrawText(GetStatBoostInfo((StatBoost)i).name, (int)x + 50, (int)y + 6, 14, has ? WHITE : GRAY);
+                    for (int l = 0; l < MAX_STAT_BOOST; l++) {
+                        DrawRectangle((int)x + 50 + l * 14, (int)y + 28, 10, 10, l < player.statBoosts[i] ? UI::GOLD_LIGHT : Color{ 60, 54, 70, 255 });
+                    }
+                }
+
+                hint("[W/S] Velg   |   [ENTER] Bekreft   |   [ESC] Fortsett");
                 UI::EndCanvas();
             }
 
@@ -972,8 +1123,10 @@ int main() {
                 UI::DrawSunburst({ CX, 88.0f }, 260.0f, 18, uiTime * 0.25f, Fade(UI::GOLD_LIGHT, 0.16f));
                 float popT = std::min(1.0f, since / 0.35f);
                 float titleSize = std::round(64.0f * (0.6f + 0.4f * popT + 0.12f * sinf(popT * PI)));
-                UI::DrawCenteredText("LEVEL UP!", CX, 88.0f - titleSize * 0.45f, titleSize, UI::GOLD_LIGHT, 4.0f);
-                UI::DrawCenteredText(TextFormat("Du er naa level %d  -  velg en belonning", player.level), CX, 134.0f, 20.0f, Color{ 230, 220, 200, 255 });
+                UI::DrawCenteredText(levelUpFromChest ? "SKATTEKISTE!" : "LEVEL UP!", CX, 88.0f - titleSize * 0.45f, titleSize, UI::GOLD_LIGHT, 4.0f);
+                const char* sub = levelUpFromChest ? "En elite-fiende slapp en kiste  -  velg en gratis belonning"
+                                                   : TextFormat("Du er naa level %d  -  velg en belonning", player.level);
+                UI::DrawCenteredText(sub, CX, 134.0f, 20.0f, Color{ 230, 220, 200, 255 });
 
                 // --- Kortene ---
                 const int count = (int)activeUpgradeChoices.size();
@@ -1028,6 +1181,10 @@ int main() {
                             title = GetAbilityDefinition(choice.ability).name;
                             badge = "NY!";
                             badgeColor = Color{ 110, 220, 110, 255 };
+                        } else if (choice.type == ChoiceType::STAT) {
+                            title = choice.title;
+                            badge = "STAT";
+                            badgeColor = Color{ 150, 200, 255, 255 };
                         } else if (choice.type == ChoiceType::UPGRADE_ABILITY && existing) {
                             title = GetAbilityDefinition(choice.ability).name;
                             badge = TextFormat("LV %d > %d", existing->level, existing->level + 1);
@@ -1049,18 +1206,22 @@ int main() {
                         DrawCircleV(ic, 47.0f, isSelected ? UI::GOLD_LIGHT : UI::GOLD_DARK);
                         DrawCircleV(ic, 42.0f, Color{ 40, 30, 46, 255 });
                         UI::DrawGlow(ic, 42.0f, Fade(accent, 0.45f), Fade(accent, 0.0f));
-                        DrawAbilityIcon(choice.ability, ic, isSelected ? 30.0f + sinf(uiTime * 5.0f) : 29.0f);
+                        float iconSize = isSelected ? 30.0f + sinf(uiTime * 5.0f) : 29.0f;
+                        if (choice.type == ChoiceType::STAT) DrawStatBoostIcon(choice.stat, ic, iconSize);
+                        else DrawAbilityIcon(choice.ability, ic, iconSize);
 
                         // Navn
                         UI::DrawCenteredText(title.c_str(), cardX + cardW / 2.0f, cardY + 166.0f, title.size() > 12 ? 22.0f : 26.0f, isSelected ? UI::GOLD_LIGHT : WHITE);
 
                         // Nivå-prikker: fylte = nåværende, blinkende grønn = den du får
                         if (choice.type != ChoiceType::HEAL) {
-                            int current = existing ? existing->level : 0;
+                            bool isStat = choice.type == ChoiceType::STAT;
+                            int current = isStat ? player.statBoosts[(int)choice.stat] : (existing ? existing->level : 0);
+                            int maxPips = isStat ? MAX_STAT_BOOST : MAX_ABILITY_LEVEL;
                             const float pip = 12.0f, pipGap = 5.0f;
-                            float pipsW = MAX_ABILITY_LEVEL * pip + (MAX_ABILITY_LEVEL - 1) * pipGap;
+                            float pipsW = maxPips * pip + (maxPips - 1) * pipGap;
                             float px = cardX + cardW / 2.0f - pipsW / 2.0f;
-                            for (int l = 0; l < MAX_ABILITY_LEVEL; l++) {
+                            for (int l = 0; l < maxPips; l++) {
                                 Rectangle pr = { px + l * (pip + pipGap), cardY + 202.0f, pip, pip };
                                 Color pc = Color{ 60, 54, 70, 255 };
                                 if (l < current) pc = UI::GOLD_LIGHT;

@@ -287,7 +287,10 @@ void drawMinimap(const HudState& hud, float s, float top, const Enemy* boss) {
         for (const Pickup& pk : *hud.pickups) {
             Vector2 m = toMap(pk.position);
             if (!inside(m, 4.0f)) continue;
-            if (pk.type == PickupType::COIN) DrawCircleV(m, 2.4f * s, GOLD);
+            if (pk.type == PickupType::CHEST) {
+                DrawRectangleRec({ m.x - 4.0f * s, m.y - 3.5f * s, 8.0f * s, 7.0f * s }, UI::INK);
+                DrawRectangleRec({ m.x - 3.0f * s, m.y - 2.5f * s, 6.0f * s, 5.0f * s }, UI::GOLD_LIGHT);
+            } else if (pk.type == PickupType::COIN) DrawCircleV(m, 2.4f * s, GOLD);
             else DrawRectangleRec({ m.x - 0.8f * s, m.y - 0.8f * s, 1.6f * s, 1.6f * s }, Fade(XP_BLUE, 0.8f));
         }
     }

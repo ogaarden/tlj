@@ -1,5 +1,6 @@
 #include "castle.hpp"
 #include "render3d.hpp"
+#include "vfx.hpp"
 #include <rlgl.h>
 #include <raymath.h>
 #include <cmath>
@@ -64,6 +65,62 @@ void drawCarpet(Rectangle r, bool vertical) {
     }
 }
 
+// Gyllent mosaikk-emblem (kompassrose) der løperne krysser hverandre
+void drawEmblem(Vector2 c, float r) {
+    DrawCircleV(c, r + 10.0f, CARPET_GOLD);
+    DrawCircleV(c, r + 4.0f, shade(CARPET_RED, -20));
+    DrawCircleV(c, r * 0.8f, CARPET_RED);
+    DrawRing(c, r * 0.55f, r * 0.6f, 0.0f, 360.0f, 48, CARPET_GOLD);
+    for (int i = 0; i < 8; i++) {
+        float a = i * PI / 4.0f;
+        float len = (i % 2 == 0) ? r * 0.95f : r * 0.6f;
+        Vector2 tip = { c.x + cosf(a) * len, c.y + sinf(a) * len };
+        Vector2 l = { c.x + cosf(a + 0.35f) * r * 0.2f, c.y + sinf(a + 0.35f) * r * 0.2f };
+        Vector2 rr = { c.x + cosf(a - 0.35f) * r * 0.2f, c.y + sinf(a - 0.35f) * r * 0.2f };
+        DrawTriangle(tip, l, rr, (i % 2 == 0) ? CARPET_GOLD : shade(CARPET_GOLD, -40));
+        DrawTriangle(tip, rr, l, (i % 2 == 0) ? CARPET_GOLD : shade(CARPET_GOLD, -40));
+    }
+    DrawCircleV(c, r * 0.18f, shade(CARPET_GOLD, 20));
+    DrawCircleV(c, r * 0.1f, CARPET_RED);
+}
+
+// Fyrfat: steinsokkel, jernskål og glør (3D)
+void drawBrazier(Vector2 p) {
+    ShadedCylinder(ToWorld3D(p, 0.0f), ToWorld3D(p, 5.0f), 13.0f, 12.0f, STONE_DARK, 10);
+    ShadedCylinder(ToWorld3D(p, 5.0f), ToWorld3D(p, 26.0f), 6.0f, 5.0f, STONE, 8);
+    ShadedCylinder(ToWorld3D(p, 26.0f), ToWorld3D(p, 34.0f), 6.0f, 15.0f, Color{ 60, 55, 60, 255 }, 10);
+    ShadedCylinder(ToWorld3D(p, 33.0f), ToWorld3D(p, 35.0f), 15.5f, 15.5f, CARPET_GOLD, 10);
+    ShadedSphere(ToWorld3D(p, 33.0f), 10.0f, Color{ 255, 120, 40, 255 }, 4, 8);
+}
+
+// Flamme, lys og glør fra et fyrfat (VFX)
+void brazierFire(Vector2 p, float seed) {
+    float t = (float)GetTime();
+    float flicker = 0.85f + 0.15f * sinf(t * 13.0f + seed) * sinf(t * 7.3f + seed * 2.0f);
+    VfxDecal(VfxTex::GLOW, p, 330.0f * flicker, Color{ 80, 48, 18, 255 }, 0.0f, 0.8f);           // Varm lyspøl på gulvet
+    VfxBillboard(VfxTex::EXPLOSION, ToWorld3D(p, 46.0f), 42.0f * flicker, Color{ 255, 190, 140, 255 }, t * 60.0f + seed * 50.0f);
+    VfxBillboard(VfxTex::EXPLOSION, ToWorld3D(p, 54.0f), 28.0f * flicker, Color{ 255, 230, 180, 255 }, -t * 90.0f + seed * 30.0f);
+    VfxBillboard(VfxTex::GLOW, ToWorld3D(p, 44.0f), 80.0f, Color{ 160, 80, 20, 255 });
+    if (GetRandomValue(0, 14) == 0) VfxBubble({ p.x + GetRandomValue(-6, 6), p.y + GetRandomValue(-6, 6) }, 44.0f, Color{ 255, 150, 50, 255 });
+}
+
+// Alle fyrfat-posisjoner innenfor en radius: fire rundt hvert løperkryss
+template <typename F>
+void forEachBrazier(Vector2 center, float radius, F&& fn) {
+    const float offset = CARPET_WIDTH / 2.0f + 70.0f;
+    int x0 = (int)floorf((center.x - radius) / CARPET_SPACING), x1 = (int)ceilf((center.x + radius) / CARPET_SPACING);
+    int y0 = (int)floorf((center.y - radius) / CARPET_SPACING), y1 = (int)ceilf((center.y + radius) / CARPET_SPACING);
+    for (int ix = x0; ix <= x1; ix++) {
+        for (int iy = y0; iy <= y1; iy++) {
+            Vector2 cross = { (float)(ix * CARPET_SPACING), (float)(iy * CARPET_SPACING) };
+            for (int k = 0; k < 4; k++) {
+                Vector2 p = { cross.x + ((k & 1) ? offset : -offset), cross.y + ((k & 2) ? offset : -offset) };
+                if (fabsf(p.x - center.x) < radius && fabsf(p.y - center.y) < radius) fn(p, (float)(ix * 7 + iy * 13 + k));
+            }
+        }
+    }
+}
+
 } // namespace
 
 void DrawShadow(Vector2 feet, float width, float height) {
@@ -101,6 +158,35 @@ void DrawCastleFloor(Vector2 center, float viewRadius) {
         float cy = (float)(i * CARPET_SPACING);
         drawCarpet({ minX, cy - CARPET_WIDTH / 2.0f, maxX - minX, (float)CARPET_WIDTH }, false);
     }
+
+    // Emblem der løperne krysser, og skygger under fyrfatene
+    for (int ix = firstCarpetX; ix <= lastCarpetX; ix++) {
+        for (int iy = firstCarpetY; iy <= lastCarpetY; iy++) {
+            drawEmblem({ (float)(ix * CARPET_SPACING), (float)(iy * CARPET_SPACING) }, CARPET_WIDTH * 0.62f);
+        }
+    }
+    forEachBrazier(center, viewRadius, [](Vector2 p, float) { DrawShadow({ p.x + 5.0f, p.y + 5.0f }, 16.0f, 11.0f); });
+}
+
+void DrawCastleProps3D(Vector2 center, float viewRadius) {
+    forEachBrazier(center, viewRadius, [](Vector2 p, float) { drawBrazier(p); });
+}
+
+void DrawCastlePropsVfx(Vector2 center, float viewRadius) {
+    forEachBrazier(center, viewRadius, [](Vector2 p, float seed) { brazierFire(p, seed); });
+}
+
+namespace {
+    // Fyrfatene i tronsalen står i en ring innenfor muren
+    constexpr int THRONE_BRAZIERS = 8;
+    Vector2 throneBrazier(Vector2 center, float radius, int i) {
+        float a = (360.0f / THRONE_BRAZIERS * i + 22.5f) * DEG2RAD;
+        return { center.x + cosf(a) * (radius - 45.0f), center.y + sinf(a) * (radius - 45.0f) };
+    }
+}
+
+void DrawThroneRoomVfx(Vector2 center, float radius) {
+    for (int i = 0; i < THRONE_BRAZIERS; i++) brazierFire(throneBrazier(center, radius, i), (float)i * 3.0f);
 }
 
 namespace {
@@ -132,6 +218,13 @@ void DrawThroneRoomFloor(Vector2 center, float radius) {
     float carpetTop = center.y - radius + 90.0f;
     float carpetBottom = center.y + radius;
     drawCarpet({ center.x - carpetWidth / 2.0f, carpetTop, carpetWidth, carpetBottom - carpetTop }, true);
+
+    // --- Stort emblem midt i salen ---
+    drawEmblem(center, 120.0f);
+    for (int i = 0; i < THRONE_BRAZIERS; i++) {
+        Vector2 p = throneBrazier(center, radius, i);
+        DrawShadow({ p.x + 5.0f, p.y + 5.0f }, 16.0f, 11.0f);
+    }
 
     // --- Podium under tronen ---
     Vector2 throne = { center.x, center.y - radius + 70.0f };
@@ -184,6 +277,9 @@ void DrawThroneRoom3D(Vector2 center, float radius) {
             ShadedCube(ToWorld3D(Vector2Subtract(bannerPos, Vector2Scale(dir, 2.0f)), PILLAR_HEIGHT - 45.0f), { 10.0f, 10.0f, 2.0f }, yaw, CARPET_GOLD);
         }
     }
+
+    // --- Fyrfat langs muren ---
+    for (int i = 0; i < THRONE_BRAZIERS; i++) drawBrazier(throneBrazier(center, radius, i));
 
     // --- Tronen ---
     Vector2 throne = { center.x, center.y - radius + 70.0f };

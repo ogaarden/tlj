@@ -43,6 +43,9 @@ struct Player {
     int projectileCount = 1;
     int aegis = 0;
 
+    // Stat-oppgraderinger tatt i level-up denne runden (se StatBoost)
+    int statBoosts[(int)StatBoost::COUNT] = {};
+
 
     int level = 1;
     int currentXp = 0;
@@ -64,6 +67,7 @@ struct Player {
     void drawShadow() const; // I gulvlaget
     void drawModel() const;  // I 3D-laget
     float takeDamage(float rawDamage); // Returnerer faktisk skade (0 hvis dodge)
+    float armorReduction() const;      // Andel skade armor tar bort (0.0 - 0.75)
     CombatModifiers combatModifiers() const;
     void addXP(int amount);
 
