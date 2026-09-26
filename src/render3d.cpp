@@ -212,5 +212,8 @@ void DrawSpriteStanding(const Camera3D& camera, Texture2D texture, Vector2 feet,
     float width = height * (float)texture.width / (float)texture.height;
     Vector3 center = Vector3Add(ToWorld3D(feet, 0.0f), Vector3Scale(up, height / 2.0f));
     Rectangle source = { 0.0f, 0.0f, flipX ? -(float)texture.width : (float)texture.width, (float)texture.height };
-    DrawBillboardRec(camera, texture, source, center, { width, height }, tint);
+    // DrawBillboardRec holder spriten loddrett i verden (blir sammenklemt sett ovenfra).
+    // Med kameraets egen opp-retning vender spriten rett mot kameraet, som i Vampire Survivors.
+    Vector2 size = { width, height };
+    DrawBillboardPro(camera, texture, source, center, up, size, Vector2Scale(size, 0.5f), 0.0f, tint);
 }
