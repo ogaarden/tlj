@@ -685,7 +685,7 @@ int main() {
                 // 3D-klovnen (render-teksturer er lagret opp-ned, derav negativ høyde)
                 Rectangle srcRect = { 0.0f, 0.0f, (float)clownPreviews[i].texture.width, -(float)clownPreviews[i].texture.height };
                 Rectangle destRect = { posX + (cardWidth - PREVIEW_W) / 2.0f, posY + 52.0f, (float)PREVIEW_W, (float)PREVIEW_H };
-                if (isSelected) DrawCircleGradient((int)(destRect.x + PREVIEW_W / 2.0f), (int)(destRect.y + PREVIEW_H * 0.6f), 110.0f, Fade(UI::GOLD_LIGHT, 0.25f), Fade(UI::GOLD_LIGHT, 0.0f));
+                if (isSelected) UI::DrawGlow({ (destRect.x + PREVIEW_W / 2.0f), (destRect.y + PREVIEW_H * 0.6f) }, 110.0f, Fade(UI::GOLD_LIGHT, 0.25f), Fade(UI::GOLD_LIGHT, 0.0f));
                 DrawTexturePro(clownPreviews[i].texture, srcRect, destRect, { 0.0f, 0.0f }, 0.0f, WHITE);
 
                 // Beskrivelse og oppgangende stats med Shop-bonuser

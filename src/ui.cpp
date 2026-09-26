@@ -1,6 +1,7 @@
 #include "ui.hpp"
 #include "settings.hpp"
 #include <raymath.h>
+#include <rlgl.h>
 #include <cmath>
 #include <algorithm>
 
@@ -105,7 +106,7 @@ void litWindow(float cx, float bottom, float width, float height, float u, float
     DrawRectangleRec({ cx - 1.0f * u, bottom - height + 2.0f * u, 2.0f * u, height - 2.0f * u }, Fade(DOOR_DARK, 0.6f));
     DrawRectangleRec({ cx - width / 2.0f - 3.0f * u, bottom, width + 6.0f * u, 3.0f * u }, STONE_LIGHT);
     // Varm glød rundt vinduet
-    DrawCircleGradient((int)cx, (int)(bottom - height * 0.5f), width * 1.6f, Fade(WINDOW_GLOW, 0.18f * flicker), Fade(WINDOW_GLOW, 0.0f));
+    UI::DrawGlow({ cx, (bottom - height * 0.5f) }, width * 1.6f, Fade(WINDOW_GLOW, 0.18f * flicker), Fade(WINDOW_GLOW, 0.0f));
 }
 
 // Flagg som vaier i vinden (små segmenter som følger en sinusbølge)
@@ -232,6 +233,22 @@ void BeginCanvas() {
 
 void EndCanvas() {
     EndMode2D();
+}
+
+void DrawGlow(Vector2 center, float radius, Color inner, Color outer) {
+    const int segments = 36;
+    rlBegin(RL_TRIANGLES);
+    for (int i = 0; i < segments; i++) {
+        float a0 = 2.0f * PI * i / segments;
+        float a1 = 2.0f * PI * (i + 1) / segments;
+        // Samme rekkefølge som raylibs egne sirkler (mot klokka på skjermen)
+        rlColor4ub(inner.r, inner.g, inner.b, inner.a);
+        rlVertex2f(center.x, center.y);
+        rlColor4ub(outer.r, outer.g, outer.b, outer.a);
+        rlVertex2f(center.x + cosf(a1) * radius, center.y + sinf(a1) * radius);
+        rlVertex2f(center.x + cosf(a0) * radius, center.y + sinf(a0) * radius);
+    }
+    rlEnd();
 }
 
 void DrawPanel(Rectangle r, float scale, Color edge, Color fill) {
@@ -389,7 +406,7 @@ void DrawCastleBackdrop(float time, float dim) {
 
     // Stor, blek måne bak slottet
     Vector2 moon = { cx + 360.0f * u, ground - 470.0f * u };
-    DrawCircleGradient((int)moon.x, (int)moon.y, 150.0f * u, Fade(Color{ 255, 230, 200, 255 }, 0.25f), Fade(Color{ 255, 230, 200, 255 }, 0.0f));
+    UI::DrawGlow({ moon.x, moon.y }, 150.0f * u, Fade(Color{ 255, 230, 200, 255 }, 0.25f), Fade(Color{ 255, 230, 200, 255 }, 0.0f));
     DrawCircleV(moon, 62.0f * u, Color{ 255, 240, 214, 255 });
     DrawCircleV({ moon.x - 18.0f * u, moon.y - 10.0f * u }, 12.0f * u, Color{ 236, 216, 190, 255 });
     DrawCircleV({ moon.x + 20.0f * u, moon.y + 18.0f * u }, 8.0f * u, Color{ 236, 216, 190, 255 });
@@ -447,7 +464,7 @@ void DrawCastleBackdrop(float time, float dim) {
     // Rosevindu over porten
     Vector2 rose = { cx, keepTop + 90.0f * u };
     float roseFlicker = 0.9f + 0.1f * sinf(time * 2.3f);
-    DrawCircleGradient((int)rose.x, (int)rose.y, 70.0f * u, Fade(WINDOW_GLOW, 0.25f), Fade(WINDOW_GLOW, 0.0f));
+    UI::DrawGlow({ rose.x, rose.y }, 70.0f * u, Fade(WINDOW_GLOW, 0.25f), Fade(WINDOW_GLOW, 0.0f));
     DrawCircleV(rose, 31.0f * u, STONE_SHADE);
     DrawCircleV(rose, 26.0f * u, mix(Color{ 150, 60, 40, 255 }, WINDOW_GLOW, roseFlicker));
     for (int i = 0; i < 8; i++) {
@@ -460,7 +477,7 @@ void DrawCastleBackdrop(float time, float dim) {
     float doorW = 96.0f * u, doorH = 140.0f * u;
     archShape(cx, ground, doorW + 18.0f * u, doorH + 12.0f * u, STONE_SHADE);
     archShape(cx, ground, doorW, doorH, DOOR_DARK);
-    DrawCircleGradient((int)cx, (int)(ground - 30.0f * u), 60.0f * u, Fade(Color{ 255, 150, 60, 255 }, 0.25f), Fade(Color{ 255, 150, 60, 255 }, 0.0f));
+    UI::DrawGlow({ cx, (ground - 30.0f * u) }, 60.0f * u, Fade(Color{ 255, 150, 60, 255 }, 0.25f), Fade(Color{ 255, 150, 60, 255 }, 0.0f));
     for (int i = -2; i <= 2; i++) {
         float gx = cx + i * doorW / 5.5f;
         DrawRectangleRec({ gx - 2.0f * u, ground - doorH * 0.93f, 4.0f * u, doorH * 0.6f }, Color{ 60, 50, 50, 255 });

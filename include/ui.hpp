@@ -35,6 +35,10 @@ namespace UI {
     void DrawOutlinedText(const char* text, float x, float y, float size, Color color, float outline = 2.0f);
     void DrawCenteredText(const char* text, float centerX, float y, float size, Color color, float outline = 2.0f);
 
+    // Rund glød som går fra `inner` i midten til `outer` i kanten.
+    // Egen versjon fordi DrawCircleGradient har ulik signatur i raylib 5.5 og nyere.
+    void DrawGlow(Vector2 center, float radius, Color inner, Color outer);
+
     // Fylt bar (HP, XP, boss) med glans øverst og ramme
     void DrawBar(Rectangle r, float pct, Color fill, Color back, float scale = 1.0f);
 
