@@ -70,4 +70,16 @@ Notes:
 5) 3D-klovner: Jester (sirkusklovn), Wester (feit Wario-klovn), tok geek (lang nerd med briller)
 6) Karaktervalg viser klovnene roterende i 3D
 
+// 1 oktober
+1) Nytt hovedmeny-look: slott i skumring bak logoen (tårn med spisse tak, flagg,
+   rosevindu, lys i vinduene, måne, skyer og ildfluer) – tegnet i kode (ui.cpp)
+2) Ny logo: "THE LAST" smått over et stort, bølgende "JESTER" med narrelue på J-en
+3) Alt skalerer med vinduet: menyer tegnes på et 1280x700-lerret som skaleres,
+   HUD festes til kantene. [F11] = fullskjerm (kantløst vindu)
+4) Samlet HUD (hud.cpp): XP-bar over hele toppen, spillerpanel med 3D-portrett,
+   HP, level, aegis/gull/kills, klokke-plakett med nedtelling til Kongen, boss-bar
+5) Minimap oppe til høyre: fiender, gull, løperne på gulvet, kompass og Kongen.
+   Roterer med kameraet (Q/E), [M] skjuler/viser kartet
+6) Alle menyer bruker samme stil: slottet dempet i bakgrunnen og paneler med gullkant
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

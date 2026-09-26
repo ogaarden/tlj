@@ -1,5 +1,6 @@
 #include "damage_numbers.hpp"
 #include "render3d.hpp"
+#include "settings.hpp"
 #include <vector>
 #include <algorithm>
 
@@ -55,6 +56,9 @@ void UpdateDamageNumbers(float deltaTime) {
 }
 
 void DrawDamageNumbers(const Camera3D& camera) {
+    // Verdenen blir større med vindushøyden (fast synsvinkel), så tallene skal også det
+    float scale = std::max(0.7f, GetScreenHeight() / (float)Settings::SCREEN_HEIGHT);
+    int shadow = std::max(1, (int)(scale + 0.5f));
     for (const auto& d : damageNumbers) {
         Vector2 screenPos = GroundToScreen(camera, d.position, d.height);
 
@@ -66,13 +70,14 @@ void DrawDamageNumbers(const Camera3D& camera) {
         if (d.amount >= 50) fontSize = 20;
         if (d.amount >= 150) fontSize = 26;
         if (t > 0.85f) fontSize += 4;
+        fontSize = (int)(fontSize * scale);
 
         const char* text = TextFormat("%d", d.amount);
         int width = MeasureText(text, fontSize);
         int x = (int)screenPos.x - width / 2;
         int y = (int)screenPos.y;
 
-        DrawText(text, x + 1, y + 1, fontSize, Fade(BLACK, alpha)); // Skygge
+        DrawText(text, x + shadow, y + shadow, fontSize, Fade(BLACK, alpha)); // Skygge
         DrawText(text, x, y, fontSize, Fade(d.color, alpha));
     }
 }

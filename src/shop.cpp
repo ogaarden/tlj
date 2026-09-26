@@ -1,6 +1,7 @@
 #include "shop.hpp"
 #include "settings.hpp"
 #include "audio.hpp"
+#include "ui.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -92,8 +93,8 @@ void Shop::handleInput(int& totalGold) {
 }
 
 void Shop::draw(int totalGold) {
-    DrawText("POWER-UP SHOP", Settings::SCREEN_WIDTH / 2 - 140, 30, 32, GOLD);
-    DrawText(TextFormat("Ditt gull: %d g", totalGold), Settings::SCREEN_WIDTH / 2 - 80, 72, 22, WHITE);
+    UI::DrawCenteredText("POWER-UP SHOP", Settings::SCREEN_WIDTH / 2.0f, 26.0f, 36.0f, UI::GOLD_LIGHT, 3.0f);
+    UI::DrawCenteredText(TextFormat("Ditt gull: %d g", totalGold), Settings::SCREEN_WIDTH / 2.0f, 70.0f, 22.0f, GOLD);
 
     const int visibleCount = 11;
     const int rowHeight = 40;
@@ -112,11 +113,11 @@ void Shop::draw(int totalGold) {
         int y = startY + i * rowHeight;
 
         if (isSelected) {
-            DrawRectangle(left - 10, y - 6, right - left + 20, rowHeight - 4, Fade(DARKGRAY, 0.6f));
-            DrawRectangleLines(left - 10, y - 6, right - left + 20, rowHeight - 4, YELLOW);
+            DrawRectangle(left - 10, y - 6, right - left + 20, rowHeight - 4, Color{ 150, 24, 36, 200 });
+            DrawRectangleLinesEx({ (float)left - 10, (float)y - 6, (float)(right - left + 20), (float)rowHeight - 4 }, 2.0f, UI::GOLD_LIGHT);
         }
 
-        Color nameColor = item.isMaxed() ? GRAY : (isSelected ? YELLOW : WHITE);
+        Color nameColor = item.isMaxed() ? GRAY : (isSelected ? UI::GOLD_LIGHT : WHITE);
         DrawText(item.name.c_str(), left, y, 20, nameColor);
         DrawText(item.description.c_str(), left + 280, y + 3, 16, LIGHTGRAY);
 
@@ -137,7 +138,7 @@ void Shop::draw(int totalGold) {
     if (scrollOffset > 0) DrawText("^", Settings::SCREEN_WIDTH / 2, startY - 22, 20, GRAY);
     if (scrollOffset + visibleCount < (int)items.size()) DrawText("v", Settings::SCREEN_WIDTH / 2, startY + visibleCount * rowHeight - 8, 20, GRAY);
 
-    DrawText("[W/S] naviger   [ENTER] kjoep   [ESC/B] tilbake", Settings::SCREEN_WIDTH / 2 - 250, Settings::SCREEN_HEIGHT - 60, 18, LIGHTGRAY);
+    UI::DrawCenteredText("[W/S] naviger   [ENTER] kjoep   [ESC/B] tilbake", Settings::SCREEN_WIDTH / 2.0f, Settings::SCREEN_HEIGHT - 38.0f, 18.0f, Color{ 220, 210, 190, 255 });
 }
 
 void Shop::writeLevels(std::ostream& out) const {

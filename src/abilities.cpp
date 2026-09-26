@@ -1,7 +1,9 @@
 #include "abilities.hpp"
 #include "character.hpp"
 #include "player.hpp"
+#include "ui.hpp"
 #include <algorithm>
+#include <cmath>
 
 // =====================================================================
 // ABILITY-DEFINISJONER
@@ -275,29 +277,47 @@ void ApplyAbilityChoice(Player& player, const AbilityChoice& choice) {
 // HUD
 // =====================================================================
 
-void DrawAbilityHud(const Player& player, int screenWidth, int screenHeight) {
-    const int slotSize = 64;
-    const int gap = 10;
-    const int totalWidth = MAX_ABILITY_SLOTS * slotSize + (MAX_ABILITY_SLOTS - 1) * gap;
-    const int startX = screenWidth / 2 - totalWidth / 2;
-    const int y = screenHeight - slotSize - 28;
+void DrawAbilityHud(const Player& player, float centerX, float bottom, float scale) {
+    const float s = scale;
+    const float slotSize = 58.0f * s;
+    const float gap = 10.0f * s;
+    const float pad = 12.0f * s;
+    const float totalWidth = MAX_ABILITY_SLOTS * slotSize + (MAX_ABILITY_SLOTS - 1) * gap;
+    const float labelH = 16.0f * s;
+
+    // Felles panel rundt alle slotsene
+    Rectangle panel = { centerX - totalWidth / 2.0f - pad, bottom - slotSize - labelH - pad * 2.0f, totalWidth + pad * 2.0f, slotSize + labelH + pad * 2.0f };
+    UI::DrawPanel(panel, s);
+
+    const float startX = panel.x + pad;
+    const float y = panel.y + pad;
+    auto text = [&](const char* t, float cx, float ty, float size, Color c) {
+        size = std::round(size);
+        float w = MeasureTextEx(GetFontDefault(), t, size, size / 10.0f).x;
+        UI::DrawOutlinedText(t, std::round(cx - w / 2.0f), std::round(ty), size, c, std::max(1.0f, size / 12.0f));
+    };
 
     for (int i = 0; i < MAX_ABILITY_SLOTS; i++) {
-        int x = startX + i * (slotSize + gap);
-        Rectangle slot = { (float)x, (float)y, (float)slotSize, (float)slotSize };
+        float x = startX + i * (slotSize + gap);
+        Rectangle slot = { x, y, slotSize, slotSize };
+        DrawRectangleRec({ x - 2.0f * s, y - 2.0f * s, slotSize + 4.0f * s, slotSize + 4.0f * s }, UI::INK);
 
         if (i >= (int)player.weapons.size()) {
-            // Låst slot: bare mørk
-            DrawRectangleRec(slot, Fade(BLACK, 0.85f));
-            DrawRectangleLinesEx(slot, 2.0f, Fade(DARKGRAY, 0.8f));
+            // Låst slot: mørk med en liten lås
+            DrawRectangleRec(slot, Color{ 16, 14, 20, 255 });
+            DrawRectangleLinesEx(slot, 1.5f * s, Fade(GRAY, 0.35f));
+            Vector2 c = { x + slotSize / 2.0f, y + slotSize / 2.0f };
+            DrawRing({ c.x, c.y - 4.0f * s }, 5.0f * s, 7.5f * s, 180.0f, 360.0f, 12, Fade(GRAY, 0.4f));
+            DrawRectangleRec({ c.x - 9.0f * s, c.y - 4.0f * s, 18.0f * s, 13.0f * s }, Fade(GRAY, 0.4f));
             continue;
         }
 
         const Weapon& w = *player.weapons[i];
         bool isInnate = (w.id == player.innateAbility);
 
-        // Bakgrunn i abilityens farge
-        DrawRectangleRec(slot, Fade(w.color, 0.35f));
+        // Bakgrunn: abilityens farge med lys øverst
+        DrawRectangleRec(slot, Color{ 20, 18, 26, 255 });
+        DrawRectangleGradientV((int)x, (int)y, (int)slotSize, (int)slotSize, Fade(w.color, 0.55f), Fade(w.color, 0.15f));
 
         // Forkortelse av navnet i midten (f.eks. "MM" for Magic Missile)
         std::string initials;
@@ -305,31 +325,35 @@ void DrawAbilityHud(const Player& player, int screenWidth, int screenHeight) {
         size_t space = w.name.find(' ');
         if (space != std::string::npos && space + 1 < w.name.size()) initials += w.name[space + 1];
         else if (w.name.size() > 1) initials += w.name[1];
-        int initialsWidth = MeasureText(initials.c_str(), 24);
-        DrawText(initials.c_str(), x + slotSize / 2 - initialsWidth / 2, y + 12, 24, WHITE);
+        text(initials.c_str(), x + slotSize / 2.0f, y + 12.0f * s, 24.0f * s, WHITE);
 
         // Cooldown: mørk overlay som krymper nedover mens abilityen lader
         float cd = w.cooldownProgress();
         if (cd < 1.0f) {
             float h = slotSize * (1.0f - cd);
-            DrawRectangle(x, y, slotSize, (int)h, Fade(BLACK, 0.5f));
+            DrawRectangleRec({ x, y, slotSize, h }, Fade(BLACK, 0.55f));
+            DrawRectangleRec({ x, y + h - 1.0f * s, slotSize, 2.0f * s }, Fade(WHITE, 0.5f));
         }
 
         // Level-prikker (1-9) nederst i slotten
-        const int pipSize = 4;
-        const int pipGap = 2;
-        int pipsWidth = MAX_ABILITY_LEVEL * pipSize + (MAX_ABILITY_LEVEL - 1) * pipGap;
-        int pipX = x + slotSize / 2 - pipsWidth / 2;
+        const float pip = 4.0f * s;
+        const float pipGap = 1.5f * s;
+        float pipsWidth = MAX_ABILITY_LEVEL * pip + (MAX_ABILITY_LEVEL - 1) * pipGap;
+        float pipX = x + slotSize / 2.0f - pipsWidth / 2.0f;
+        DrawRectangleRec({ pipX - 2.0f * s, y + slotSize - 11.0f * s, pipsWidth + 4.0f * s, pip + 4.0f * s }, Fade(BLACK, 0.5f));
         for (int l = 0; l < MAX_ABILITY_LEVEL; l++) {
-            Color pipColor = (l < w.level) ? w.color : Fade(DARKGRAY, 0.8f);
-            DrawRectangle(pipX + l * (pipSize + pipGap), y + slotSize - 10, pipSize, pipSize, pipColor);
+            Color pipColor = (l < w.level) ? UI::GOLD_LIGHT : Fade(DARKGRAY, 0.8f);
+            DrawRectangleRec({ pipX + l * (pip + pipGap), y + slotSize - 9.0f * s, pip, pip }, pipColor);
         }
 
-        // Innate har gull-ramme
-        DrawRectangleLinesEx(slot, isInnate ? 3.0f : 2.0f, isInnate ? GOLD : w.color);
+        // Innate har tykk gullramme og en liten krone-prikk
+        DrawRectangleLinesEx(slot, isInnate ? 3.0f * s : 2.0f * s, isInnate ? UI::GOLD_LIGHT : w.color);
+        if (isInnate) {
+            DrawCircleV({ x + 7.0f * s, y + 7.0f * s }, 4.0f * s, UI::INK);
+            DrawCircleV({ x + 7.0f * s, y + 7.0f * s }, 2.8f * s, UI::GOLD_LIGHT);
+        }
 
         // Navn under slotten
-        int nameWidth = MeasureText(w.name.c_str(), 10);
-        DrawText(w.name.c_str(), x + slotSize / 2 - nameWidth / 2, y + slotSize + 4, 10, LIGHTGRAY);
+        text(w.name.c_str(), x + slotSize / 2.0f, y + slotSize + 5.0f * s, 10.0f * s, Color{ 225, 218, 200, 255 });
     }
 }

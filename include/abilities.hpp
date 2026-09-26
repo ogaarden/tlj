@@ -55,7 +55,7 @@ struct AbilityChoice {
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count = 3);
 void ApplyAbilityChoice(Player& player, const AbilityChoice& choice);
 
-// --- HUD med de 5 ability-slotsene ---
-void DrawAbilityHud(const Player& player, int screenWidth, int screenHeight);
+// --- HUD med de 5 ability-slotsene (i et panel, sentrert på centerX, med underkant på bottom) ---
+void DrawAbilityHud(const Player& player, float centerX, float bottom, float scale);
 
 #endif // ABILITIES_HPP

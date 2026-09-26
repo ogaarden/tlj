@@ -22,6 +22,8 @@
 #include "render3d.hpp"
 #include "audio.hpp"
 #include "clowns.hpp"
+#include "ui.hpp"
+#include "hud.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -104,6 +106,7 @@ int main() {
     SetConfigFlags(FLAG_WINDOW_RESIZABLE);
     InitWindow(Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, "The Last Jester");
     SetTargetFPS(Settings::FPS);
+    SetWindowMinSize(800, 450); // Alt skalerer med vinduet, men under dette blir teksten for liten
     SetExitKey(KEY_NULL); // ESC skal gå tilbake i menyer, ikke lukke hele spillet
     InitRenderer3D();
     InitGameAudio();
@@ -120,10 +123,19 @@ int main() {
         characterTextures.push_back(LoadTexture(charData.texturePath.c_str()));
     }
 
-    // 3D-forhåndsvisning av klovnene på karaktervalg-skjermen (én liten scene per kort)
+    // 3D-forhåndsvisning av klovnene på karaktervalg-skjermen (én liten scene per kort).
+    // Rendres i dobbel oppløsning så de er skarpe også når vinduet er stort.
     const int PREVIEW_W = 200, PREVIEW_H = 190;
     std::vector<RenderTexture2D> clownPreviews;
-    for (size_t i = 0; i < characters.size(); i++) clownPreviews.push_back(LoadRenderTexture(PREVIEW_W, PREVIEW_H));
+    for (size_t i = 0; i < characters.size(); i++) {
+        clownPreviews.push_back(LoadRenderTexture(PREVIEW_W * 2, PREVIEW_H * 2));
+        SetTextureFilter(clownPreviews.back().texture, TEXTURE_FILTER_BILINEAR);
+    }
+
+    // Portrett av klovnen i HUD-en
+    RenderTexture2D portraitRT = LoadRenderTexture(160, 160);
+    SetTextureFilter(portraitRT.texture, TEXTURE_FILTER_BILINEAR);
+    bool showMinimap = true;
 
     // Last inn felles tekstur for fiender
     Texture2D enemyTexture = LoadTexture("assets/jester_real.png"); // Bytt ut med egen enemy.png om du har
@@ -230,6 +242,7 @@ int main() {
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
+        UI::HandleWindowShortcuts();
 
         // --- MENYLYDER: felles for alle menyskjermer ---
         bool inMenu = currentState != GAMEPLAY;
@@ -359,6 +372,7 @@ int main() {
             // Roter kameraet med Q og E (60 grader i sekundet)
             if (IsKeyDown(KEY_Q)) camera.rotation -= 60.0f * deltaTime;
             if (IsKeyDown(KEY_E)) camera.rotation += 60.0f * deltaTime;
+            if (IsKeyPressed(KEY_M)) showMinimap = !showMinimap;
 
             // Oppdater spilleren (sender inn gjeldende kamerarotasjon så WASD matcher skjermen)
             player.update(camera.rotation);
@@ -533,30 +547,11 @@ int main() {
     }
 
         // -------------------------------------------------------------
-        // TEGNING ON SCREEN
+        // 3D-PORTRETTER (tegnes til teksturer før selve skjermen)
         // -------------------------------------------------------------
-        BeginDrawing();
-        ClearBackground(BLACK);
-
-        if (currentState == MAIN_MENU) {
-            DrawText("THE LAST JESTER", Settings::SCREEN_WIDTH / 2 - 180, 120, 40, YELLOW);
-
-            const char* options[] = { "PLAY", "SHOP", "SETTINGS", "QUIT" };
-            for (int i = 0; i < 4; i++) {
-                Color color = (i == mainOption) ? YELLOW : WHITE;
-                const char* prefix = (i == mainOption) ? "> " : "  ";
-                DrawText(TextFormat("%s%s", prefix, options[i]), Settings::SCREEN_WIDTH / 2 - 60, 260 + (i * 50), 28, color);
-            }
-
-            DrawText(TextFormat("Gull: %d g", totalGold), 30, Settings::SCREEN_HEIGHT - 50, 22, GOLD);
-        }
-        else if (currentState == CHARACTER_SELECT) {
-            DrawText("VELG KARAKTER", Settings::SCREEN_WIDTH / 2 - 130, 50, 30, WHITE);
-
-            int cardWidth = 220;
-            int cardHeight = 430;
-
-            // Tegn hver klovn i sin egen lille 3D-scene
+        float uiTime = (float)GetTime();
+        if (currentState == CHARACTER_SELECT) {
+            // Hver klovn i sin egen lille 3D-scene
             Camera3D previewCam{};
             previewCam.position = { 0.0f, 52.0f, 125.0f };
             previewCam.target = { 0.0f, 30.0f, 0.0f };
@@ -565,10 +560,10 @@ int main() {
             previewCam.projection = CAMERA_PERSPECTIVE;
             for (size_t i = 0; i < characters.size(); i++) {
                 bool isSelected = (static_cast<int>(i) == selectedCharacter);
-                float spin = (float)GetTime() * (isSelected ? 1.6f : 0.5f) + i * 2.0f;
+                float spin = uiTime * (isSelected ? 1.6f : 0.5f) + i * 2.0f;
 
                 BeginTextureMode(clownPreviews[i]);
-                ClearBackground(isSelected ? Color{ 45, 38, 25, 255 } : Color{ 24, 22, 32, 255 });
+                ClearBackground(Color{ 0, 0, 0, 0 });
                 BeginMode3D(previewCam);
                     // Liten sokkel med rød løper-farge og gullkant
                     ShadedCylinder({ 0.0f, -6.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, 34.0f, 32.0f, Color{ 212, 175, 55, 255 }, 24);
@@ -578,26 +573,119 @@ int main() {
                     pose.position = { 0.0f, 0.0f };
                     pose.facing = { sinf(spin), cosf(spin) };
                     pose.moving = isSelected;               // Den valgte klovnen går på stedet
-                    pose.walkTime = (float)GetTime() * 0.8f;
+                    pose.walkTime = uiTime * 0.8f;
                     DrawClown(characters[i].clown, pose);
                 EndMode3D();
                 EndTextureMode();
             }
-            int startX = (Settings::SCREEN_WIDTH - (static_cast<int>(characters.size()) * cardWidth + (static_cast<int>(characters.size()) - 1) * 20)) / 2;
+        }
+        if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
+            // Portrett av klovnens hode til HUD-en
+            float headHeight = (player.clown == ClownStyle::GEEK) ? 58.0f : 47.0f;
+            Camera3D portraitCam{};
+            portraitCam.position = { 18.0f, headHeight + 6.0f, 64.0f };
+            portraitCam.target = { 0.0f, headHeight + 1.0f, 0.0f };
+            portraitCam.up = { 0.0f, 1.0f, 0.0f };
+            portraitCam.fovy = 26.0f;
+            portraitCam.projection = CAMERA_PERSPECTIVE;
+            BeginTextureMode(portraitRT);
+            ClearBackground(Color{ 58, 40, 70, 255 });
+            BeginMode3D(portraitCam);
+                ClownPose pose;
+                pose.position = { 0.0f, 0.0f };
+                pose.facing = { 0.15f, 1.0f };
+                pose.tint = (player.invulnerableTimer > 0.0f && fmodf(uiTime * 10.0f, 1.0f) < 0.5f) ? Color{ 255, 150, 150, 255 } : WHITE;
+                DrawClown(player.clown, pose);
+            EndMode3D();
+            EndTextureMode();
+        }
 
-            for (size_t i = 0; i < characters.size(); i++) {
-                int posX = startX + static_cast<int>(i) * (cardWidth + 20);
-                bool isSelected = (static_cast<int>(i) == selectedCharacter);
+        // -------------------------------------------------------------
+        // TEGNING ON SCREEN
+        // Menyer: slottet i bakgrunnen + et 1280x700-lerret som skaleres til vinduet.
+        // Spilling: 3D-verdenen fyller hele vinduet, HUD-en festes til kantene.
+        // -------------------------------------------------------------
+        BeginDrawing();
+        ClearBackground(BLACK);
 
-                // Ramme
-                DrawRectangleLinesEx({ (float)posX, 100.0f, (float)cardWidth, (float)cardHeight }, isSelected ? 4.0f : 2.0f, isSelected ? YELLOW : DARKGRAY);
-                
-                // Navn
-                DrawText(characters[i].name.c_str(), posX + 15, 115, 22, isSelected ? YELLOW : WHITE);
+        const float VW = (float)Settings::SCREEN_WIDTH;
+        const float VH = (float)Settings::SCREEN_HEIGHT;
+        const float CX = VW / 2.0f;
+        auto hint = [&](const char* text) {
+            UI::DrawCenteredText(text, CX, VH - 38.0f, 18.0f, Color{ 220, 210, 190, 255 });
+        };
+        auto heading = [&](const char* text, float y, Color color) {
+            UI::DrawCenteredText(text, CX, y, 36.0f, color, 3.0f);
+        };
+
+        if (currentState == MAIN_MENU) {
+            UI::DrawCastleBackdrop(uiTime, 0.0f);
+            UI::BeginCanvas();
+                UI::DrawTitleLogo(CX, 22.0f, 700.0f, uiTime);
+
+                // Knapper som bannere: den valgte er kongerød med gullkant
+                const char* options[] = { "PLAY", "SHOP", "SETTINGS", "QUIT" };
+                for (int i = 0; i < 4; i++) {
+                    bool sel = (i == mainOption);
+                    float bw = sel ? 300.0f + 6.0f * sinf(uiTime * 4.0f) : 280.0f;
+                    Rectangle r = { CX - bw / 2.0f, 350.0f + i * 58.0f, bw, 46.0f };
+                    if (sel) {
+                        UI::DrawPanel(r, 1.0f, UI::GOLD_LIGHT, Color{ 150, 24, 36, 235 });
+                        // Diamanter som peker inn mot valget
+                        for (int side = -1; side <= 1; side += 2) {
+                            float dx = r.x + (side < 0 ? -22.0f : r.width + 22.0f) + side * 3.0f * sinf(uiTime * 6.0f);
+                            float dy = r.y + r.height / 2.0f;
+                            DrawTriangle({ dx, dy - 9 }, { dx - 9, dy }, { dx, dy + 9 }, UI::GOLD_LIGHT);
+                            DrawTriangle({ dx, dy - 9 }, { dx, dy + 9 }, { dx + 9, dy }, UI::GOLD_DARK);
+                        }
+                    } else {
+                        UI::DrawPanel(r, 1.0f, UI::PANEL_EDGE, Color{ 22, 18, 30, 190 });
+                    }
+                    UI::DrawCenteredText(options[i], CX, r.y + 11.0f, 26.0f, sel ? UI::GOLD_LIGHT : Color{ 230, 222, 205, 255 });
+                }
+            UI::EndCanvas();
+
+            // Gull nede i venstre hjørne og hjelpetekst nede i midten (festet til vinduskanten)
+            float s = HudScale();
+            const char* goldText = TextFormat("%d g", totalGold);
+            float gs = std::round(22.0f * s);
+            float gw = MeasureTextEx(GetFontDefault(), goldText, gs, gs / 10.0f).x;
+            Rectangle gp = { 16.0f * s, GetScreenHeight() - 58.0f * s, gw + 64.0f * s, 42.0f * s };
+            UI::DrawPanel(gp, s);
+            DrawCircleV({ gp.x + 24.0f * s, gp.y + 21.0f * s }, 10.0f * s, UI::GOLD_DARK);
+            DrawCircleV({ gp.x + 23.0f * s, gp.y + 20.0f * s }, 8.0f * s, GOLD);
+            UI::DrawOutlinedText(goldText, gp.x + 42.0f * s, gp.y + 10.0f * s, gs, UI::GOLD_LIGHT, 2.0f);
+            const char* help = "[W/S] Velg   [ENTER] Bekreft   [F11] Fullskjerm";
+            float hs = std::round(14.0f * s);
+            float hw = MeasureTextEx(GetFontDefault(), help, hs, hs / 10.0f).x;
+            UI::DrawOutlinedText(help, GetScreenWidth() - hw - 18.0f * s, GetScreenHeight() - 30.0f * s, hs, Fade(Color{ 230, 222, 205, 255 }, 0.8f), 1.5f);
+        }
+        else if (currentState == CHARACTER_SELECT) {
+            UI::DrawCastleBackdrop(uiTime, 0.6f);
+            UI::BeginCanvas();
+            heading("VELG KARAKTER", 36.0f, UI::GOLD_LIGHT);
+
+            const float cardWidth = 240.0f;
+            const float cardHeight = 470.0f;
+            const float cardGap = 26.0f;
+            int count = static_cast<int>(characters.size());
+            float startX = CX - (count * cardWidth + (count - 1) * cardGap) / 2.0f;
+
+            for (int i = 0; i < count; i++) {
+                bool isSelected = (i == selectedCharacter);
+                float posX = startX + i * (cardWidth + cardGap);
+                float posY = 100.0f - (isSelected ? 8.0f : 0.0f);
+                Rectangle card = { posX, posY, cardWidth, cardHeight };
+                UI::DrawPanel(card, 1.0f, isSelected ? UI::GOLD_LIGHT : UI::PANEL_EDGE,
+                              isSelected ? Color{ 48, 30, 40, 235 } : Color{ 22, 18, 30, 215 });
+
+                // Navn på et lite banner
+                UI::DrawCenteredText(characters[i].name.c_str(), posX + cardWidth / 2.0f, posY + 18.0f, 26.0f, isSelected ? UI::GOLD_LIGHT : WHITE);
 
                 // 3D-klovnen (render-teksturer er lagret opp-ned, derav negativ høyde)
-                Rectangle srcRect = { 0.0f, 0.0f, (float)PREVIEW_W, -(float)PREVIEW_H };
-                Rectangle destRect = { posX + (cardWidth - PREVIEW_W) / 2.0f, 145.0f, (float)PREVIEW_W, (float)PREVIEW_H };
+                Rectangle srcRect = { 0.0f, 0.0f, (float)clownPreviews[i].texture.width, -(float)clownPreviews[i].texture.height };
+                Rectangle destRect = { posX + (cardWidth - PREVIEW_W) / 2.0f, posY + 52.0f, (float)PREVIEW_W, (float)PREVIEW_H };
+                if (isSelected) DrawCircleGradient((int)(destRect.x + PREVIEW_W / 2.0f), (int)(destRect.y + PREVIEW_H * 0.6f), 110.0f, Fade(UI::GOLD_LIGHT, 0.25f), Fade(UI::GOLD_LIGHT, 0.0f));
                 DrawTexturePro(clownPreviews[i].texture, srcRect, destRect, { 0.0f, 0.0f }, 0.0f, WHITE);
 
                 // Beskrivelse og oppgangende stats med Shop-bonuser
@@ -605,40 +693,50 @@ int main() {
                 float finalSpeed = characters[i].speed * shop.speedMult();
                 float finalArmor = characters[i].armor + shop.armorBonus();
 
-                int textY = 342;
-                DrawText(characters[i].description.c_str(), posX + 15, textY, 12, GRAY);
-                DrawText(TextFormat("Innate: %s", GetAbilityDefinition(characters[i].innateAbility).name.c_str()), posX + 15, textY + 20, 16, GOLD);
-                DrawText(TextFormat("HP: %.0f", finalHp), posX + 15, textY + 44, 16, WHITE);
-                DrawText(TextFormat("Fart: %.0f", finalSpeed), posX + 15, textY + 64, 16, WHITE);
-                DrawText(TextFormat("Armor: %.1f", finalArmor), posX + 15, textY + 84, 16, WHITE);
-                DrawText(TextFormat("Radius: %.0f   Aegis: +%d", characters[i].lootRadius, shop.aegisBonus()), posX + 15, textY + 104, 16, WHITE);
+                float textX = posX + 20.0f;
+                float textY = posY + 252.0f;
+                DrawText(characters[i].description.c_str(), (int)textX, (int)textY, 14, Color{ 200, 190, 170, 255 });
+                DrawLineEx({ textX, textY + 24.0f }, { posX + cardWidth - 20.0f, textY + 24.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
+                DrawText(TextFormat("Innate: %s", GetAbilityDefinition(characters[i].innateAbility).name.c_str()), (int)textX, (int)textY + 34, 16, GOLD);
+                const char* labels[4] = { "HP", "Fart", "Armor", "Radius" };
+                const char* values[4] = { TextFormat("%.0f", finalHp), TextFormat("%.0f", finalSpeed), TextFormat("%.1f", finalArmor), TextFormat("%.0f", characters[i].lootRadius) };
+                for (int k = 0; k < 4; k++) {
+                    int ly = (int)textY + 62 + k * 24;
+                    DrawText(labels[k], (int)textX, ly, 18, Color{ 190, 180, 165, 255 });
+                    DrawText(values[k], (int)(posX + cardWidth - 20.0f) - MeasureText(values[k], 18), ly, 18, WHITE);
+                }
+                if (shop.aegisBonus() > 0) DrawText(TextFormat("Aegis: +%d", shop.aegisBonus()), (int)textX, (int)textY + 162, 18, Color{ 90, 200, 120, 255 });
             }
 
-            DrawText("[A/D] Velg karakter   |   [ENTER] Videre   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 290, 560, 20, GRAY);
+            hint("[A/D] Velg karakter   |   [ENTER] Videre   |   [ESC] Tilbake");
+            UI::EndCanvas();
         }
         else if (currentState == ECHELON_SELECT) {
-            DrawText("VELG ECHELON", Settings::SCREEN_WIDTH / 2 - MeasureText("VELG ECHELON", 32) / 2, 30, 32, ORANGE);
+            UI::DrawCastleBackdrop(uiTime, 0.7f);
+            UI::BeginCanvas();
+            heading("VELG ECHELON", 26.0f, Color{ 255, 170, 70, 255 });
 
             // --- Liste over alle 10 echelons (låste er mørke) ---
             const int listX = 60;
             const int rowHeight = 50;
-            const int listY = 90;
+            const int listY = 86;
+            UI::DrawPanel({ listX - 14.0f, listY - 14.0f, 648.0f, MAX_ECHELON * rowHeight + 22.0f });
             for (int e = 1; e <= MAX_ECHELON; e++) {
                 const EchelonData& info = GetEchelon(e);
                 bool unlocked = e <= saveData.unlockedEchelon;
                 bool isSelected = e == selectedEchelon;
                 int y = listY + (e - 1) * rowHeight;
 
-                Color bg = isSelected ? Fade(ORANGE, 0.25f) : Fade(DARKGRAY, unlocked ? 0.35f : 0.15f);
+                Color bg = isSelected ? Color{ 150, 24, 36, 200 } : Fade(DARKGRAY, unlocked ? 0.35f : 0.12f);
                 DrawRectangle(listX, y, 620, rowHeight - 6, bg);
-                if (isSelected) DrawRectangleLines(listX, y, 620, rowHeight - 6, ORANGE);
+                if (isSelected) DrawRectangleLinesEx({ (float)listX, (float)y, 620.0f, rowHeight - 6.0f }, 2.0f, UI::GOLD_LIGHT);
 
                 if (unlocked) {
                     int bossTime = (int)GetBossTimer(e);
-                    DrawText(info.name.c_str(), listX + 12, y + 6, 20, isSelected ? YELLOW : WHITE);
+                    DrawText(info.name.c_str(), listX + 12, y + 6, 20, isSelected ? UI::GOLD_LIGHT : WHITE);
                     DrawText(info.description.c_str(), listX + 12, y + 27, 14, LIGHTGRAY);
                     const char* timeText = TextFormat("Boss %02d:%02d", bossTime / 60, bossTime % 60);
-                    DrawText(timeText, listX + 610 - MeasureText(timeText, 16), y + 14, 16, GRAY);
+                    DrawText(timeText, listX + 610 - MeasureText(timeText, 16), y + 14, 16, isSelected ? UI::GOLD_LIGHT : GRAY);
                 } else {
                     DrawText(info.name.c_str(), listX + 12, y + 12, 20, Fade(GRAY, 0.4f));
                     DrawText("LAAST", listX + 610 - MeasureText("LAAST", 18), y + 12, 18, Fade(GRAY, 0.4f));
@@ -647,51 +745,63 @@ int main() {
 
             // --- Alle effekter som gjelder for valgt echelon (de stacker) ---
             const int panelX = 730;
-            DrawText(TextFormat("%s - aktive effekter:", GetEchelon(selectedEchelon).name.c_str()), panelX, 90, 20, WHITE);
-            int lineY = 125;
+            UI::DrawPanel({ panelX - 20.0f, listY - 14.0f, 510.0f, MAX_ECHELON * rowHeight + 22.0f });
+            DrawText(TextFormat("%s - aktive effekter:", GetEchelon(selectedEchelon).name.c_str()), panelX, listY + 6, 20, WHITE);
+            int lineY = listY + 42;
             for (int e = 1; e <= selectedEchelon; e++) {
-                Color c = (e == selectedEchelon) ? YELLOW : LIGHTGRAY;
+                Color c = (e == selectedEchelon) ? UI::GOLD_LIGHT : LIGHTGRAY;
                 DrawText(TextFormat("E%d: %s", e, GetEchelon(e).description.c_str()), panelX, lineY, 18, c);
                 lineY += 28;
             }
             int bossTime = (int)GetBossTimer(selectedEchelon);
-            DrawText(TextFormat("Boss etter %02d:%02d", bossTime / 60, bossTime % 60), panelX, lineY + 15, 20, ORANGE);
+            DrawText(TextFormat("Boss etter %02d:%02d", bossTime / 60, bossTime % 60), panelX, lineY + 15, 20, Color{ 255, 170, 70, 255 });
 
-            DrawText("[W/S] Velg   |   [ENTER] Start   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 230, Settings::SCREEN_HEIGHT - 45, 20, GRAY);
+            hint("[W/S] Velg   |   [ENTER] Start   |   [ESC] Tilbake");
+            UI::EndCanvas();
         }
         else if (currentState == CURSE_SELECT) {
-            const char* title = TextFormat("VELG EN CURSE (%d igjen)", cursesToPick);
-            DrawText(title, Settings::SCREEN_WIDTH / 2 - MeasureText(title, 32) / 2, 110, 32, PURPLE);
-            DrawText(GetEchelon(selectedEchelon).name.c_str(), Settings::SCREEN_WIDTH / 2 - MeasureText(GetEchelon(selectedEchelon).name.c_str(), 20) / 2, 155, 20, ORANGE);
+            UI::DrawCastleBackdrop(uiTime, 0.75f);
+            UI::BeginCanvas();
+            heading(TextFormat("VELG EN CURSE (%d igjen)", cursesToPick), 110.0f, Color{ 190, 120, 255, 255 });
+            UI::DrawCenteredText(GetEchelon(selectedEchelon).name.c_str(), CX, 158.0f, 20.0f, Color{ 255, 170, 70, 255 });
 
-            int cardWidth = 450;
-            int cardHeight = 80;
+            const float cardWidth = 460.0f;
+            const float cardHeight = 80.0f;
             for (size_t i = 0; i < curseChoices.size(); i++) {
                 const Curse& curse = GetCurse(curseChoices[i]);
                 bool isSelected = (int)i == selectedCurse;
-                int x = Settings::SCREEN_WIDTH / 2 - cardWidth / 2;
-                int y = 220 + (int)i * (cardHeight + 20);
+                float x = CX - cardWidth / 2.0f;
+                float y = 220.0f + i * (cardHeight + 20.0f);
 
-                DrawRectangle(x, y, cardWidth, cardHeight, isSelected ? Fade(PURPLE, 0.3f) : BLACK);
-                DrawRectangleLines(x, y, cardWidth, cardHeight, isSelected ? VIOLET : GRAY);
-                DrawText(curse.name.c_str(), x + 20, y + 15, 24, isSelected ? VIOLET : WHITE);
-                DrawText(curse.description.c_str(), x + 20, y + 48, 16, LIGHTGRAY);
+                UI::DrawPanel({ x, y, cardWidth, cardHeight }, 1.0f, isSelected ? VIOLET : UI::PANEL_EDGE,
+                              isSelected ? Color{ 60, 24, 90, 230 } : Color{ 22, 18, 30, 215 });
+                DrawText(curse.name.c_str(), (int)x + 22, (int)y + 15, 24, isSelected ? Color{ 210, 160, 255, 255 } : WHITE);
+                DrawText(curse.description.c_str(), (int)x + 22, (int)y + 48, 16, LIGHTGRAY);
             }
 
-            DrawText("[W/S] Velg   |   [ENTER] Bekreft   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 240, Settings::SCREEN_HEIGHT - 60, 20, GRAY);
+            hint("[W/S] Velg   |   [ENTER] Bekreft   |   [ESC] Tilbake");
+            UI::EndCanvas();
         }
         else if (currentState == SHOP) {
+            UI::DrawCastleBackdrop(uiTime, 0.7f);
+            UI::BeginCanvas();
+            UI::DrawPanel({ 50.0f, 100.0f, VW - 100.0f, 470.0f });
             shop.draw(totalGold);
+            UI::EndCanvas();
         }
         else if (currentState == SETTINGS) {
-            DrawText("INNSTILLINGER", Settings::SCREEN_WIDTH / 2 - 120, 100, 32, WHITE);
-            DrawText("Volum", Settings::SCREEN_WIDTH / 2 - 200, 220, 24, WHITE);
-            DrawRectangle(Settings::SCREEN_WIDTH / 2 - 80, 222, 280, 22, DARKGRAY);
-            DrawRectangle(Settings::SCREEN_WIDTH / 2 - 80, 222, (int)(280 * saveData.volume / 100.0f), 22, GOLD);
-            DrawRectangleLines(Settings::SCREEN_WIDTH / 2 - 80, 222, 280, 22, WHITE);
-            DrawText(TextFormat("%d%%", saveData.volume), Settings::SCREEN_WIDTH / 2 + 215, 222, 22, WHITE);
-            DrawText("[A/D] eller [Venstre/Hoeyre] for aa justere", Settings::SCREEN_WIDTH / 2 - 200, 265, 18, GRAY);
-            DrawText("Trykk [ESC] for a ga tilbake", Settings::SCREEN_WIDTH / 2 - 140, 450, 20, GRAY);
+            UI::DrawCastleBackdrop(uiTime, 0.7f);
+            UI::BeginCanvas();
+            heading("INNSTILLINGER", 100.0f, UI::GOLD_LIGHT);
+            UI::DrawPanel({ CX - 290.0f, 180.0f, 580.0f, 200.0f });
+            DrawText("Volum", (int)CX - 250, 220, 24, WHITE);
+            UI::DrawBar({ CX - 120.0f, 222.0f, 280.0f, 22.0f }, saveData.volume / 100.0f, GOLD, Color{ 40, 34, 30, 255 });
+            DrawText(TextFormat("%d%%", saveData.volume), (int)CX + 180, 222, 22, WHITE);
+            DrawText("[A/D] eller [Venstre/Hoeyre] for aa justere", (int)CX - 250, 265, 18, GRAY);
+            DrawText("Fullskjerm", (int)CX - 250, 315, 24, WHITE);
+            DrawText(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE) ? "PAA  [F11]" : "AV  [F11]", (int)CX - 50, 318, 20, UI::GOLD_LIGHT);
+            hint("Trykk [ESC] for aa gaa tilbake");
+            UI::EndCanvas();
         }
         else if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
             // 2. TEGNING PÅ SKJERMEN (2.5D – se render3d.hpp)
@@ -740,151 +850,128 @@ int main() {
             EndMode3D();
 
             // --- HP-BARER over skadde fiender (ikke bossen – den har egen bar øverst) ---
+            float barScale = HudScale();
             for (const auto& e : enemies) {
                 if (e->hp >= e->maxHp || e->id == bossId) continue;
                 Vector2 screen = GroundToScreen(view, e->position, e->modelHeight() + 8.0f);
                 float pct = std::max(0.0f, (float)e->hp / (float)e->maxHp);
-                DrawRectangle((int)screen.x - 15, (int)screen.y, 30, 4, Fade(BLACK, 0.6f));
-                DrawRectangle((int)screen.x - 15, (int)screen.y, (int)(30 * pct), 4, GREEN);
+                float bw = 30.0f * barScale, bh = 4.0f * barScale;
+                DrawRectangleRec({ screen.x - bw / 2.0f - 1.0f, screen.y - 1.0f, bw + 2.0f, bh + 2.0f }, Fade(BLACK, 0.7f));
+                DrawRectangleRec({ screen.x - bw / 2.0f, screen.y, bw * pct, bh }, Color{ 90, 220, 90, 255 });
             }
 
             // --- SKADETALL (projiseres fra 3D-posisjonen, så teksten alltid er rett vei) ---
             DrawDamageNumbers(view);
 
-            // --- UI / TEKST (Festet til skjermen, roterer ikke) ---
-            DrawText("GAMEPLAY (ESC for meny)", 20, 20, 20, GREEN);
-            DrawText("Roter kamera: [Q] / [E]", 20, 50, 18, LIGHTGRAY);
-            DrawText(TextFormat("Vinkel: %.1f deg", camera.rotation), 20, 75, 18, YELLOW);
-            DrawText(TextFormat("HP: %.0f / %.0f", player.hp, player.maxHp), 20, 105, 18, RED);
-            DrawText(TextFormat("Aegis: %d", player.aegis), 20, 130, 18, GREEN);
-            DrawText(TextFormat("Gull: %d", runCoins), 20, 155, 18, GOLD);
-            DrawText(TextFormat("Kills: %d", Enemy::killCount), 20, 180, 18, LIGHTGRAY);
-            for (size_t i = 0; i < activeCurses.size(); i++) {
-                DrawText(TextFormat("Curse: %s", GetCurse(activeCurses[i]).name.c_str()), 20, 205 + (int)i * 22, 16, VIOLET);
-            }
+            // --- HUD (festet til vinduskantene, skalerer med vindusstørrelsen) ---
+            HudState hud;
+            hud.player = &player;
+            hud.enemies = &enemies;
+            hud.pickups = &pickups;
+            hud.curses = &activeCurses;
+            hud.portrait = portraitRT.texture;
+            hud.characterName = characters[selectedCharacter].name.c_str();
+            hud.echelonName = GetEchelon(selectedEchelon).name.c_str();
+            hud.gameTime = spawner.gameTime;
+            hud.bossTime = GetBossTimer(selectedEchelon);
+            hud.inBossArena = inBossArena;
+            hud.bossId = bossId;
+            hud.arenaCenter = Arena::CENTER;
+            hud.arenaRadius = Arena::RADIUS;
+            hud.runCoins = runCoins;
+            hud.kills = Enemy::killCount;
+            hud.cameraYaw = camera.rotation;
+            hud.showMinimap = showMinimap;
+            DrawGameHud(hud);
 
-            float barWidth = 400.0f;
-            float barHeight = 12.0f;
-            float barX = (Settings::SCREEN_WIDTH / 2.0f) - (barWidth / 2.0f);
-            float barY = 70.0f; // Litt under timeren
-
-
-
-            // Regn utprosent fullført
-            float xpProgress = (float)player.currentXp / (float)player.xpToNextLevel;
-            if (xpProgress > 1.0f) xpProgress = 1.0f;
-
-            // Bakgrunn (tom bar) ogfyll (blå/lilla)
-            DrawRectangle((int)barX, (int)barY, (int)barWidth, (int)barHeight, DARKGRAY);
-            DrawRectangle((int)barX, (int)barY, (int)(barWidth * xpProgress), (int)barHeight, BLUE);
-            DrawRectangleLines((int)barX, (int)barY, (int)barWidth, (int)barHeight, WHITE);
-            DrawText(TextFormat("Lv %d", player.level), (int)(barX + barWidth + 10), (int)barY - 2, 16, WHITE);
-
-            // --- ABILITY-SLOTS (5 stk, låste er mørke) ---
-            DrawAbilityHud(player, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT);
-
-            // --- BOSS HP-BAR ---
-            if (inBossArena) {
-                for (const auto& e : enemies) {
-                    if (e->id != bossId) continue;
-                    float bossBarWidth = 600.0f;
-                    float bossBarX = Settings::SCREEN_WIDTH / 2.0f - bossBarWidth / 2.0f;
-                    float bossBarY = 100.0f;
-                    float pct = std::max(0.0f, (float)e->hp / (float)e->maxHp);
-                    DrawRectangle((int)bossBarX, (int)bossBarY, (int)bossBarWidth, 18, Fade(BLACK, 0.7f));
-                    DrawRectangle((int)bossBarX, (int)bossBarY, (int)(bossBarWidth * pct), 18, RED);
-                    DrawRectangleLines((int)bossBarX, (int)bossBarY, (int)bossBarWidth, 18, WHITE);
-                    const char* bossName = TextFormat("KONGEN - %s", GetEchelon(selectedEchelon).name.c_str());
-                    DrawText(bossName, Settings::SCREEN_WIDTH / 2 - MeasureText(bossName, 16) / 2, (int)bossBarY + 22, 16, WHITE);
-                }
+            // --- "KONGENS TRONSAL"-INTRO ETTER TELEPORT ---
+            if (currentState == GAMEPLAY && inBossArena && arenaIntroTimer > 0.0f) {
+                float t = arenaIntroTimer / Arena::INTRO_TIME; // 1 -> 0
+                // Hvitt blink som fader ut, så teksten
+                DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(WHITE, std::max(0.0f, (t - 0.7f) / 0.3f)));
+                UI::BeginCanvas();
+                float a = std::min(1.0f, t * 2.0f);
+                UI::DrawCenteredText("KONGENS TRONSAL", CX, VH / 2.0f - 80.0f, 64.0f, Fade(Color{ 230, 40, 50, 255 }, a), 4.0f);
+                UI::DrawCenteredText("Kongen venter...", CX, VH / 2.0f, 24.0f, Fade(UI::GOLD_LIGHT, a));
+                UI::EndCanvas();
             }
 
             if (currentState == LEVEL_UP) {
-                // Mørklegg skjermen bak menyen
-                DrawRectangle(0, 0, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, Fade(BLACK, 0.85f));
+                // Mørklegg hele vinduet bak menyen
+                DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(Color{ 8, 6, 14, 255 }, 0.8f));
+                UI::BeginCanvas();
+                heading("LEVEL UP!", 70.0f, UI::GOLD_LIGHT);
+                UI::DrawCenteredText("Velg en oppgradering", CX, 118.0f, 20.0f, Color{ 220, 210, 190, 255 });
 
-                DrawText("LEVEL UP! VELG EN OPPDATERING", Settings::SCREEN_WIDTH / 2 - 210, 110, 30, YELLOW);
-
-                int cardWidth = 450;
-                int cardHeight = 80;
-                int startY = (activeUpgradeChoices.size() > 3) ? 170 : 220; // Plass til 4 valg med "Flere valg"-oppgraderingen
+                const float cardWidth = 480.0f;
+                const float cardHeight = 80.0f;
+                float startY = (activeUpgradeChoices.size() > 3) ? 170.0f : 210.0f; // Plass til 4 valg med "Flere valg"-oppgraderingen
 
                 for (size_t i = 0; i < activeUpgradeChoices.size(); i++) {
-                    int cardY = startY + (int)i * (cardHeight + 15);
+                    float cardY = startY + i * (cardHeight + 16.0f);
+                    float cardX = CX - cardWidth / 2.0f;
                     bool isSelected = ((int)i == selectedUpgradeOption);
+                    const AbilityChoice& choice = activeUpgradeChoices[i];
 
-                    // Tegn boks
-                    DrawRectangle(Settings::SCREEN_WIDTH / 2 - cardWidth / 2, cardY, cardWidth, cardHeight, isSelected ? DARKGRAY : BLACK);
-                    DrawRectangleLines(Settings::SCREEN_WIDTH / 2 - cardWidth / 2, cardY, cardWidth, cardHeight, isSelected ? YELLOW : GRAY);
-
+                    UI::DrawPanel({ cardX, cardY, cardWidth, cardHeight }, 1.0f, isSelected ? UI::GOLD_LIGHT : UI::PANEL_EDGE,
+                                  isSelected ? Color{ 48, 34, 44, 240 } : Color{ 22, 18, 30, 230 });
                     // Fargestripe som viser hvilken ability det gjelder
-                    DrawRectangle(Settings::SCREEN_WIDTH / 2 - cardWidth / 2, cardY, 6, cardHeight, activeUpgradeChoices[i].color);
+                    DrawRectangleRec({ cardX + 6.0f, cardY + 6.0f, 8.0f, cardHeight - 12.0f }, choice.color);
 
-                    // Innhold i boksen
-                    Color textColor = isSelected ? YELLOW : WHITE;
-                    DrawText(activeUpgradeChoices[i].title.c_str(), Settings::SCREEN_WIDTH / 2 - cardWidth / 2 + 20, cardY + 15, 22, textColor);
-                    DrawText(activeUpgradeChoices[i].description.c_str(), Settings::SCREEN_WIDTH / 2 - cardWidth / 2 + 20, cardY + 45, 14, LIGHTGRAY);
+                    Color textColor = isSelected ? UI::GOLD_LIGHT : WHITE;
+                    DrawText(choice.title.c_str(), (int)cardX + 28, (int)cardY + 15, 22, textColor);
+                    DrawText(choice.description.c_str(), (int)cardX + 28, (int)cardY + 46, 14, LIGHTGRAY);
+                    if (isSelected) {
+                        float dx = cardX - 18.0f + 3.0f * sinf(uiTime * 6.0f);
+                        float dy = cardY + cardHeight / 2.0f;
+                        DrawTriangle({ dx - 9, dy - 9 }, { dx - 9, dy + 9 }, { dx + 3, dy }, UI::GOLD_LIGHT);
+                    }
                 }
 
-                DrawText("Bruk [W/S] eller [Piltaster] og trykk [ENTER] for å velge", Settings::SCREEN_WIDTH / 2 - 220, Settings::SCREEN_HEIGHT - 100, 18, GRAY);
+                hint("[W/S] eller [Piltaster] og [ENTER] for aa velge");
+                UI::EndCanvas();
             }
         }
 
         else if (currentState == GAME_OVER) {
-            int cx = Settings::SCREEN_WIDTH / 2;
-            const char* heading = lastRun.bossDefeated ? TextFormat("%s FULLFOERT!", GetEchelon(lastRun.echelon).name.c_str())
+            UI::DrawCastleBackdrop(uiTime, 0.72f);
+            UI::BeginCanvas();
+            const char* title = lastRun.bossDefeated ? TextFormat("%s FULLFOERT!", GetEchelon(lastRun.echelon).name.c_str())
                                 : lastRun.died ? "DU DOEDE" : "RUN AVSLUTTET";
-            Color headingColor = lastRun.bossDefeated ? GREEN : (lastRun.died ? RED : YELLOW);
-            DrawText(heading, cx - MeasureText(heading, 44) / 2, 70, 44, headingColor);
+            Color headingColor = lastRun.bossDefeated ? Color{ 110, 230, 120, 255 } : (lastRun.died ? Color{ 235, 60, 60, 255 } : UI::GOLD_LIGHT);
+            UI::DrawCenteredText(title, CX, 60.0f, 48.0f, headingColor, 3.0f);
             if (lastRun.unlockedNewEchelon) {
-                const char* unlockText = TextFormat("%s er laast opp!", GetEchelon(lastRun.echelon + 1).name.c_str());
-                DrawText(unlockText, cx - MeasureText(unlockText, 24) / 2, 125, 24, ORANGE);
+                UI::DrawCenteredText(TextFormat("%s er laast opp!", GetEchelon(lastRun.echelon + 1).name.c_str()), CX, 118.0f, 24.0f, Color{ 255, 170, 70, 255 });
             }
 
+            float px = CX - 260.0f;
+            UI::DrawPanel({ px, 155.0f, 520.0f, 430.0f });
             int minutes = (int)lastRun.timeSurvived / 60;
             int seconds = (int)lastRun.timeSurvived % 60;
-            DrawText(TextFormat("Tid: %02d:%02d    Level: %d    Kills: %d", minutes, seconds, lastRun.level, lastRun.kills),
-                     cx - 230, 170, 22, WHITE);
+            const char* stats = TextFormat("Tid: %02d:%02d    Level: %d    Kills: %d", minutes, seconds, lastRun.level, lastRun.kills);
+            DrawText(stats, (int)CX - MeasureText(stats, 22) / 2, 180, 22, WHITE);
+            DrawLineEx({ px + 30.0f, 218.0f }, { px + 490.0f, 218.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
 
+            // Gull-linjer: navn til venstre, beløp høyrejustert
             int y = 240;
-            DrawText(TextFormat("Mynter plukket opp:   %d g", lastRun.coinGold), cx - 200, y, 22, LIGHTGRAY);
-            DrawText(TextFormat("Overlevd tid:              %d g", lastRun.survivalGold), cx - 200, y + 35, 22, LIGHTGRAY);
-            DrawText(TextFormat("Level-bonus:                %d g", lastRun.levelGold), cx - 200, y + 70, 22, LIGHTGRAY);
-            int nextLine = y + 105;
-            if (lastRun.bossGold > 0) {
-                DrawText(TextFormat("Boss-bonus:                  %d g", lastRun.bossGold), cx - 200, nextLine, 22, GREEN);
-                nextLine += 35;
-            }
-            if (lastRun.greedMult > 1.0f) {
-                DrawText(TextFormat("Greed:                          x%.1f", lastRun.greedMult), cx - 200, nextLine, 22, LIGHTGRAY);
-                nextLine += 35;
-            }
-            DrawLine(cx - 200, nextLine, cx + 200, nextLine, GRAY);
-            DrawText(TextFormat("TOTALT:  +%d g", lastRun.totalGold), cx - 200, nextLine + 15, 30, GOLD);
-            DrawText(TextFormat("Gull i banken: %d g", totalGold), cx - 200, nextLine + 60, 20, GOLD);
+            auto goldLine = [&](const char* label, const char* value, Color color) {
+                DrawText(label, (int)px + 40, y, 22, color);
+                DrawText(value, (int)px + 480 - MeasureText(value, 22), y, 22, color);
+                y += 35;
+            };
+            goldLine("Mynter plukket opp", TextFormat("%d g", lastRun.coinGold), LIGHTGRAY);
+            goldLine("Overlevd tid", TextFormat("%d g", lastRun.survivalGold), LIGHTGRAY);
+            goldLine("Level-bonus", TextFormat("%d g", lastRun.levelGold), LIGHTGRAY);
+            if (lastRun.bossGold > 0) goldLine("Boss-bonus", TextFormat("%d g", lastRun.bossGold), GREEN);
+            if (lastRun.greedMult > 1.0f) goldLine("Greed", TextFormat("x%.1f", lastRun.greedMult), LIGHTGRAY);
+            DrawLineEx({ px + 40.0f, (float)y }, { px + 480.0f, (float)y }, 2.0f, UI::GOLD_DARK);
+            UI::DrawOutlinedText("TOTALT", px + 40.0f, y + 15.0f, 30.0f, UI::GOLD_LIGHT);
+            const char* total = TextFormat("+%d g", lastRun.totalGold);
+            UI::DrawOutlinedText(total, px + 480.0f - MeasureText(total, 30), y + 15.0f, 30.0f, UI::GOLD_LIGHT);
+            DrawText(TextFormat("Gull i banken: %d g", totalGold), (int)px + 40, y + 62, 20, GOLD);
 
-            DrawText("[ENTER] Tilbake til menyen", cx - 140, Settings::SCREEN_HEIGHT - 80, 20, GRAY);
-        }
-
-        if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
-            // --- KLOKKE: TELLER ALLTID OPP FRA 0 ---
-            int fontSize = 32;
-            int minutes = (int)spawner.gameTime / 60;
-            int seconds = (int)spawner.gameTime % 60;
-            const char* timeText = TextFormat("%02d:%02d", minutes, seconds);
-            DrawText(timeText, (Settings::SCREEN_WIDTH / 2) - MeasureText(timeText, fontSize) / 2, 20, fontSize, inBossArena ? RED : WHITE);
-            const char* echelonLabel = GetEchelon(selectedEchelon).name.c_str();
-            DrawText(echelonLabel, Settings::SCREEN_WIDTH - MeasureText(echelonLabel, 20) - 20, 20, 20, ORANGE);
-
-            // --- "BOSS ARENA"-INTRO ETTER TELEPORT ---
-            if (inBossArena && arenaIntroTimer > 0.0f) {
-                float t = arenaIntroTimer / Arena::INTRO_TIME; // 1 -> 0
-                // Hvitt blink som fader ut, så teksten
-                DrawRectangle(0, 0, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, Fade(WHITE, std::max(0.0f, (t - 0.7f) / 0.3f)));
-                const char* introText = "KONGENS TRONSAL";
-                int introSize = 64;
-                DrawText(introText, Settings::SCREEN_WIDTH / 2 - MeasureText(introText, introSize) / 2, Settings::SCREEN_HEIGHT / 2 - 80, introSize, Fade(RED, std::min(1.0f, t * 2.0f)));
-            }
+            hint("[ENTER] Tilbake til menyen");
+            UI::EndCanvas();
         }
 
         EndDrawing();
@@ -898,6 +985,7 @@ int main() {
 
     saveProgress();
     for (auto& rt : clownPreviews) UnloadRenderTexture(rt);
+    UnloadRenderTexture(portraitRT);
     UnloadRenderer3D();
     UnloadGameAudio();
     CloseWindow();
