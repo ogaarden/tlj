@@ -1177,7 +1177,7 @@ int main() {
             BeginMode3D(view);
                 DrawGroundLayer();
                 if (inBossArena) DrawThroneRoom3D(Arena::CENTER, Arena::RADIUS);
-                else DrawCastleProps3D(player.position, 1100.0f);
+                else DrawCastleProps3D(player.position, 1400.0f, view);
 
                 // Pickups svever og vipper litt opp og ned
                 float bob = (float)GetTime() * 4.0f;
@@ -1293,6 +1293,7 @@ int main() {
                 DrawEnemyShots3D();
                 DrawExplosions3D();
                 DrawQueuedSprites(view);
+                if (!inBossArena) DrawCastlePillarsFaded(player.position, 1400.0f, view);
 
                 // --- VFX: glød, lyn, sjokkbølger og partikler (additivt, etter alt solid) ---
                 VfxBegin(view);

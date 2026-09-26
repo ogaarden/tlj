@@ -155,12 +155,15 @@ void forEachBrazier(Vector2 center, float radius, F&& fn) {
 }
 
 // ---------------------------------------------------------------------
-// SØYLER: marmorsøyler i rekker langs løperne og små grupper midt i hver sal.
-// De stenger veien for spilleren og fiendene (prosjektiler går forbi dem).
+// SØYLER: høye bærende marmorsøyler som går helt opp til hvelvet (ut av bildet).
+// Ett par står på hver side av løperen midt mellom to kryss, så de er sjeldne
+// og danner "porter" man går gjennom. De stenger veien for spilleren og fiendene
+// (prosjektiler går forbi dem). Står en søyle mellom kameraet og spilleren,
+// blir den gjennomsiktig (se DrawCastlePillarsFaded).
 // ---------------------------------------------------------------------
-constexpr float PILLAR_RADIUS = 24.0f;
-constexpr float PILLAR_HEIGHT_HALL = 115.0f;
-constexpr float COLONNADE_OFFSET = CARPET_WIDTH / 2.0f + 95.0f; // Avstand fra midten av løperen
+constexpr float PILLAR_RADIUS = 36.0f;
+constexpr float PILLAR_HEIGHT_HALL = 1250.0f;                    // Opp til taket (godt over kameraets synsfelt)
+constexpr float COLONNADE_OFFSET = CARPET_WIDTH / 2.0f + 120.0f; // Avstand fra midten av løperen
 
 template <typename F>
 void forEachPillar(Vector2 center, float radius, F&& fn) {
@@ -173,40 +176,61 @@ void forEachPillar(Vector2 center, float radius, F&& fn) {
     for (int ix = x0; ix <= x1; ix++) {
         for (int iy = y0; iy <= y1; iy++) {
             float bx = ix * CS, by = iy * CS;
-            // Søylerekker langs den loddrette og den vannrette løperen (ikke nær kryssene med fyrfat)
-            for (int k = 2; k <= 4; k++) {
-                float along = k * TILE * 4.0f;
-                for (int side = -1; side <= 1; side += 2) {
-                    emit({ bx + side * COLONNADE_OFFSET, by + along });
-                    emit({ bx + along, by + side * COLONNADE_OFFSET });
-                }
+            // Ett søylepar midt på hver løper (den loddrette og den vannrette)
+            for (int side = -1; side <= 1; side += 2) {
+                emit({ bx + side * COLONNADE_OFFSET, by + CS / 2.0f });
+                emit({ bx + CS / 2.0f, by + side * COLONNADE_OFFSET });
             }
-            // Fire søyler i en firkant midt i salen
-            Vector2 mid = { bx + CS / 2.0f, by + CS / 2.0f };
-            for (int q = 0; q < 4; q++) emit({ mid.x + ((q & 1) ? 140.0f : -140.0f), mid.y + ((q & 2) ? 140.0f : -140.0f) });
         }
     }
 }
 
-// Marmorsøyle med gullringer (3D). Rund topp, så den ser riktig ut ovenfra.
-void drawPillar(Vector2 p) {
-    const Color MARBLE = { 224, 214, 198, 255 };
-    const Color MARBLE_SHADE = { 168, 156, 140, 255 };
-    const Color RING = { 225, 180, 60, 255 };
+// Marmorsøyle med gullringer (3D) som fortsetter opp til taket.
+// alpha < 255: gjennomsiktig (når den skjuler spilleren).
+void drawPillar(Vector2 p, unsigned char alpha = 255) {
+    const Color MARBLE = { 224, 214, 198, alpha };
+    const Color MARBLE_SHADE = { 168, 156, 140, alpha };
+    const Color RING = { 225, 180, 60, alpha };
     const float H = PILLAR_HEIGHT_HALL;
-    ShadedCube(ToWorld3D(p, 5.0f), { 58.0f, 10.0f, 58.0f }, 45.0f, MARBLE_SHADE);                 // Sokkel (rombe)
-    ShadedCylinder(ToWorld3D(p, 10.0f), ToWorld3D(p, 18.0f), 29.0f, 25.0f, MARBLE, 20);           // Fot
-    ShadedCylinder(ToWorld3D(p, 18.0f), ToWorld3D(p, 22.0f), 25.5f, 25.5f, RING, 20);             // Gullring
-    ShadedCylinder(ToWorld3D(p, 22.0f), ToWorld3D(p, H - 14.0f), 22.0f, 20.0f, MARBLE, 20);       // Skaft
-    for (int i = 0; i < 10; i++) {                                                                 // Riller
-        float a = i * PI / 5.0f;
-        Vector2 o = { p.x + cosf(a) * 20.8f, p.y + sinf(a) * 20.8f };
-        ShadedCylinder(ToWorld3D(o, 26.0f), ToWorld3D(o, H - 18.0f), 1.8f, 1.6f, MARBLE_SHADE, 4);
+    const float R = PILLAR_RADIUS;
+    ShadedCube(ToWorld3D(p, 7.0f), { R * 2.6f, 14.0f, R * 2.6f }, 45.0f, MARBLE_SHADE);             // Sokkel (rombe)
+    ShadedCylinder(ToWorld3D(p, 14.0f), ToWorld3D(p, 26.0f), R * 1.3f, R * 1.12f, MARBLE, 24);       // Fot
+    ShadedCylinder(ToWorld3D(p, 26.0f), ToWorld3D(p, 32.0f), R * 1.14f, R * 1.14f, RING, 24);        // Gullring
+    ShadedCylinder(ToWorld3D(p, 32.0f), ToWorld3D(p, H), R, R * 0.92f, MARBLE, 24);                  // Skaft
+    for (int i = 0; i < (alpha == 255 ? 12 : 0); i++) {                                               // Riller (ikke når gjennomsiktig)
+        float a = i * PI / 6.0f;
+        Vector2 o = { p.x + cosf(a) * R * 0.95f, p.y + sinf(a) * R * 0.95f };
+        ShadedCylinder(ToWorld3D(o, 38.0f), ToWorld3D(o, H), 2.4f, 2.2f, MARBLE_SHADE, 4);
     }
-    ShadedCylinder(ToWorld3D(p, H - 14.0f), ToWorld3D(p, H - 10.0f), 22.0f, 22.0f, RING, 20);     // Gullring
-    ShadedCylinder(ToWorld3D(p, H - 10.0f), ToWorld3D(p, H - 2.0f), 22.0f, 29.0f, MARBLE, 20);    // Kapitel
-    ShadedCylinder(ToWorld3D(p, H - 2.0f), ToWorld3D(p, H + 1.0f), 29.0f, 27.0f, RING, 20);       // Gullkant
-    ShadedCylinder(ToWorld3D(p, H + 1.0f), ToWorld3D(p, H + 2.0f), 27.0f, 0.0f, MARBLE_SHADE, 20); // Topp
+    // Gullbånd oppover skaftet: gjør høyden (og perspektivet) tydelig
+    for (float y = 260.0f; y < H; y += 260.0f) {
+        float r = R * (1.0f - 0.08f * y / H) + 1.5f;
+        ShadedCylinder(ToWorld3D(p, y), ToWorld3D(p, y + 8.0f), r, r, RING, 24);
+    }
+}
+
+// Står søylen mellom kameraet og `focus` (spilleren) på skjermen? 0 = nei, 1 = helt over.
+float pillarCover(Vector2 p, const Camera3D& cam, Vector2 focus) {
+    // Bare søyler som er nærmere kameraet enn spilleren kan skjule ham
+    Vector3 fwd = Vector3Subtract(cam.target, cam.position);
+    Vector2 fwd2 = Vector2Normalize({ fwd.x, fwd.z });
+    if (Vector2DotProduct(Vector2Subtract(p, focus), fwd2) > 0.0f) return 0.0f;
+    Vector2 b = GetWorldToScreen(ToWorld3D(p, 0.0f), cam);
+    Vector2 t = GetWorldToScreen(ToWorld3D(p, PILLAR_HEIGHT_HALL * 0.7f), cam);
+    Vector2 f = GetWorldToScreen(ToWorld3D(focus, 45.0f), cam);
+    // Nærmeste punkt på søylens midtlinje (på skjermen)
+    Vector2 bt = Vector2Subtract(t, b);
+    float len2 = Vector2DotProduct(bt, bt);
+    float u = len2 > 0.0f ? Clamp(Vector2DotProduct(Vector2Subtract(f, b), bt) / len2, 0.0f, 1.0f) : 0.0f;
+    Vector2 c = Vector2Add(b, Vector2Scale(bt, u));
+    // Søylens halve bredde på skjermen ved det punktet
+    Vector3 cw = ToWorld3D(p, PILLAR_HEIGHT_HALL * 0.7f * u);
+    Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, { 0, 1, 0 }));
+    Vector2 edge = GetWorldToScreen(Vector3Add(cw, Vector3Scale(right, PILLAR_RADIUS)), cam);
+    float halfW = Vector2Distance(edge, c);
+    float d = Vector2Distance(f, c) - halfW;
+    const float MARGIN = 45.0f; // Omtrent en halv figur (i skjermpiksler)
+    return Clamp(1.0f - d / MARGIN, 0.0f, 1.0f);
 }
 
 } // namespace
@@ -323,14 +347,26 @@ void DrawCastleFloor(Vector2 center, float viewRadius) {
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { DrawShadow({ p.x + 5.0f, p.y + 5.0f }, 16.0f, 11.0f); });
     // Søylene kaster en lang skygge
     forEachPillar(center, viewRadius, [](Vector2 p) {
-        DrawShadow({ p.x + 10.0f, p.y + 12.0f }, 38.0f, 30.0f);
-        DrawCircleV(p, 33.0f, Fade(BLACK, 0.18f));
+        DrawShadow({ p.x + 16.0f, p.y + 18.0f }, PILLAR_RADIUS * 1.9f, PILLAR_RADIUS * 1.5f);
+        DrawCircleV(p, PILLAR_RADIUS * 1.45f, Fade(BLACK, 0.18f));
     });
 }
 
-void DrawCastleProps3D(Vector2 center, float viewRadius) {
+void DrawCastleProps3D(Vector2 center, float viewRadius, const Camera3D& camera) {
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { drawBrazier(p); });
-    forEachPillar(center, viewRadius, [](Vector2 p) { drawPillar(p); });
+    // Søyler som skjuler spilleren tegnes gjennomsiktige til slutt (DrawCastlePillarsFaded)
+    forEachPillar(center, viewRadius, [&](Vector2 p) { if (pillarCover(p, camera, center) <= 0.0f) drawPillar(p); });
+}
+
+void DrawCastlePillarsFaded(Vector2 center, float viewRadius, const Camera3D& camera) {
+    rlDrawRenderBatchActive();
+    rlDisableDepthMask(); // Gjennomsiktig: ikke skjul det som tegnes etterpå
+    forEachPillar(center, viewRadius, [&](Vector2 p) {
+        float cover = pillarCover(p, camera, center);
+        if (cover > 0.0f) drawPillar(p, (unsigned char)(255.0f * (1.0f - 0.72f * cover)));
+    });
+    rlDrawRenderBatchActive();
+    rlEnableDepthMask();
 }
 
 void DrawCastlePropsVfx(Vector2 center, float viewRadius) {

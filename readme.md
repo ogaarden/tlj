@@ -233,4 +233,15 @@ Notes:
    Spilleren og fiendene kan ikke gå gjennom dem (fiender glir rundt), prosjektiler går forbi.
    Søylene vises som prikker på minimapet, og kister havner aldri inni en søyle.
 
+// 13 oktober – ny figurstil og bærende søyler
+1) Alle figurer er tegnet på nytt med Higgsfield i ÉN felles stil: malte papirteater-dukker med tykk
+   mørk blekkontur, flate farger og samme palett som slottet (koboltblått, krem, karmosin og gull).
+   Klovnene, vaktene og minibossene/kongen ble tegnet i to ark (det andre med det første som
+   stilreferanse), så alle ser ut som de hører til i samme spill. Fiendene bærer kongens
+   karmosin-og-gull-livré. Hver figur har en kremhvit papirkant, så de synes godt både på de blå
+   flisene og på de røde løperne. Tegnes nå mykt (mipmaps) i stedet for som pikselkunst.
+2) HUD-portrettet viser ansiktet til klovnen (ikke hammeren eller treforken).
+3) Søylene er mye sjeldnere (ett par midt på hver løper, 4 per sal i stedet for 16), tykkere og går
+   helt opp til taket, ut av bildet. Står en søyle mellom kameraet og spilleren, blir den gjennomsiktig.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

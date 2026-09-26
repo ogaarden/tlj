@@ -19,8 +19,10 @@ void DrawCastleFloor(Vector2 center, float viewRadius);
 void DrawThroneRoomFloor(Vector2 center, float radius);
 void DrawThroneRoom3D(Vector2 center, float radius);
 
-// Fyrfat og andre 3D-detaljer i storsalen (rundt der løperne krysser hverandre)
-void DrawCastleProps3D(Vector2 center, float viewRadius);
+// Fyrfat og søyler i storsalen. center = spilleren: søyler som skjuler spilleren hoppes over
+// her og tegnes gjennomsiktige med DrawCastlePillarsFaded etter figurene.
+void DrawCastleProps3D(Vector2 center, float viewRadius, const Camera3D& camera);
+void DrawCastlePillarsFaded(Vector2 center, float viewRadius, const Camera3D& camera);
 // Flammer, glør og varme lyspøler (kalles i VFX-passet, se vfx.hpp)
 void DrawCastlePropsVfx(Vector2 center, float viewRadius);
 // Samme for tronsalen: fyrfat langs muren

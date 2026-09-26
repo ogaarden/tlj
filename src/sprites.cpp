@@ -14,11 +14,19 @@ const char* FILES[(int)SpriteId::COUNT] = {
     "assets/sprites/executioner.png", "assets/sprites/magus.png", "assets/sprites/iron_knight.png", "assets/sprites/king.png",
 };
 
-// Høyde i verden. Litt større enn 3D-modellene, så tegningene synes godt fra kameraet.
+// Høyde i verden (hele bildet, inkludert papirkanten). Bildene har 3 piksler per enhet.
 const float HEIGHTS[(int)SpriteId::COUNT] = {
-    84.0f, 84.0f, 92.0f, 84.0f,
-    70.0f, 92.0f, 50.0f, 50.0f, 70.0f,
-    84.0f, 76.0f, 80.0f, 170.0f,
+    88.0f, 90.0f, 92.0f, 82.0f,
+    76.0f, 98.0f, 54.0f, 60.0f, 72.0f,
+    96.0f, 88.0f, 108.0f, 175.0f,
+};
+
+// Hodet i bildet (til HUD-portrettet) som andeler av bildet: midtpunkt x, midtpunkt y og størrelse
+// (andel av høyden). x < 0: regnes ut automatisk. Klovnene har våpen over hodet, så de settes for hånd.
+const float HEADS[(int)SpriteId::COUNT][3] = {
+    { 0.40f, 0.26f, 0.40f }, { 0.53f, 0.26f, 0.36f }, { 0.42f, 0.17f, 0.32f }, { 0.39f, 0.20f, 0.34f },
+    { -1, 0, 0 }, { -1, 0, 0 }, { -1, 0, 0 }, { -1, 0, 0 }, { -1, 0, 0 },
+    { -1, 0, 0 }, { -1, 0, 0 }, { -1, 0, 0 }, { -1, 0, 0 },
 };
 
 Texture2D textures[(int)SpriteId::COUNT] = {};
@@ -63,11 +71,16 @@ void InitSprites() {
             float cx = sum > 0 ? (float)(sx / sum) : img.width / 2.0f;
             float size = img.height * 0.46f;
             heads[i] = { cx - size / 2.0f, img.height * 0.01f, size, size };
+            if (HEADS[i][0] >= 0.0f) {
+                float sz = img.height * HEADS[i][2];
+                heads[i] = { img.width * HEADS[i][0] - sz / 2.0f, img.height * HEADS[i][1] - sz / 2.0f, sz, sz };
+            }
         }
         textures[i] = LoadTextureFromImage(img);
         UnloadImage(img);
-        // Pikselkunst: skarpe piksler, ingen utjevning og ingen mipmaps
-        SetTextureFilter(textures[i], TEXTURE_FILTER_POINT);
+        // Malte papirfigurer: mipmaps og myk filtrering, så de er rene også når de er små
+        GenTextureMipmaps(&textures[i]);
+        SetTextureFilter(textures[i], TEXTURE_FILTER_TRILINEAR);
         loaded[i] = textures[i].id != 0;
     }
     shader = LoadShaderFromMemory(nullptr, FRAGMENT);

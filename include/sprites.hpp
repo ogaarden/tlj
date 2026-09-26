@@ -4,9 +4,11 @@
 #include <raylib.h>
 
 // =====================================================================
-// PIKSELFIGURER (sprites)
-// Figurene ble tegnet med Higgsfield og gjort om til pikselkunst (assets/sprites/*.png,
-// ca. 1.5 verdensenheter per piksel). De vises som flate figurer i 3D-verdenen:
+// PAPIRFIGURER (sprites)
+// Alle figurene er tegnet med Higgsfield i samme stil: malte papirteater-dukker med mørk
+// blekkontur, flate farger og én felles palett (kobolt, krem, karmosin, gull) som passer
+// med porselensgulvet. Hver figur har en kremhvit papirkant (assets/sprites/*.png,
+// 3 piksler per verdensenhet). De vises som flate figurer i 3D-verdenen:
 // vender alltid mot kameraet, speilvendes etter hvilken vei de går, og hopper/vugger.
 // Man kan bytte tilbake til 3D-modellene i innstillingene.
 // =====================================================================
