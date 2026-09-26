@@ -25,7 +25,16 @@ void vertex(Vector3 p, Color c) {
     rlVertex3f(p.x, p.y, p.z);
 }
 
-void triangle(Vector3 a, Vector3 b, Vector3 c, Color ca, Color cb, Color cc) {
+// Trekant som alltid vender utover (mot klokka sett fra `outward`-siden).
+// Viktig: rlDisableBackfaceCulling() gjelder ikke for trekanter som ligger i batchen –
+// de tegnes først senere, når culling er på igjen. Trekanter med feil rekkefølge blir
+// da borte, og man ser innsiden av formen (f.eks. nesa gjennom bakhodet).
+void triangle(Vector3 a, Vector3 b, Vector3 c, Color ca, Color cb, Color cc, Vector3 outward) {
+    Vector3 n = Vector3CrossProduct(Vector3Subtract(b, a), Vector3Subtract(c, a));
+    if (Vector3DotProduct(n, outward) < 0.0f) {
+        Vector3 tp = b; b = c; c = tp;
+        Color tc = cb; cb = cc; cc = tc;
+    }
     vertex(a, ca);
     vertex(b, cb);
     vertex(c, cc);
@@ -111,7 +120,6 @@ Vector2 GroundToScreen(const Camera3D& camera, Vector2 ground, float height) {
 
 void ShadedSphere(Vector3 center, float radius, Color color, int rings, int slices) {
     rlCheckRenderBatchLimit(rings * slices * 6);
-    rlDisableBackfaceCulling();
     rlBegin(RL_TRIANGLES);
     for (int i = 0; i < rings; i++) {
         float lat0 = -PI / 2.0f + PI * i / rings;
@@ -130,12 +138,12 @@ void ShadedSphere(Vector3 center, float radius, Color color, int rings, int slic
             Vector3 p10 = Vector3Add(center, Vector3Scale(n10, radius));
             Vector3 p11 = Vector3Add(center, Vector3Scale(n11, radius));
 
-            triangle(p00, p10, p11, lit(color, n00), lit(color, n10), lit(color, n11));
-            triangle(p00, p11, p01, lit(color, n00), lit(color, n11), lit(color, n01));
+            Vector3 out = Vector3Add(Vector3Add(n00, n01), Vector3Add(n10, n11));
+            triangle(p00, p10, p11, lit(color, n00), lit(color, n10), lit(color, n11), out);
+            triangle(p00, p11, p01, lit(color, n00), lit(color, n11), lit(color, n01), out);
         }
     }
     rlEnd();
-    rlEnableBackfaceCulling();
 }
 
 void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadius, Color color, int slices) {
@@ -149,7 +157,6 @@ void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadi
     Vector3 v = Vector3CrossProduct(dir, u);
 
     rlCheckRenderBatchLimit(slices * 12);
-    rlDisableBackfaceCulling();
     rlBegin(RL_TRIANGLES);
     Color capStart = lit(color, Vector3Negate(dir));
     Color capEnd = lit(color, dir);
@@ -165,15 +172,15 @@ void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadi
         Vector3 t1 = Vector3Add(end, Vector3Scale(n1, endRadius));
 
         // Sidene
-        triangle(b0, t0, t1, lit(color, n0), lit(color, n0), lit(color, n1));
-        triangle(b0, t1, b1, lit(color, n0), lit(color, n1), lit(color, n1));
+        Vector3 out = Vector3Add(n0, n1);
+        triangle(b0, t0, t1, lit(color, n0), lit(color, n0), lit(color, n1), out);
+        triangle(b0, t1, b1, lit(color, n0), lit(color, n1), lit(color, n1), out);
 
         // Lokk i begge ender
-        if (startRadius > 0.0f) triangle(start, b1, b0, capStart, capStart, capStart);
-        if (endRadius > 0.0f) triangle(end, t0, t1, capEnd, capEnd, capEnd);
+        if (startRadius > 0.0f) triangle(start, b1, b0, capStart, capStart, capStart, Vector3Negate(dir));
+        if (endRadius > 0.0f) triangle(end, t0, t1, capEnd, capEnd, capEnd, dir);
     }
     rlEnd();
-    rlEnableBackfaceCulling();
 }
 
 void ShadedCube(Vector3 center, Vector3 size, float yawDegrees, Color color) {
@@ -190,12 +197,11 @@ void ShadedCube(Vector3 center, Vector3 size, float yawDegrees, Color color) {
     };
     auto face = [&](Vector3 a, Vector3 b, Vector3 c, Vector3 d, Vector3 normal) {
         Color col = lit(color, normal);
-        triangle(a, b, c, col, col, col);
-        triangle(a, c, d, col, col, col);
+        triangle(a, b, c, col, col, col, normal);
+        triangle(a, c, d, col, col, col, normal);
     };
 
     rlCheckRenderBatchLimit(36);
-    rlDisableBackfaceCulling();
     rlBegin(RL_TRIANGLES);
     face(corner(-1, 1, -1), corner(1, 1, -1), corner(1, 1, 1), corner(-1, 1, 1), ay);                        // Topp
     face(corner(-1, -1, -1), corner(1, -1, -1), corner(1, -1, 1), corner(-1, -1, 1), Vector3Negate(ay));     // Bunn
@@ -204,7 +210,6 @@ void ShadedCube(Vector3 center, Vector3 size, float yawDegrees, Color color) {
     face(corner(1, -1, -1), corner(1, -1, 1), corner(1, 1, 1), corner(1, 1, -1), ax);                        // Øst
     face(corner(-1, -1, -1), corner(-1, -1, 1), corner(-1, 1, 1), corner(-1, 1, -1), Vector3Negate(ax));     // Vest
     rlEnd();
-    rlEnableBackfaceCulling();
 }
 
 void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color, int rings, int slices) {
@@ -226,7 +231,6 @@ void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color
     };
 
     rlCheckRenderBatchLimit(rings * slices * 6);
-    rlDisableBackfaceCulling();
     rlBegin(RL_TRIANGLES);
     for (int i = 0; i < rings; i++) {
         float lat0 = -PI / 2.0f + PI * i / rings;
@@ -237,10 +241,10 @@ void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color
             Color c00, c01, c10, c11;
             Vector3 p00 = point(lat0, lon0, c00), p01 = point(lat0, lon1, c01);
             Vector3 p10 = point(lat1, lon0, c10), p11 = point(lat1, lon1, c11);
-            triangle(p00, p10, p11, c00, c10, c11);
-            triangle(p00, p11, p01, c00, c11, c01);
+            Vector3 out = Vector3Subtract(Vector3Scale(Vector3Add(Vector3Add(p00, p01), Vector3Add(p10, p11)), 0.25f), center);
+            triangle(p00, p10, p11, c00, c10, c11, out);
+            triangle(p00, p11, p01, c00, c11, c01, out);
         }
     }
     rlEnd();
-    rlEnableBackfaceCulling();
 }

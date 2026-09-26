@@ -119,20 +119,36 @@ void drawJester(const ClownPose& pose) {
         r.sphere(cosf(a) * 9.0f, sinf(a) * 9.0f, 34.0f + up, 3.3f, GLOVE, 5, 7);
     }
 
-    // Hode og regnbuehår som stritter ut på sidene
+    // Hode og regnbuehår: myke dotter i en halvsirkel rundt sidene og bakhodet
     float headUp = 44.0f + up;
     clownFace(r, headUp, 10.0f, false);
-    for (int side = -1; side <= 1; side += 2) {
-        for (int i = 0; i < 4; i++) {
-            float a = (-40.0f + i * 30.0f) * DEG2RAD;
-            r.sphere(-2.0f + cosf(a) * 3.0f, side * (9.5f + fabsf(sinf(a)) * 2.0f), headUp + 2.0f + sinf(a) * 6.0f, 4.2f, HAIR[i], 5, 7);
+    for (int i = 0; i < 9; i++) {
+        float a = (-120.0f + i * 30.0f) * DEG2RAD;  // Fra høyre side, rundt bakhodet, til venstre side
+        float fwd = -cosf(a) * 7.5f - 1.5f;
+        float side = sinf(a) * 9.5f;
+        for (int layer = 0; layer < 2; layer++) {
+            float h = headUp - 1.0f + layer * 5.0f;
+            float rad = layer == 0 ? 4.4f : 3.8f;
+            r.sphere(fwd * (layer ? 0.9f : 1.0f), side * (layer ? 0.9f : 1.0f), h, rad, HAIR[(i + layer) % 4], 6, 8);
         }
     }
-    // Liten hatt på skrå
-    r.limb(r.at(-1.0f, 1.5f, headUp + 8.5f), r.at(-1.5f, 2.5f, headUp + 10.0f), 7.0f, 7.0f, Color{ 40, 40, 50, 255 });
-    r.limb(r.at(-1.5f, 2.5f, headUp + 10.0f), r.at(-2.0f, 3.0f, headUp + 17.0f), 4.5f, 4.0f, Color{ 40, 40, 50, 255 });
-    r.limb(r.at(-1.6f, 2.6f, headUp + 11.0f), r.at(-1.7f, 2.7f, headUp + 12.5f), 4.7f, 4.6f, CLOWN_RED); // Hattebånd
-    r.sphere(-1.8f, 7.0f, headUp + 13.0f, 1.8f, POMPOM, 4, 6);                                          // Blomst
+
+    // Narrelue: tre bøyde tupper i rødt, lilla og grønt med gullbjeller
+    const Color CAP[3] = { { 214, 40, 52, 255 }, { 110, 40, 150, 255 }, { 30, 130, 70, 255 } };
+    const Color BELL = { 255, 205, 60, 255 };
+    r.limb(r.at(0.5f, 0.0f, headUp + 5.0f), r.at(0.0f, 0.0f, headUp + 8.5f), 10.4f, 9.6f, Color{ 240, 200, 60, 255 }); // Luebånd
+    float sway = sinf((float)GetTime() * 3.0f + pose.walkTime * 6.0f) * 1.2f;
+    for (int i = 0; i < 3; i++) {
+        float side = (i - 1) * 9.0f;                     // Venstre, midt, høyre
+        float lean = (i == 1) ? -3.0f : 0.0f;            // Midttuppen bøyer bakover
+        Vector3 base = r.at(0.0f, (i - 1) * 4.0f, headUp + 8.0f);
+        Vector3 mid = r.at(lean - 1.0f, side * 0.9f, headUp + 17.0f + (i == 1 ? 3.0f : 0.0f));
+        Vector3 tip = r.at(lean - 4.0f, side * 1.35f + sway, headUp + 16.0f + (i == 1 ? 7.0f : 1.0f));
+        r.limb(base, mid, 5.2f, 3.0f, CAP[i]);
+        r.limb(mid, tip, 3.0f, 0.8f, CAP[i]);
+        ShadedSphere(mid, 3.0f, r.c(CAP[i]), 5, 7);                    // Myk knekk i tuppen
+        ShadedSphere(tip, 2.3f, r.c(BELL), 6, 8);                      // Bjelle
+    }
 }
 
 // =====================================================================
@@ -184,6 +200,10 @@ void drawWester(const ClownPose& pose) {
         head.ellipsoid(9.8f, side * 3.8f, headUp - 3.0f, { 1.6f, 1.8f, 4.2f }, MUSTACHE);
         head.ellipsoid(9.2f, side * 7.4f, headUp - 1.5f, { 1.4f, 2.2f, 1.8f }, MUSTACHE); // Oppbrettede tupper
     }
+
+    // Svart hår i nakken og ved ørene, under capsen
+    head.ellipsoid(-3.5f, 0.0f, headUp + 0.5f, { 8.0f, 6.5f, 10.2f }, MUSTACHE);
+    for (int side = -1; side <= 1; side += 2) head.sphere(-1.0f, side * 9.0f, headUp + 1.5f, 3.2f, MUSTACHE, 5, 7);
 
     // Gul caps med skygge og emblem
     head.ellipsoid(-0.5f, 0.0f, headUp + 5.5f, { 11.0f, 7.5f, 11.0f }, SHIRT);
@@ -255,6 +275,14 @@ void drawGeek(const ClownPose& pose) {
         r.limb(r.at(7.4f, side * 7.0f, headUp + 1.5f), r.at(0.0f, side * 8.2f, headUp + 1.5f), 0.5f, 0.5f, FRAME); // Brillestang
     }
     r.limb(r.at(8.0f, -0.8f, headUp + 1.8f), r.at(8.0f, 0.8f, headUp + 1.8f), 0.6f, 0.6f, FRAME); // Neseklype
+
+    // Brunt, pjuskete hår bak og på sidene av hodet
+    const Color HAIR = { 110, 70, 40, 255 };
+    r.ellipsoid(-3.0f, 0.0f, headUp + 1.0f, { 6.5f, 7.5f, 8.3f }, HAIR);
+    for (int i = 0; i < 5; i++) {
+        float a = (-60.0f + i * 30.0f) * DEG2RAD;
+        r.sphere(-cosf(a) * 7.0f, sinf(a) * 7.0f, headUp + 3.5f, 2.2f, HAIR, 4, 6);
+    }
 
     // Propellcaps i to farger, med propell som snurrer
     r.ellipsoid(-0.3f, 0.0f, headUp + 6.5f, { 8.8f, 5.0f, 8.8f }, CAP_A);
