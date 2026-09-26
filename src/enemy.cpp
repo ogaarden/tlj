@@ -643,6 +643,12 @@ void Exploder::onDeath() {
     SpawnExplosion(position, explosionRadius, explosionDamage);
 }
 
+Color Exploder::spriteTint() const {
+    // Blinker rødt når lunta er tent
+    if (!fuseLit) return WHITE;
+    return ((int)(fuseTimer * 20.0f) % 2 == 0) ? Color{ 255, 120, 110, 255 } : Color{ 255, 60, 50, 255 };
+}
+
 void Exploder::applyEchelonModifiers(float hpMult, float damageMult, float speedMult) {
     Enemy::applyEchelonModifiers(hpMult, damageMult, speedMult);
     explosionDamage *= damageMult;

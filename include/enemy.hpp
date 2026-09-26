@@ -5,6 +5,7 @@
 #include <raymath.h>
 #include <cmath>
 #include <vector>
+#include "sprites.hpp"
 
 enum class EnemyType {
     FOOTMAN,
@@ -102,6 +103,10 @@ public:
     virtual void draw3D() const;
     virtual void drawVfx() const;                       // Glød/aura i det additive VFX-passet
     virtual float modelHeight() const { return 36.0f * modelScale; } // Brukes for å plassere HP-bar over hodet
+
+    // Tegnet figur (sprites.hpp). COUNT = ingen, bruk 3D-modellen.
+    virtual SpriteId spriteId() const { return SpriteId::COUNT; }
+    virtual Color spriteTint() const { return WHITE; }
 };
 
 class Footman : public Enemy {
@@ -109,6 +114,7 @@ public:
     Footman(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw3D() const override;
+    SpriteId spriteId() const override { return SpriteId::FOOTMAN; }
 };
 
 class Goon : public Enemy {
@@ -116,6 +122,7 @@ public:
     Goon(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw3D() const override;
+    SpriteId spriteId() const override { return SpriteId::GOON; }
 };
 
 class Lackey : public Enemy {
@@ -126,6 +133,7 @@ public:
     Lackey(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw3D() const override;
+    SpriteId spriteId() const override { return SpriteId::LACKEY; }
 };
 
 // Boss som venter i boss-arenaen når echelon-timeren er ferdig.
@@ -151,6 +159,8 @@ public:
     void draw3D() const override;
     void drawVfx() const override;
     float modelHeight() const override { return 110.0f; }
+    SpriteId spriteId() const override { return SpriteId::KING; }
+    Color spriteTint() const override { return enraged ? Color{ 255, 150, 140, 255 } : WHITE; }
 };
 
 // Kamikaze-fiende (echelon 2+): løper mot spilleren, stopper opp og blinker
@@ -172,6 +182,8 @@ public:
     void onDeath() override;
     int contactDamage() const override { return 0; } // Skader bare med eksplosjonen
     void applyEchelonModifiers(float hpMult, float damageMult, float speedMult) override;
+    SpriteId spriteId() const override { return SpriteId::EXPLODER; }
+    Color spriteTint() const override;
 };
 
 // Armbrøstskytter: løper til passe avstand, sikter (rød linje på gulvet) og skyter
@@ -188,6 +200,7 @@ public:
     void draw3D() const override;
     void drawVfx() const override;
     int contactDamage() const override { return damage / 2; }
+    SpriteId spriteId() const override { return SpriteId::ARCHER; }
 };
 
 enum class PickupType {

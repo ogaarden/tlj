@@ -53,6 +53,39 @@ void drawTile(int tx, int ty, Color light, Color dark) {
     DrawRectangle(x + TILE - 4, y + 2, 2, TILE - 4, shade(base, -14)); // Mørk kant høyre
 }
 
+// ---------------------------------------------------------------------
+// PORSELENSGULV (Higgsfield-teksturer i assets/floor/)
+// Hvite delft-fliser speiles i 2x2-grupper så de danner store rosetter,
+// og koboltblå stjernefliser går i bånd mellom gruppene.
+// Begge flisene ligger i ÉN tekstur (atlas), så hele gulvet tegnes i én batch.
+// ---------------------------------------------------------------------
+Texture2D floorAtlas{};
+bool floorLoaded = false;
+constexpr int ATLAS_TILE = 256;
+
+// Porselensflis: speilet delft (kind 0) eller koboltstjerne (kind 1), med glasur-glans og fuge
+void drawPorcelainTile(int tx, int ty, float brightness) {
+    // Mønster med periode 5: 4x4 hvite fliser (to og to speilet) omkranset av blå bånd
+    int mx = ((tx % 5) + 5) % 5, my = ((ty % 5) + 5) % 5;
+    bool blue = (mx == 4 || my == 4);
+    Rectangle src = { blue ? (float)ATLAS_TILE : 0.0f, 0.0f, (float)ATLAS_TILE, (float)ATLAS_TILE };
+    if (!blue) {
+        // Speilvend så fire fliser danner én rosett (hjørnet med rosetten møtes i midten)
+        if (mx % 2 == 1) src.width = -src.width;
+        if (my % 2 == 1) src.height = -src.height;
+    }
+    int v = tileHash(tx, ty) / 2;                      // Litt variasjon i glasuren
+    unsigned char b = (unsigned char)Clamp((235 + v) * brightness, 0.0f, 255.0f);
+    float x = (float)(tx * TILE), y = (float)(ty * TILE);
+    DrawRectangle((int)x, (int)y, TILE, TILE, Color{ 150, 135, 100, 255 });            // Fuge
+    DrawTexturePro(floorAtlas, src, { x + 1.5f, y + 1.5f, TILE - 3.0f, TILE - 3.0f }, { 0, 0 }, 0.0f, Color{ b, b, b, 255 });
+    // Glans: lys stripe langs øvre venstre kant, skygge nede til høyre (glassert kant)
+    DrawRectangleGradientH((int)x + 2, (int)y + 2, TILE / 2, 3, Fade(WHITE, 0.45f), Fade(WHITE, 0.0f));
+    DrawRectangleGradientV((int)x + 2, (int)y + 2, 3, TILE / 2, Fade(WHITE, 0.35f), Fade(WHITE, 0.0f));
+    DrawRectangle((int)x + 2, (int)y + TILE - 4, TILE - 4, 2, Fade(BLACK, 0.18f));
+    DrawRectangle((int)x + TILE - 4, (int)y + 2, 2, TILE - 4, Fade(BLACK, 0.14f));
+}
+
 void drawCarpet(Rectangle r, bool vertical) {
     DrawRectangleRec(r, CARPET_RED);
     // Gullkanter langs sidene
@@ -123,6 +156,43 @@ void forEachBrazier(Vector2 center, float radius, F&& fn) {
 
 } // namespace
 
+void InitCastleTextures() {
+    const char* white = "assets/floor/porcelain_white.png";
+    const char* blue = "assets/floor/porcelain_blue.png";
+    if (!FileExists(white) || !FileExists(blue)) return;
+    Image atlas = GenImageColor(ATLAS_TILE * 2, ATLAS_TILE, BLACK); // RGBA8
+    const char* files[2] = { white, blue };
+    for (int i = 0; i < 2; i++) {
+        Image img = LoadImage(files[i]);
+        ImageResize(&img, ATLAS_TILE, ATLAS_TILE);
+        ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        // Dempes litt mot hvitt/lyst, så figurene og effektene synes godt oppå gulvet
+        float soften = (i == 0) ? 0.35f : 0.12f;
+        Color* px = (Color*)img.data;
+        for (int k = 0; k < img.width * img.height; k++) {
+            px[k].r = (unsigned char)(px[k].r + (255 - px[k].r) * soften);
+            px[k].g = (unsigned char)(px[k].g + (255 - px[k].g) * soften);
+            px[k].b = (unsigned char)(px[k].b + (255 - px[k].b) * soften);
+        }
+        // Kopier inn i atlaset piksel for piksel (ImageDraw finnes ikke i alle raylib-versjoner)
+        Color* dst = (Color*)atlas.data;
+        for (int y = 0; y < ATLAS_TILE; y++)
+            for (int x = 0; x < ATLAS_TILE; x++)
+                dst[y * ATLAS_TILE * 2 + i * ATLAS_TILE + x] = px[y * ATLAS_TILE + x];
+        UnloadImage(img);
+    }
+    floorAtlas = LoadTextureFromImage(atlas);
+    UnloadImage(atlas);
+    GenTextureMipmaps(&floorAtlas);
+    SetTextureFilter(floorAtlas, TEXTURE_FILTER_TRILINEAR);
+    floorLoaded = floorAtlas.id != 0;
+}
+
+void UnloadCastleTextures() {
+    if (floorLoaded) UnloadTexture(floorAtlas);
+    floorLoaded = false;
+}
+
 void DrawShadow(Vector2 feet, float width, float height) {
     DrawEllipse((int)feet.x, (int)feet.y, width, height, Fade(BLACK, 0.28f));
     DrawEllipse((int)feet.x, (int)feet.y, width * 0.65f, height * 0.65f, Fade(BLACK, 0.18f));
@@ -141,7 +211,8 @@ void DrawCastleFloor(Vector2 center, float viewRadius) {
 
     for (int ty = startY; ty <= endY; ty++) {
         for (int tx = startX; tx <= endX; tx++) {
-            drawTile(tx, ty, MARBLE_LIGHT, MARBLE_DARK);
+            if (floorLoaded) drawPorcelainTile(tx, ty, 1.0f);
+            else drawTile(tx, ty, MARBLE_LIGHT, MARBLE_DARK);
         }
     }
 
@@ -208,7 +279,8 @@ void DrawThroneRoomFloor(Vector2 center, float radius) {
             int worldTy = baseY + ty;
             Vector2 tileCenter = { worldTx * TILE + TILE / 2.0f, worldTy * TILE + TILE / 2.0f };
             if (Vector2Distance(tileCenter, center) < radius + TILE) {
-                drawTile(worldTx, worldTy, THRONE_LIGHT, THRONE_DARK);
+                if (floorLoaded) drawPorcelainTile(worldTx, worldTy, 0.72f); // Litt mørkere i tronsalen
+                else drawTile(worldTx, worldTy, THRONE_LIGHT, THRONE_DARK);
             }
         }
     }

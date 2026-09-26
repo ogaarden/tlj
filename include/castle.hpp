@@ -7,6 +7,10 @@
 // Alt her er ren grafikk – ingen kollisjon eller spillogikk.
 
 // Uendelig slottsgulv. Tegner flisene innenfor viewRadius rundt center.
+// Porselensflisene (assets/floor). Uten dem tegnes det gamle marmorgulvet.
+void InitCastleTextures();
+void UnloadCastleTextures();
+
 void DrawCastleFloor(Vector2 center, float viewRadius);
 
 // Tronsalen (boss-arenaen) i to lag:

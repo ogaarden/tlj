@@ -28,6 +28,7 @@ class Executioner : public Goon {
     float timer = 2.5f;
 public:
     using Goon::Goon;
+    SpriteId spriteId() const override { return SpriteId::EXECUTIONER; }
     void update(Vector2 playerPosition) override;
     void draw() const override;
     void drawVfx() const override;
@@ -39,6 +40,7 @@ class Magus : public Archer {
     float volleyOffset = 0.0f;
 public:
     using Archer::Archer;
+    SpriteId spriteId() const override { return SpriteId::MAGUS; }
     void update(Vector2 playerPosition) override;
     void draw() const override;
     void drawVfx() const override;
@@ -51,6 +53,7 @@ class IronKnight : public Footman {
     Vector2 dashDir = { 0, 1 };
 public:
     using Footman::Footman;
+    SpriteId spriteId() const override { return SpriteId::IRON_KNIGHT; }
     void update(Vector2 playerPosition) override;
     void draw() const override;
     void drawVfx() const override;

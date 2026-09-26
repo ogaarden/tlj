@@ -30,6 +30,7 @@
 #include "music.hpp"
 #include "items.hpp"
 #include "miniboss.hpp"
+#include "sprites.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -117,6 +118,8 @@ int main() {
     SetExitKey(KEY_NULL); // ESC skal gå tilbake i menyer, ikke lukke hele spillet
     InitRenderer3D();
     InitVfx();
+    InitSprites();
+    InitCastleTextures();
     InitGameAudio();
     InitGameMusic();
 
@@ -155,7 +158,17 @@ int main() {
     LoadGame(Rewards::SAVE_FILE, saveData, shop);
     SetGameVolume(saveData.volume / 100.0f);
     SetMusicVolume01(saveData.musicVolume / 100.0f);
-    int settingsRow = 0; // 0 = volum, 1 = musikk
+    int settingsRow = 0; // 0 = volum, 1 = musikk, 2 = figurer
+    SetSpritesEnabled(saveData.drawnFigures != 0);
+    // Klovnestil -> tegnet figur
+    auto clownSprite = [](ClownStyle c) {
+        switch (c) {
+            case ClownStyle::WESTER:  return SpriteId::WESTER;
+            case ClownStyle::GEEK:    return SpriteId::GEEK;
+            case ClownStyle::PIERROT: return SpriteId::PIERROT;
+            default:                  return SpriteId::JESTER;
+        }
+    };
     int& totalGold = saveData.gold;
     auto saveProgress = [&]() { SaveGame(Rewards::SAVE_FILE, saveData, shop); };
 
@@ -427,10 +440,19 @@ int main() {
         }
         else if (currentState == SETTINGS) {
             // W/S velger rad, A/D justerer i steg på 10 %
-            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) settingsRow = 1 - settingsRow;
-            int& value = settingsRow == 0 ? saveData.volume : saveData.musicVolume;
-            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) value = std::min(100, value + 10);
-            if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) value = std::max(0, value - 10);
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) settingsRow = (settingsRow + 1) % 3;
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) settingsRow = (settingsRow + 2) % 3;
+            if (settingsRow == 2) {
+                // Figurer: tegnet eller 3D
+                if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_ENTER)) {
+                    saveData.drawnFigures = !saveData.drawnFigures;
+                    SetSpritesEnabled(saveData.drawnFigures != 0);
+                }
+            } else {
+                int& value = settingsRow == 0 ? saveData.volume : saveData.musicVolume;
+                if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) value = std::min(100, value + 10);
+                if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) value = std::max(0, value - 10);
+            }
             SetGameVolume(saveData.volume / 100.0f);
             SetMusicVolume01(saveData.musicVolume / 100.0f);
 
@@ -831,6 +853,20 @@ int main() {
 
                 BeginTextureMode(clownPreviews[i]);
                 ClearBackground(Color{ 0, 0, 0, 0 });
+                SpriteId sid = clownSprite(characters[i].clown);
+                if (HasSprite(sid)) {
+                    // Tegnet figur på en liten sokkel. Den valgte hopper litt.
+                    float rw = (float)clownPreviews[i].texture.width, rh = (float)clownPreviews[i].texture.height;
+                    Texture2D t = SpriteTexture(sid);
+                    float hop = isSelected ? fabsf(sinf(uiTime * 5.0f)) * 10.0f : 0.0f;
+                    float sq = isSelected ? sinf(uiTime * 10.0f) * 0.03f : sinf(uiTime * 2.0f + i) * 0.015f;
+                    float dh = rh * 0.86f * (1.0f + sq), dw = dh * t.width / t.height * (1.0f - sq);
+                    DrawEllipse((int)(rw / 2), (int)(rh * 0.93f), rw * 0.3f, rh * 0.05f, Color{ 212, 175, 55, 255 });
+                    DrawEllipse((int)(rw / 2), (int)(rh * 0.925f), rw * 0.27f, rh * 0.04f, Color{ 130, 20, 30, 255 });
+                    DrawTexturePro(t, { 0, 0, (float)t.width, (float)t.height }, { rw / 2 - dw / 2, rh * 0.95f - dh - hop, dw, dh }, { 0, 0 }, 0.0f, WHITE);
+                    EndTextureMode();
+                    continue;
+                }
                 BeginMode3D(previewCam);
                     // Liten sokkel med rød løper-farge og gullkant
                     ShadedCylinder({ 0.0f, -6.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, 34.0f, 32.0f, Color{ 212, 175, 55, 255 }, 24);
@@ -858,6 +894,14 @@ int main() {
             SetShadeViewDir(Vector3Subtract(portraitCam.position, portraitCam.target));
             BeginTextureMode(portraitRT);
             ClearBackground(Color{ 58, 40, 70, 255 });
+            if (HasSprite(clownSprite(player.clown))) {
+                // Hodet og overkroppen fra den tegnede figuren
+                Texture2D t = SpriteTexture(clownSprite(player.clown));
+                Rectangle head = SpriteHeadRect(clownSprite(player.clown));
+                Color tint = (player.invulnerableTimer > 0.0f && fmodf(uiTime * 10.0f, 1.0f) < 0.5f) ? Color{ 255, 150, 150, 255 } : WHITE;
+                DrawTexturePro(t, head, { 0, 0, 160, 160 }, { 0, 0 }, 0.0f, tint);
+                EndTextureMode();
+            } else {
             BeginMode3D(portraitCam);
                 ClownPose pose;
                 pose.position = { 0.0f, 0.0f };
@@ -866,6 +910,7 @@ int main() {
                 DrawClown(player.clown, pose);
             EndMode3D();
             EndTextureMode();
+            }
         }
 
         // -------------------------------------------------------------
@@ -1071,9 +1116,16 @@ int main() {
                 UI::DrawBar({ CX - 120.0f, (float)y + 2, 280.0f, 22.0f }, rowValues[i] / 100.0f, i == 0 ? GOLD : Color{ 150, 110, 230, 255 }, Color{ 40, 34, 30, 255 });
                 DrawText(TextFormat("%d%%", rowValues[i]), (int)CX + 180, y + 2, 22, WHITE);
             }
-            DrawText("[W/S] velg   [A/D] juster", (int)CX - 250, 320, 18, GRAY);
-            DrawText("Fullskjerm", (int)CX - 250, 370, 24, WHITE);
-            DrawText(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE) ? "PAA  [F11]" : "AV  [F11]", (int)CX - 50, 373, 20, UI::GOLD_LIGHT);
+            {
+                int y = 315;
+                bool sel = settingsRow == 2;
+                if (sel) DrawRectangleLinesEx({ CX - 270.0f, (float)y - 10, 540.0f, 44.0f }, 2.0f, UI::GOLD_LIGHT);
+                DrawText("Figurer", (int)CX - 250, y, 24, sel ? UI::GOLD_LIGHT : WHITE);
+                DrawText(saveData.drawnFigures ? "< TEGNET (Paper-stil) >" : "< 3D-MODELLER >", (int)CX - 120, y + 2, 22, UI::GOLD_LIGHT);
+            }
+            DrawText("[W/S] velg   [A/D] juster", (int)CX - 250, 365, 18, GRAY);
+            DrawText("Fullskjerm", (int)CX - 250, 395, 24, WHITE);
+            DrawText(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE) ? "PAA  [F11]" : "AV  [F11]", (int)CX - 50, 398, 20, UI::GOLD_LIGHT);
             hint("Trykk [ESC] for aa gaa tilbake");
             UI::EndCanvas();
         }
@@ -1182,6 +1234,24 @@ int main() {
                     float rise = std::min(1.0f, enemy->age / 0.45f);
                     rise = 1.0f - (1.0f - rise) * (1.0f - rise);
                     float scale = enemy->modelScale * (0.5f + 0.5f * rise);
+                    if (HasSprite(enemy->spriteId())) {
+                        // Tegnet figur: hopper og vugger i takt med gangen
+                        float w = enemy->walkCycle();
+                        SpriteDraw sd;
+                        sd.id = enemy->spriteId();
+                        sd.feet = enemy->position;
+                        sd.height = SpriteBaseHeight(sd.id) * enemy->modelScale * (0.6f + 0.4f * rise);
+                        sd.flip = FacesLeftOnScreen(view, enemy->facing);
+                        sd.flash = enemy->hitFlash * 0.85f;
+                        sd.squash = sinf(w * 2.0f) * 0.6f;
+                        sd.lean = sinf(w) * 5.0f;
+                        sd.hop = fabsf(sinf(w)) * 3.0f * enemy->modelScale;
+                        sd.sink = (1.0f - rise) * sd.height;
+                        sd.tint = enemy->spriteTint();
+                        if (enemy->slowTimer > 0.0f) sd.tint = ColorTint(sd.tint, Color{ 170, 210, 255, 255 });
+                        QueueSprite(sd);
+                        continue;
+                    }
                     SetShadeFlash(enemy->hitFlash * 0.85f);
                     rlPushMatrix();
                         rlTranslatef(enemy->position.x, -(1.0f - rise) * 25.0f, enemy->position.y);
@@ -1193,9 +1263,30 @@ int main() {
                 SetShadeFlash(0.0f);
                 SetShapeDetail(1.0f);
                 for (auto& w : player.weapons) w->draw3D();
-                player.drawModel();
+                if (HasSprite(clownSprite(player.clown))) {
+                    SpriteDraw sd;
+                    sd.id = clownSprite(player.clown);
+                    sd.feet = player.position;
+                    sd.height = SpriteBaseHeight(sd.id);
+                    sd.flip = FacesLeftOnScreen(view, player.facingDir);
+                    float w = player.walkTime * 1.0f;
+                    float breathe = sinf(uiTime * 2.5f);
+                    sd.squash = player.isMoving ? sinf(w * 2.0f) * 0.7f : breathe * 0.3f;
+                    sd.lean = player.isMoving ? sinf(w) * 6.0f : 0.0f;
+                    sd.hop = player.isMoving ? fabsf(sinf(w)) * 5.0f : 0.0f;
+                    if (!player.weapons.empty()) {
+                        float p = player.weapons[0]->cooldownProgress();
+                        if (p < 0.2f) sd.squash -= (1.0f - p / 0.2f) * 0.8f; // Liten "puff" når standardvåpenet brukes
+                    }
+                    if (player.invulnerableTimer > 0.0f && ((int)(player.invulnerableTimer * 20.0f) % 2 == 0)) sd.tint = Color{ 255, 120, 120, 255 };
+                    else if (player.slowTimer > 0.0f) sd.tint = SKYBLUE;
+                    QueueSprite(sd);
+                } else {
+                    player.drawModel();
+                }
                 DrawEnemyShots3D();
                 DrawExplosions3D();
+                DrawQueuedSprites(view);
 
                 // --- VFX: glød, lyn, sjokkbølger og partikler (additivt, etter alt solid) ---
                 VfxBegin(view);
@@ -1280,7 +1371,8 @@ int main() {
             float barScale = HudScale();
             for (const auto& e : enemies) {
                 if (e->hp >= e->maxHp || e->id == bossId) continue;
-                Vector2 screen = GroundToScreen(view, e->position, e->modelHeight() + 8.0f);
+                float barH = HasSprite(e->spriteId()) ? SpriteBaseHeight(e->spriteId()) * e->modelScale * 0.85f : e->modelHeight();
+                Vector2 screen = GroundToScreen(view, e->position, barH + 8.0f);
                 float pct = std::max(0.0f, (float)e->hp / (float)e->maxHp);
                 float bw = 30.0f * barScale, bh = 4.0f * barScale;
                 DrawRectangleRec({ screen.x - bw / 2.0f - 1.0f, screen.y - 1.0f, bw + 2.0f, bh + 2.0f }, Fade(BLACK, 0.7f));
@@ -1766,6 +1858,8 @@ int main() {
     for (auto& rt : clownPreviews) UnloadRenderTexture(rt);
     UnloadRenderTexture(portraitRT);
     UnloadVfx();
+    UnloadSprites();
+    UnloadCastleTextures();
     UnloadRenderer3D();
     UnloadGameMusic();
     UnloadGameAudio();

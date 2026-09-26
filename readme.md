@@ -201,4 +201,14 @@ Notes:
    Ringbrynje+Piggkrage=Piggrustning, Magnetstein+Uglefjær=Visdommens magnet,
    Trollspeil+Firkløver=Lykkespeilet. Item-kortene viser hvilket item de kombineres med.
 
+// 10 oktober – tegnede figurer og porselensgulv
+1) Alle klovner, fiender, minibosser og kongen er tegnet med Higgsfield (assets/sprites/) og vises som
+   "papirfigurer" i 3D-verdenen (sprites.cpp), som i Paper Mario: de vender alltid mot kameraet,
+   speilvendes etter hvilken vei de går, hopper og vugger når de går, blinker hvitt når de blir truffet
+   og stiger opp av gulvet når de spawner. Bakgrunnen ble fjernet med et eget chroma key-verktøy.
+2) Wester er nå en original sirkus-strongman (den første tegningen ble for lik Wario).
+3) Porselensgulv (assets/floor/): hvite delft-fliser speilet i 2x2 til store rosetter, med koboltblå
+   stjernefliser i bånd mellom. Begge ligger i én tekstur, så gulvet tegnes i én batch.
+4) Innstillinger -> Figurer: bytt mellom TEGNET og de gamle 3D-MODELLENE (lagres).
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj
