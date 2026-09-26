@@ -58,5 +58,7 @@ Notes:
 2) Boss-arenaen er nå kongens tronsal med trone, søyler og bannere
 3) Bossen er Kongen: kappe, hermelin, krone, skjegg og septer
 4) Skygger under alle figurer (første steg mot 3D-look)
+5) 2.5D: skrått 3D-kamera, gulvet tegnes som tekstur på et 3D-plan,
+   figurer/prosjektiler/tronsal i ekte 3D med belysning (render3d.cpp)
 
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

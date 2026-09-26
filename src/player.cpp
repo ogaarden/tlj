@@ -1,5 +1,6 @@
 #include "player.hpp"
 #include "castle.hpp"
+#include "render3d.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -29,6 +30,8 @@ void Player::update(float cameraRotation)
 
         // Klovnen peker i den retningen du trykker på skjermen (0 deg = rett opp)
         facingRotation = std::atan2(screenInput.x, -screenInput.y) * RAD2DEG;
+        if (screenInput.x < 0.0f) facingLeft = true;
+        else if (screenInput.x > 0.0f) facingLeft = false;
     }
 
     // 2. Transformer skjerm-bevegelsen til verdens-bevegelse basert på KAMERAROTASJONEN.
@@ -45,23 +48,20 @@ void Player::update(float cameraRotation)
     position.y += worldMovement.y * currentSpeed * deltaTime;
 }
 
-void Player::draw(float cameraRotation)
-{
-    // Legg til cameraRotation her slik at figuren roterer i takt med skjermen/kameraet
-    float finalDrawAngle = facingRotation + cameraRotation;
+namespace {
+    constexpr float PLAYER_SPRITE_HEIGHT = 56.0f;
+}
 
-    Rectangle source = { 0.0f, 0.0f, (float)texture.width, (float)texture.height };
-    Rectangle dest = { position.x, position.y, (float)texture.width, (float)texture.height };
-    Vector2 origin = { (float)texture.width / 2.0f, (float)texture.height / 2.0f };
+void Player::drawShadow() const {
+    DrawShadow({ position.x + 4.0f, position.y + 4.0f }, 16.0f, 9.0f);
+}
 
-    // Blink rødt mens spilleren er udødelig etter et treff
-    // Skygge under føttene
-    DrawShadow({ position.x + 4.0f, position.y + texture.height * 0.35f }, texture.width * 0.35f, texture.height * 0.12f);
-
-    Color tint = (slowTimer > 0.0f) ? SKYBLUE : WHITE; // Blålig når man er slowet
+void Player::drawSprite(const Camera3D& camera) const {
+    // Blålig når man er slowet, blinker rødt mens man er udødelig etter et treff
+    Color tint = (slowTimer > 0.0f) ? SKYBLUE : WHITE;
     if (invulnerableTimer > 0.0f && ((int)(invulnerableTimer * 20.0f) % 2 == 0)) tint = RED;
 
-    DrawTexturePro(texture, source, dest, origin, -finalDrawAngle, tint);
+    DrawSpriteStanding(camera, texture, position, PLAYER_SPRITE_HEIGHT, facingLeft, tint);
 }
 
 // Beregn skade basert på Armor og Evasion

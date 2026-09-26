@@ -2,6 +2,8 @@
 #include <raymath.h>
 #include <algorithm>
 #include <cmath>
+#include "render3d.hpp"
+#include "castle.hpp"
 
 // --- Felles hjelpefunksjoner ---
 namespace {
@@ -76,6 +78,12 @@ Vector2 rotateDegrees(Vector2 v, float degrees) {
 }
 
 constexpr float PROJECTILE_HIT_RADIUS = 5.0f;
+constexpr float PROJECTILE_HEIGHT = 18.0f; // Hvor høyt over bakken prosjektiler flyr (3D)
+
+// Liten skygge under noe som svever
+void smallShadow(Vector2 pos, float size) {
+    DrawEllipse((int)pos.x + 2, (int)pos.y + 2, size, size * 0.6f, Fade(BLACK, 0.3f));
+}
 
 } // namespace
 
@@ -161,13 +169,22 @@ void ProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std:
 }
 
 void ProjectileWeapon::draw() const {
+    for (const auto& p : projectiles) smallShadow(p.position, spread ? 4.0f : 5.0f);
+}
+
+void ProjectileWeapon::draw3D() const {
     for (const auto& p : projectiles) {
         if (spread) {
-            DrawCircleV(p.position, 4.0f, color);
+            // Trefork-prong: gullkule med en liten spiss
+            ShadedSphere(ToWorld3D(p.position, PROJECTILE_HEIGHT), 4.5f, color, 5, 8);
+            Vector2 tip = Vector2Add(p.position, Vector2Scale(p.direction, 9.0f));
+            ShadedCylinder(ToWorld3D(p.position, PROJECTILE_HEIGHT), ToWorld3D(tip, PROJECTILE_HEIGHT), 3.0f, 0.0f, color, 6);
         } else {
-            // Dolk: en kort strek i fartsretningen
-            Vector2 tail = Vector2Subtract(p.position, Vector2Scale(p.direction, 12.0f));
-            DrawLineEx(tail, p.position, 3.0f, color);
+            // Dolk: skaft + blad i fartsretningen
+            Vector2 hilt = Vector2Subtract(p.position, Vector2Scale(p.direction, 8.0f));
+            Vector2 tip = Vector2Add(p.position, Vector2Scale(p.direction, 8.0f));
+            ShadedCylinder(ToWorld3D(hilt, PROJECTILE_HEIGHT), ToWorld3D(p.position, PROJECTILE_HEIGHT), 1.8f, 1.8f, Color{ 90, 60, 40, 255 }, 6);
+            ShadedCylinder(ToWorld3D(p.position, PROJECTILE_HEIGHT), ToWorld3D(tip, PROJECTILE_HEIGHT), 2.8f, 0.0f, color, 6);
         }
     }
 }
@@ -302,17 +319,23 @@ void BouncingProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vec
 }
 
 void BouncingProjectileWeapon::draw() const {
+    for (const auto& p : projectiles) smallShadow(p.position, homing ? 6.0f : 4.0f);
+}
+
+void BouncingProjectileWeapon::draw3D() const {
     for (const auto& p : projectiles) {
         int bounced = (int)p.hitEnemyIds.size();
+        Vector3 pos = ToWorld3D(p.position, PROJECTILE_HEIGHT + (homing ? 6.0f : 0.0f));
 
         if (homing) {
-            // Magisk missil med glød og hale
-            DrawCircleV(p.position, 9.0f, Fade(color, 0.25f));
-            DrawCircleV(p.position, 5.0f, color);
-            DrawLineEx(p.position, Vector2Subtract(p.position, Vector2Scale(p.direction, 16.0f)), 3.0f, Fade(color, 0.5f));
+            // Magisk missil: lysende kjerne med glorie og hale
+            ShadedSphere(pos, 5.0f, color, 6, 8);
+            DrawSphere(pos, 9.0f, Fade(color, 0.3f));
+            Vector3 tail = ToWorld3D(Vector2Subtract(p.position, Vector2Scale(p.direction, 16.0f)), PROJECTILE_HEIGHT + 6.0f);
+            ShadedCylinder(pos, tail, 3.5f, 0.0f, Fade(color, 0.7f), 6);
         } else {
             // Ricochet: mindre og mer oransje for hvert sprett
-            float size = std::max(2.0f, 5.0f - bounced * 0.7f);
+            float size = std::max(2.5f, 5.0f - bounced * 0.6f);
             float t = std::min(1.0f, bounced / 4.0f);
             Color c = {
                 (unsigned char)(color.r + (ORANGE.r - color.r) * t),
@@ -320,8 +343,7 @@ void BouncingProjectileWeapon::draw() const {
                 (unsigned char)(color.b + (ORANGE.b - color.b) * t),
                 255
             };
-            DrawCircleV(p.position, size, c);
-            DrawLineV(p.position, Vector2Subtract(p.position, Vector2Scale(p.direction, 10.0f)), Fade(c, 0.5f));
+            ShadedSphere(pos, size, c, 5, 8);
         }
     }
 }
@@ -346,10 +368,22 @@ void RotWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique
 }
 
 void RotWeapon::draw() const {
-    // Pulserende giftsky rundt spilleren
+    // Pulserende giftsky på gulvet rundt spilleren
     float pulse = 0.5f + 0.5f * sinf(pulseTimer * 4.0f);
-    DrawCircleV(lastPlayerPos, radius(), Fade(DARKGREEN, 0.15f + 0.08f * pulse));
-    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius() - 2.0f * pulse, Fade(color, 0.6f));
+    DrawCircleV(lastPlayerPos, radius(), Fade(DARKGREEN, 0.18f + 0.08f * pulse));
+    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius() - 2.0f * pulse, Fade(color, 0.7f));
+}
+
+void RotWeapon::draw3D() const {
+    // Giftsporer som svever rundt i auraen
+    const int spores = 10;
+    for (int i = 0; i < spores; i++) {
+        float a = pulseTimer * (0.6f + 0.1f * (i % 3)) + i * (2.0f * PI / spores);
+        float dist = radius() * (0.35f + 0.5f * (0.5f + 0.5f * sinf(pulseTimer * 0.7f + i)));
+        Vector2 pos = { lastPlayerPos.x + cosf(a) * dist, lastPlayerPos.y + sinf(a) * dist };
+        float height = 10.0f + 12.0f * (0.5f + 0.5f * sinf(pulseTimer * 2.0f + i * 1.7f));
+        ShadedSphere(ToWorld3D(pos, height), 3.0f, color, 4, 6);
+    }
 }
 
 // =====================================================================
@@ -398,11 +432,19 @@ void OrbitWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
 }
 
 void OrbitWeapon::draw() const {
+    for (int b = 0; b < bladeCount; b++) smallShadow(bladePosition(b), 7.0f);
+}
+
+void OrbitWeapon::draw3D() const {
     for (int b = 0; b < bladeCount; b++) {
         Vector2 pos = bladePosition(b);
-        float bladeRotation = angle + 360.0f / bladeCount * b + 90.0f; // Pek i bevegelsesretningen
-        DrawPoly(pos, 3, 11.0f, bladeRotation, color);
-        DrawPolyLines(pos, 3, 11.0f, bladeRotation, BLACK);
+        // Bladet ligger langs bevegelsesretningen (tangenten til sirkelen)
+        float a = (angle + 360.0f / bladeCount * b) * DEG2RAD;
+        Vector2 tangent = { -sinf(a), cosf(a) };
+        Vector2 back = Vector2Subtract(pos, Vector2Scale(tangent, 6.0f));
+        Vector2 front = Vector2Add(pos, Vector2Scale(tangent, 12.0f));
+        ShadedCylinder(ToWorld3D(back, 16.0f), ToWorld3D(front, 16.0f), 4.5f, 0.0f, color, 6);
+        ShadedSphere(ToWorld3D(back, 16.0f), 3.0f, Color{ 110, 110, 120, 255 }, 4, 6);
     }
 }
 
@@ -443,14 +485,17 @@ void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
     for (Vector2 pos : strikePositions) {
         damageEnemiesInRadius(pos, area(), dmg, color, false, enemies, pickups);
 
-        // Lag en hakkete lynstrek fra "himmelen" ned til treffpunktet
+        // Lag en hakkete lynstrek fra himmelen rett ned til treffpunktet
         LightningBolt bolt{ pos, area(), 0.25f, {} };
-        Vector2 start = { pos.x + (float)GetRandomValue(-40, 40), pos.y - 350.0f };
-        const int segments = 7;
-        for (int s = 0; s <= segments; s++) {
-            float t = (float)s / segments;
-            Vector2 point = Vector2Lerp(start, pos, t);
-            if (s != 0 && s != segments) point.x += (float)GetRandomValue(-18, 18);
+        const int segments = 8;
+        const float skyHeight = 420.0f;
+        for (int seg = 0; seg <= segments; seg++) {
+            float t = (float)seg / segments;
+            Vector3 point = { pos.x, skyHeight * (1.0f - t), pos.y };
+            if (seg != segments) {
+                point.x += (float)GetRandomValue(-16, 16);
+                point.z += (float)GetRandomValue(-16, 16);
+            }
             bolt.points.push_back(point);
         }
         bolts.push_back(bolt);
@@ -460,12 +505,21 @@ void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
 }
 
 void LightningWeapon::draw() const {
+    // Brent merke på gulvet der lynet slo ned
     for (const auto& bolt : bolts) {
         float alpha = bolt.timer / 0.25f;
-        DrawCircleV(bolt.target, bolt.radius, Fade(color, 0.2f * alpha));
+        DrawCircleV(bolt.target, bolt.radius, Fade(color, 0.25f * alpha));
+        DrawCircleLines((int)bolt.target.x, (int)bolt.target.y, bolt.radius, Fade(WHITE, 0.6f * alpha));
+    }
+}
+
+void LightningWeapon::draw3D() const {
+    // Selve lynet: hakkete strek fra himmelen og ned
+    for (const auto& bolt : bolts) {
+        float alpha = bolt.timer / 0.25f;
         for (size_t i = 1; i < bolt.points.size(); i++) {
-            DrawLineEx(bolt.points[i - 1], bolt.points[i], 4.0f, Fade(color, alpha));
-            DrawLineEx(bolt.points[i - 1], bolt.points[i], 1.5f, Fade(WHITE, alpha));
+            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], 3.5f, 3.5f, 5, Fade(color, alpha));
+            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], 1.5f, 1.5f, 5, Fade(WHITE, alpha));
         }
     }
 }

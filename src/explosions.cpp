@@ -54,6 +54,16 @@ void DrawExplosions() {
     }
 }
 
+void DrawExplosions3D() {
+    for (const auto& e : explosions) {
+        float t = 1.0f - e.timer / EXPLOSION_ANIM_TIME; // 0 -> 1
+        float r = e.radius * (0.3f + 0.5f * t);
+        Vector3 center = { e.position.x, r * 0.5f, e.position.y };
+        DrawSphere(center, r, Fade(ORANGE, 0.45f * (1.0f - t)));
+        DrawSphere(center, r * 0.55f, Fade(YELLOW, 0.6f * (1.0f - t)));
+    }
+}
+
 void ClearExplosions() {
     explosions.clear();
 }

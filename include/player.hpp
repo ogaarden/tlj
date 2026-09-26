@@ -54,7 +54,10 @@ struct Player {
     float facingRotation = 0.0f;
 
     void update(float cameraRotation = 0.0f);
-    void draw(float rotation = 0.0f);
+    bool facingLeft = false; // Speilvend spriten når man går mot venstre på skjermen
+
+    void drawShadow() const;                   // I gulvlaget
+    void drawSprite(const Camera3D& camera) const; // I 3D-laget
     float takeDamage(float rawDamage); // Returnerer faktisk skade (0 hvis dodge)
     CombatModifiers combatModifiers() const;
     void addXP(int amount);

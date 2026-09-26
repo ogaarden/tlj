@@ -54,19 +54,28 @@ public:
 
     // Echelon-effekter som gjør fienden sterkere (kalles når den spawner)
     virtual void applyEchelonModifiers(float hpMult, float damageMult, float speedMult);
+    Vector2 facing = { 0.0f, 1.0f }; // Retningen fienden går/ser (brukes av 3D-modellen)
+
+    // Tegning i to lag (se render3d.hpp):
+    //  draw()   – på gulvet: skygge, varsel-linjer osv. (2D-koordinater)
+    //  draw3D() – selve figuren i 3D
     virtual void draw() const;
+    virtual void draw3D() const;
+    virtual float modelHeight() const { return 36.0f; } // Brukes for å plassere HP-bar over hodet
 };
 
 class Footman : public Enemy {
 public:
     Footman(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
+    void draw3D() const override;
 };
 
 class Goon : public Enemy {
 public:
     Goon(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
+    void draw3D() const override;
 };
 
 class Lackey : public Enemy {
@@ -76,6 +85,7 @@ private:
 public:
     Lackey(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
+    void draw3D() const override;
 };
 
 // Boss som venter i boss-arenaen når echelon-timeren er ferdig.
@@ -92,6 +102,8 @@ public:
     Boss(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw() const override;
+    void draw3D() const override;
+    float modelHeight() const override { return 110.0f; }
 };
 
 // Kamikaze-fiende (echelon 2+): løper mot spilleren, stopper opp og blinker
@@ -108,6 +120,7 @@ public:
     Exploder(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw() const override;
+    void draw3D() const override;
     void onDeath() override;
     int contactDamage() const override { return 0; } // Skader bare med eksplosjonen
     void applyEchelonModifiers(float hpMult, float damageMult, float speedMult) override;

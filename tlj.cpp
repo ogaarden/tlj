@@ -19,6 +19,7 @@
 #include "curses.hpp"
 #include "explosions.hpp"
 #include "castle.hpp"
+#include "render3d.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -102,6 +103,7 @@ int main() {
     InitWindow(Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, "The Last Jester");
     SetTargetFPS(Settings::FPS);
     SetExitKey(KEY_NULL); // ESC skal gå tilbake i menyer, ikke lukke hele spillet
+    InitRenderer3D();
 
     GameState currentState = MAIN_MENU;
     int mainOption = 0;
@@ -142,7 +144,7 @@ int main() {
     RunSummary lastRun;     // Vises på game over-skjermen
 
     Player player{};
-    Camera2D camera{};
+    Camera2D camera{}; // Brukes bare for rotasjonen (Q/E) – selve kameraet er 3D (se MakeGameCamera)
 
     int lastPlayerLevel = 1;
     std::vector<AbilityChoice> activeUpgradeChoices;
@@ -623,41 +625,62 @@ int main() {
             DrawText("Trykk [ESC] for a ga tilbake", Settings::SCREEN_WIDTH / 2 - 140, 450, 20, GRAY);
         }
         else if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
-            // 2. TEGNING PÅ SKJERMEN
-            BeginMode2D(camera);
+            // 2. TEGNING PÅ SKJERMEN (2.5D – se render3d.hpp)
+            Camera3D view = MakeGameCamera(player.position, camera.rotation);
 
-                // --- SLOTTET: storsalen, eller kongens tronsal når man er hos bossen ---
+            // --- GULVLAGET: slottsgulv, skygger, AOE-ringer og varsler (vanlig 2D-tegning) ---
+            BeginGroundLayer(player.position);
                 if (inBossArena) {
-                    DrawThroneRoom(Arena::CENTER, Arena::RADIUS);
+                    DrawThroneRoomFloor(Arena::CENTER, Arena::RADIUS);
                 } else {
-                    DrawCastleFloor(camera);
+                    DrawCastleFloor(player.position, View3D::GROUND_SIZE / 2.0f);
                 }
-
                 for (const auto& pickup : pickups) {
-                    DrawCircleV(pickup.position, pickup.radius, pickup.color);
+                    DrawEllipse((int)pickup.position.x + 2, (int)pickup.position.y + 2, pickup.radius, pickup.radius * 0.6f, Fade(BLACK, 0.3f));
+                }
+                player.drawShadow();
+                for (auto& w : player.weapons) w->draw();
+                for (auto& enemy : enemies) enemy->draw();
+                DrawExplosions();
+            EndGroundLayer();
+
+            // --- 3D-LAGET: figurer, prosjektiler, søyler osv. ---
+            BeginMode3D(view);
+                DrawGroundLayer();
+                if (inBossArena) DrawThroneRoom3D(Arena::CENTER, Arena::RADIUS);
+
+                // Pickups svever og vipper litt opp og ned
+                float bob = (float)GetTime() * 4.0f;
+                for (const auto& pickup : pickups) {
+                    float h = 8.0f + 3.0f * sinf(bob + pickup.position.x * 0.05f);
                     if (pickup.type == PickupType::COIN) {
-                        DrawCircleLines((int)pickup.position.x, (int)pickup.position.y, pickup.radius, ORANGE);
+                        // Mynt som snurrer rundt seg selv
+                        float spin = bob * 0.8f + pickup.position.y * 0.05f;
+                        Vector3 axis = { cosf(spin) * 1.5f, 0.0f, sinf(spin) * 1.5f };
+                        Vector3 center = ToWorld3D(pickup.position, h + 2.0f);
+                        ShadedCylinder(Vector3Subtract(center, axis), Vector3Add(center, axis), 6.0f, 6.0f, GOLD, 12);
+                    } else {
+                        ShadedSphere(ToWorld3D(pickup.position, h), pickup.radius, pickup.color, 5, 8);
                     }
                 }
 
-                // --- SPILLER OG VÅPEN ---
-                player.draw(camera.rotation);
-                
-                for (auto& w : player.weapons) {
-                    w->draw();
-                }
-                // --- TEGN ALLE FIENDER ---
-                for (auto& enemy : enemies) {
-                    enemy->draw();
-                }
-                DrawExplosions();
+                for (auto& enemy : enemies) enemy->draw3D();
+                for (auto& w : player.weapons) w->draw3D();
+                player.drawSprite(view);
+                DrawExplosions3D();
+            EndMode3D();
 
+            // --- HP-BARER over skadde fiender (ikke bossen – den har egen bar øverst) ---
+            for (const auto& e : enemies) {
+                if (e->hp >= e->maxHp || e->id == bossId) continue;
+                Vector2 screen = GroundToScreen(view, e->position, e->modelHeight() + 8.0f);
+                float pct = std::max(0.0f, (float)e->hp / (float)e->maxHp);
+                DrawRectangle((int)screen.x - 15, (int)screen.y, 30, 4, Fade(BLACK, 0.6f));
+                DrawRectangle((int)screen.x - 15, (int)screen.y, (int)(30 * pct), 4, GREEN);
+            }
 
-
-            EndMode2D();
-
-            // --- SKADETALL (tegnes i skjerm-koordinater så de ikke roterer med kameraet) ---
-            DrawDamageNumbers(camera);
+            // --- SKADETALL (projiseres fra 3D-posisjonen, så teksten alltid er rett vei) ---
+            DrawDamageNumbers(view);
 
             // --- UI / TEKST (Festet til skjermen, roterer ikke) ---
             DrawText("GAMEPLAY (ESC for meny)", 20, 20, 20, GREEN);
@@ -805,6 +828,7 @@ int main() {
     UnloadTexture(enemyTexture);
 
     saveProgress();
+    UnloadRenderer3D();
     CloseWindow();
     return 0;
 }

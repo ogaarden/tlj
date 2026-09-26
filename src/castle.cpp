@@ -1,5 +1,6 @@
 #include "castle.hpp"
-#include "settings.hpp"
+#include "render3d.hpp"
+#include <rlgl.h>
 #include <raymath.h>
 #include <cmath>
 
@@ -70,14 +71,11 @@ void DrawShadow(Vector2 feet, float width, float height) {
     DrawEllipse((int)feet.x, (int)feet.y, width * 0.65f, height * 0.65f, Fade(BLACK, 0.18f));
 }
 
-void DrawCastleFloor(const Camera2D& camera) {
-    // Kameraet kan rotere, så vi tegner alt innenfor en sirkel som dekker hele skjermen
-    float halfDiagonal = sqrtf((float)(Settings::SCREEN_WIDTH * Settings::SCREEN_WIDTH +
-                                       Settings::SCREEN_HEIGHT * Settings::SCREEN_HEIGHT)) * 0.5f / camera.zoom;
-    float minX = camera.target.x - halfDiagonal - TILE;
-    float maxX = camera.target.x + halfDiagonal + TILE;
-    float minY = camera.target.y - halfDiagonal - TILE;
-    float maxY = camera.target.y + halfDiagonal + TILE;
+void DrawCastleFloor(Vector2 center, float viewRadius) {
+    float minX = center.x - viewRadius - TILE;
+    float maxX = center.x + viewRadius + TILE;
+    float minY = center.y - viewRadius - TILE;
+    float maxY = center.y + viewRadius + TILE;
 
     int startX = (int)floorf(minX / TILE);
     int endX = (int)floorf(maxX / TILE);
@@ -105,12 +103,14 @@ void DrawCastleFloor(const Camera2D& camera) {
     }
 }
 
-void DrawThroneRoom(Vector2 center, float radius) {
-    const float wallThickness = 50.0f;
+namespace {
+    constexpr float WALL_THICKNESS = 50.0f;
+    constexpr float WALL_HEIGHT = 55.0f;
+    constexpr float PILLAR_HEIGHT = 120.0f;
+    constexpr int PILLAR_COUNT = 16;
+}
 
-    // Mørk bakgrunn utenfor salen
-    DrawCircleV(center, radius + wallThickness + 200.0f, Color{ 12, 10, 16, 255 });
-
+void DrawThroneRoomFloor(Vector2 center, float radius) {
     // --- Sjakkbrett-gulv (bare fliser innenfor sirkelen) ---
     int start = (int)floorf(-radius / TILE) - 1;
     int end = (int)ceilf(radius / TILE) + 1;
@@ -133,43 +133,67 @@ void DrawThroneRoom(Vector2 center, float radius) {
     float carpetBottom = center.y + radius;
     drawCarpet({ center.x - carpetWidth / 2.0f, carpetTop, carpetWidth, carpetBottom - carpetTop }, true);
 
-    // --- Tronen øverst i salen ---
+    // --- Podium under tronen ---
     Vector2 throne = { center.x, center.y - radius + 70.0f };
-    DrawRectangle((int)throne.x - 70, (int)throne.y - 10, 140, 60, STONE_DARK);                 // Podium
-    DrawRectangle((int)throne.x - 70, (int)throne.y - 10, 140, 4, STONE);
-    DrawRectangle((int)throne.x - 40, (int)throne.y - 55, 80, 70, CARPET_GOLD);                 // Ryggstø
-    DrawTriangle({ throne.x - 40, throne.y - 55 }, { throne.x + 40, throne.y - 55 }, { throne.x, throne.y - 85 }, CARPET_GOLD);
-    DrawRectangle((int)throne.x - 30, (int)throne.y - 45, 60, 50, CARPET_RED);                  // Pute
-    DrawCircleV({ throne.x, throne.y - 62 }, 6.0f, RED);                                        // Juvel
-    DrawRectangle((int)throne.x - 48, (int)throne.y - 5, 12, 40, shade(CARPET_GOLD, -30));      // Armlener
-    DrawRectangle((int)throne.x + 36, (int)throne.y - 5, 12, 40, shade(CARPET_GOLD, -30));
+    DrawRectangle((int)throne.x - 80, (int)throne.y - 40, 160, 90, STONE_DARK);
+    DrawRectangleLines((int)throne.x - 80, (int)throne.y - 40, 160, 90, STONE);
 
-    // --- Murvegg rundt salen (dekker de hakkete flis-kantene) ---
-    DrawRing(center, radius, radius + wallThickness, 0.0f, 360.0f, 96, STONE);
-    DrawRing(center, radius, radius + 6.0f, 0.0f, 360.0f, 96, STONE_DARK);                   // Skygge innerst
-    DrawRing(center, radius + wallThickness - 6.0f, radius + wallThickness, 0.0f, 360.0f, 96, shade(STONE, 25));
+    // --- Mur-fundament (dekker de hakkete flis-kantene) og mørket utenfor ---
+    DrawRing(center, radius, radius + WALL_THICKNESS, 0.0f, 360.0f, 96, STONE_DARK);
+    DrawRing(center, radius - 10.0f, radius, 0.0f, 360.0f, 96, Fade(BLACK, 0.35f)); // Skygge langs muren
+}
 
-    // --- Søyler og bannere langs veggen ---
-    const int pillarCount = 16;
-    for (int i = 0; i < pillarCount; i++) {
-        float angle = (360.0f / pillarCount) * i * DEG2RAD;
-        Vector2 dir = { cosf(angle), sinf(angle) };
-        Vector2 pillarPos = Vector2Add(center, Vector2Scale(dir, radius + wallThickness * 0.5f));
+void DrawThroneRoom3D(Vector2 center, float radius) {
+    // --- Murvegg rundt salen, bygget av skrå blokker ---
+    const int segments = 48;
+    float wallRadius = radius + WALL_THICKNESS / 2.0f;
+    float segmentLength = 2.0f * PI * wallRadius / segments + 2.0f;
+    for (int i = 0; i < segments; i++) {
+        float angle = (360.0f / segments) * (i + 0.5f);
+        float a = angle * DEG2RAD;
+        Vector2 pos = { center.x + cosf(a) * wallRadius, center.y + sinf(a) * wallRadius };
 
-        // Banner mellom søylene (bare annenhver, og ikke der løperen går ut)
-        if (i % 2 == 1 && dir.y < 0.9f) {
-            float bannerAngle = angle + (180.0f / pillarCount) * DEG2RAD;
-            Vector2 bdir = { cosf(bannerAngle), sinf(bannerAngle) };
-            Vector2 bannerPos = Vector2Add(center, Vector2Scale(bdir, radius - 6.0f));
-            DrawCircleV(bannerPos, 12.0f, CARPET_RED);
-            DrawCircleLines((int)bannerPos.x, (int)bannerPos.y, 12.0f, CARPET_GOLD);
-            DrawCircleV(bannerPos, 4.0f, CARPET_GOLD);
+        // Åpning i muren der løperen går inn (sør)
+        if (fabsf(angle - 90.0f) < 6.0f) continue;
+
+        Color blockColor = (i % 2 == 0) ? STONE : shade(STONE, -10);
+        // Blokken ligger langs sirkelen (lokal x-akse = tangenten): yaw = -vinkel - 90
+        ShadedCube(ToWorld3D(pos, WALL_HEIGHT / 2.0f), { segmentLength, WALL_HEIGHT, WALL_THICKNESS }, -angle - 90.0f, blockColor);
+        // Tinder på toppen av muren (annenhver blokk)
+        if (i % 2 == 0) {
+            ShadedCube(ToWorld3D(pos, WALL_HEIGHT + 8.0f), { segmentLength * 0.5f, 16.0f, WALL_THICKNESS * 0.8f }, -angle - 90.0f, shade(STONE, 12));
         }
-
-        // Søyle: skygge, sokkel og topp med lys kant
-        DrawCircleV(Vector2Add(pillarPos, { 6.0f, 8.0f }), 26.0f, Fade(BLACK, 0.35f));
-        DrawCircleV(pillarPos, 26.0f, STONE_DARK);
-        DrawCircleV(pillarPos, 21.0f, shade(STONE, 15));
-        DrawCircleV(Vector2Add(pillarPos, { -5.0f, -5.0f }), 9.0f, shade(STONE, 45));
     }
+
+    // --- Søyler med bannere ---
+    for (int i = 0; i < PILLAR_COUNT; i++) {
+        float angle = (360.0f / PILLAR_COUNT) * i * DEG2RAD;
+        Vector2 dir = { cosf(angle), sinf(angle) };
+        Vector2 pillarPos = Vector2Add(center, Vector2Scale(dir, radius + 6.0f));
+
+        ShadedCylinder(ToWorld3D(pillarPos, 0.0f), ToWorld3D(pillarPos, 10.0f), 28.0f, 28.0f, STONE_DARK, 16);          // Sokkel
+        ShadedCylinder(ToWorld3D(pillarPos, 10.0f), ToWorld3D(pillarPos, PILLAR_HEIGHT), 20.0f, 18.0f, shade(STONE, 20), 16);
+        ShadedCylinder(ToWorld3D(pillarPos, PILLAR_HEIGHT), ToWorld3D(pillarPos, PILLAR_HEIGHT + 12.0f), 20.0f, 25.0f, shade(STONE, 30), 16); // Kapitél
+
+        // Rødt banner med gullkant på innsiden av annenhver søyle (ikke ved inngangen)
+        if (i % 2 == 1 && dir.y < 0.9f) {
+            Vector2 bannerPos = Vector2Subtract(pillarPos, Vector2Scale(dir, 21.0f));
+            float yaw = -angle * RAD2DEG - 90.0f;
+            ShadedCube(ToWorld3D(bannerPos, PILLAR_HEIGHT - 40.0f), { 26.0f, 70.0f, 3.0f }, yaw, CARPET_RED);
+            ShadedCube(ToWorld3D(bannerPos, PILLAR_HEIGHT - 6.0f), { 30.0f, 4.0f, 4.0f }, yaw, CARPET_GOLD);
+            ShadedCube(ToWorld3D(Vector2Subtract(bannerPos, Vector2Scale(dir, 2.0f)), PILLAR_HEIGHT - 45.0f), { 10.0f, 10.0f, 2.0f }, yaw, CARPET_GOLD);
+        }
+    }
+
+    // --- Tronen ---
+    Vector2 throne = { center.x, center.y - radius + 70.0f };
+    ShadedCube(ToWorld3D(throne, 6.0f), { 150.0f, 12.0f, 80.0f }, 0.0f, STONE);                                 // Podium
+    ShadedCube(ToWorld3D({ throne.x, throne.y + 5.0f }, 28.0f), { 70.0f, 30.0f, 50.0f }, 0.0f, CARPET_GOLD);     // Sete
+    ShadedCube(ToWorld3D({ throne.x, throne.y + 5.0f }, 45.0f), { 56.0f, 6.0f, 40.0f }, 0.0f, CARPET_RED);       // Pute
+    ShadedCube(ToWorld3D({ throne.x, throne.y - 20.0f }, 80.0f), { 70.0f, 100.0f, 12.0f }, 0.0f, CARPET_GOLD);   // Ryggstø
+    ShadedCube(ToWorld3D({ throne.x, throne.y - 13.0f }, 75.0f), { 50.0f, 70.0f, 3.0f }, 0.0f, CARPET_RED);
+    ShadedCube(ToWorld3D({ throne.x - 38.0f, throne.y + 5.0f }, 50.0f), { 10.0f, 16.0f, 50.0f }, 0.0f, shade(CARPET_GOLD, -25)); // Armlener
+    ShadedCube(ToWorld3D({ throne.x + 38.0f, throne.y + 5.0f }, 50.0f), { 10.0f, 16.0f, 50.0f }, 0.0f, shade(CARPET_GOLD, -25));
+    ShadedCylinder(ToWorld3D({ throne.x, throne.y - 20.0f }, 130.0f), ToWorld3D({ throne.x, throne.y - 20.0f }, 150.0f), 12.0f, 0.0f, CARPET_GOLD, 10);
+    ShadedSphere(ToWorld3D({ throne.x, throne.y - 13.0f }, 110.0f), 7.0f, RED, 6, 8);                             // Juvel
 }

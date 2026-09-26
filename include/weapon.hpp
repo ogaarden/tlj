@@ -48,8 +48,12 @@ public:
         tick(deltaTime, playerPos, enemies, pickups);
     }
 
+    // Tegning i to lag (se render3d.hpp):
+    //  draw()   – på gulvet: skygger, AOE-ringer osv. (2D-koordinater)
+    //  draw3D() – prosjektiler, blader, lyn osv. i 3D
     // "Pure virtual" betyr at subklassene MÅ skrive sin egen versjon
     virtual void draw() const = 0;
+    virtual void draw3D() const {}
 
     // 0.0 = nettopp brukt, 1.0 = klar. Brukes av HUD-en.
     virtual float cooldownProgress() const {
@@ -80,6 +84,7 @@ public:
 
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
+    void draw3D() const override;
 };
 
 // --- AOE-slag rundt spilleren (Ground Slam) ---
@@ -116,6 +121,7 @@ public:
 
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
+    void draw3D() const override;
 };
 
 // --- Aura som gjør skade HVER FRAME (Rot) ---
@@ -129,6 +135,7 @@ private:
 public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
+    void draw3D() const override;
     float cooldownProgress() const override { return 1.0f; }
 };
 
@@ -146,6 +153,7 @@ private:
 public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
+    void draw3D() const override;
     float cooldownProgress() const override { return 1.0f; }
 };
 
@@ -154,7 +162,7 @@ struct LightningBolt {
     Vector2 target;
     float radius;
     float timer;
-    std::vector<Vector2> points;
+    std::vector<Vector3> points; // Hakkete strek fra himmelen og ned til bakken (3D)
 };
 
 class LightningWeapon : public Weapon {
@@ -164,6 +172,7 @@ private:
 public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
+    void draw3D() const override;
 };
 
 #endif // WEAPON_HPP

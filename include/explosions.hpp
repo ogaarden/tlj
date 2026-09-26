@@ -13,7 +13,8 @@ void SpawnExplosion(Vector2 position, float radius, float damage);
 // fra nye eksplosjoner som treffer (0 hvis ingen).
 float UpdateExplosions(float deltaTime, Vector2 playerPos, float playerRadius);
 
-void DrawExplosions();
+void DrawExplosions();   // På gulvet (i gulvlaget)
+void DrawExplosions3D(); // Ildkule i 3D
 void ClearExplosions();
 
 #endif // EXPLOSIONS_HPP

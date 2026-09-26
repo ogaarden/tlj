@@ -6,11 +6,14 @@
 // Tegning av slottsmiljøet: rutete marmorgulv, løpere og tronsalen.
 // Alt her er ren grafikk – ingen kollisjon eller spillogikk.
 
-// Uendelig slottsgulv. Tegner bare flisene som er synlige for kameraet.
-void DrawCastleFloor(const Camera2D& camera);
+// Uendelig slottsgulv. Tegner flisene innenfor viewRadius rundt center.
+void DrawCastleFloor(Vector2 center, float viewRadius);
 
-// Tronsalen (boss-arenaen): sirkulært gulv, løper, trone, murvegg med søyler og bannere
-void DrawThroneRoom(Vector2 center, float radius);
+// Tronsalen (boss-arenaen) i to lag:
+//  - Gulvet (2D, tegnes i gulvlaget): sjakkbrett, løper og mørk kant
+//  - 3D: murvegg, søyler med bannere og tronen
+void DrawThroneRoomFloor(Vector2 center, float radius);
+void DrawThroneRoom3D(Vector2 center, float radius);
 
 // Myk skygge under en figur – gir en enkel følelse av dybde
 void DrawShadow(Vector2 feet, float width, float height);
