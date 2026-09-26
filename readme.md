@@ -82,4 +82,13 @@ Notes:
    Roterer med kameraet (Q/E), [M] skjuler/viser kartet
 6) Alle menyer bruker samme stil: slottet dempet i bakgrunnen og paneler med gullkant
 
+// 2 oktober
+1) Fikset "rare" 3D-figurer: ellipsoider og sylindre ble tegnet vrengt (man så
+   innsiden av dem). Nå vender alle trekanter utover (render3d.cpp)
+2) Jester har fått ekte narrelue med tre tupper og bjeller; Wester og tok geek har fått hår
+3) Ny shop: grid med kort (ikon, nivåprikker, pris) + detaljpanel med nå/neste-effekt
+   og kjøpsknapp. Navigeres med WASD
+4) Ny level-up: liggende kort som glir inn, fargebanner, ikon, NY!/LV-merke og nivåprikker
+5) Egne ikoner for alle abilities og shop-oppgraderinger (icons.cpp), også i HUD-en
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

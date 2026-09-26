@@ -39,6 +39,12 @@ namespace UI {
     // Egen versjon fordi DrawCircleGradient har ulik signatur i raylib 5.5 og nyere.
     void DrawGlow(Vector2 center, float radius, Color inner, Color outer);
 
+    // Tekst som brytes over flere linjer innenfor `width`. Returnerer høyden som ble brukt.
+    float DrawWrappedText(const char* text, float x, float y, float width, float size, Color color, bool centered = false);
+
+    // Roterende strålekrans (bak "LEVEL UP!", valgte kort osv.)
+    void DrawSunburst(Vector2 center, float radius, int rays, float time, Color color);
+
     // Fylt bar (HP, XP, boss) med glans øverst og ramme
     void DrawBar(Rectangle r, float pct, Color fill, Color back, float scale = 1.0f);
 

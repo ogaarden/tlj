@@ -66,9 +66,12 @@ public:
     int totalCostOfEverything() const;
 
 private:
+    static constexpr int GRID_COLUMNS = 4;
+
     std::vector<ShopItem> items;
     int selectedOption = 0;
-    int scrollOffset = 0;
+    double purchaseTime = -10.0; // Når siste kjøp skjedde (for animasjon)
+    double denyTime = -10.0;     // Når man sist prøvde å kjøpe uten nok gull
 };
 
 #endif

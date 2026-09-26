@@ -2,6 +2,7 @@
 #include "character.hpp"
 #include "player.hpp"
 #include "ui.hpp"
+#include "icons.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -319,13 +320,8 @@ void DrawAbilityHud(const Player& player, float centerX, float bottom, float sca
         DrawRectangleRec(slot, Color{ 20, 18, 26, 255 });
         DrawRectangleGradientV((int)x, (int)y, (int)slotSize, (int)slotSize, Fade(w.color, 0.55f), Fade(w.color, 0.15f));
 
-        // Forkortelse av navnet i midten (f.eks. "MM" for Magic Missile)
-        std::string initials;
-        initials += w.name[0];
-        size_t space = w.name.find(' ');
-        if (space != std::string::npos && space + 1 < w.name.size()) initials += w.name[space + 1];
-        else if (w.name.size() > 1) initials += w.name[1];
-        text(initials.c_str(), x + slotSize / 2.0f, y + 12.0f * s, 24.0f * s, WHITE);
+        // Ikonet til abilityen i midten
+        DrawAbilityIcon(w.id, { x + slotSize / 2.0f, y + slotSize * 0.44f }, slotSize * 0.33f);
 
         // Cooldown: mørk overlay som krymper nedover mens abilityen lader
         float cd = w.cooldownProgress();

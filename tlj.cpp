@@ -24,6 +24,7 @@
 #include "clowns.hpp"
 #include "ui.hpp"
 #include "hud.hpp"
+#include "icons.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -170,6 +171,7 @@ int main() {
     int lastPlayerLevel = 1;
     std::vector<AbilityChoice> activeUpgradeChoices;
     int selectedUpgradeOption = 0;
+    double levelUpStart = 0.0; // For animasjonen når level-up-kortene kommer inn
 
     // --- SPAWNER OG FIENDER ---
     WaveSpawner spawner;
@@ -365,6 +367,7 @@ int main() {
                 currentState = LEVEL_UP;
                 PlaySfx(Sfx::LEVEL_UP);
                 selectedUpgradeOption = 0;
+                levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
             }
 
@@ -532,10 +535,11 @@ int main() {
             }
         }
             else if(currentState == LEVEL_UP) {
-                if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
+                // Kortene ligger ved siden av hverandre: A/D (og W/S) blar
+                if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D) || IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S)) {
                     selectedUpgradeOption = (selectedUpgradeOption + 1) % activeUpgradeChoices.size();
             }
-                if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
+                if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
                     selectedUpgradeOption = (selectedUpgradeOption - 1 + activeUpgradeChoices.size()) % activeUpgradeChoices.size();
             }
             // Bekreft valg
@@ -785,7 +789,6 @@ int main() {
         else if (currentState == SHOP) {
             UI::DrawCastleBackdrop(uiTime, 0.7f);
             UI::BeginCanvas();
-            UI::DrawPanel({ 50.0f, 100.0f, VW - 100.0f, 470.0f });
             shop.draw(totalGold);
             UI::EndCanvas();
         }
@@ -897,38 +900,135 @@ int main() {
             }
 
             if (currentState == LEVEL_UP) {
+                float since = (float)(GetTime() - levelUpStart);
+
                 // Mørklegg hele vinduet bak menyen
-                DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(Color{ 8, 6, 14, 255 }, 0.8f));
+                DrawRectangle(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(Color{ 8, 6, 14, 255 }, std::min(0.82f, since * 4.0f)));
                 UI::BeginCanvas();
-                heading("LEVEL UP!", 70.0f, UI::GOLD_LIGHT);
-                UI::DrawCenteredText("Velg en oppgradering", CX, 118.0f, 20.0f, Color{ 220, 210, 190, 255 });
 
-                const float cardWidth = 480.0f;
-                const float cardHeight = 80.0f;
-                float startY = (activeUpgradeChoices.size() > 3) ? 170.0f : 210.0f; // Plass til 4 valg med "Flere valg"-oppgraderingen
+                // --- Tittel: "LEVEL UP!" som spretter inn, med strålekrans bak ---
+                UI::DrawSunburst({ CX, 88.0f }, 260.0f, 18, uiTime * 0.25f, Fade(UI::GOLD_LIGHT, 0.16f));
+                float popT = std::min(1.0f, since / 0.35f);
+                float titleSize = std::round(64.0f * (0.6f + 0.4f * popT + 0.12f * sinf(popT * PI)));
+                UI::DrawCenteredText("LEVEL UP!", CX, 88.0f - titleSize * 0.45f, titleSize, UI::GOLD_LIGHT, 4.0f);
+                UI::DrawCenteredText(TextFormat("Du er naa level %d  -  velg en belonning", player.level), CX, 134.0f, 20.0f, Color{ 230, 220, 200, 255 });
 
-                for (size_t i = 0; i < activeUpgradeChoices.size(); i++) {
-                    float cardY = startY + i * (cardHeight + 16.0f);
-                    float cardX = CX - cardWidth / 2.0f;
-                    bool isSelected = ((int)i == selectedUpgradeOption);
-                    const AbilityChoice& choice = activeUpgradeChoices[i];
+                // --- Kortene ---
+                const int count = (int)activeUpgradeChoices.size();
+                const float cardW = count > 3 ? 240.0f : 260.0f;
+                const float cardH = 360.0f;
+                const float gap = 26.0f;
+                const float totalW = count * cardW + (count - 1) * gap;
+                const float baseY = 188.0f;
 
-                    UI::DrawPanel({ cardX, cardY, cardWidth, cardHeight }, 1.0f, isSelected ? UI::GOLD_LIGHT : UI::PANEL_EDGE,
-                                  isSelected ? Color{ 48, 34, 44, 240 } : Color{ 22, 18, 30, 230 });
-                    // Fargestripe som viser hvilken ability det gjelder
-                    DrawRectangleRec({ cardX + 6.0f, cardY + 6.0f, 8.0f, cardHeight - 12.0f }, choice.color);
+                // Tegn det valgte kortet sist så det havner øverst
+                for (int pass = 0; pass < 2; pass++) {
+                    for (int i = 0; i < count; i++) {
+                        bool isSelected = (i == selectedUpgradeOption);
+                        if ((pass == 1) != isSelected) continue;
+                        const AbilityChoice& choice = activeUpgradeChoices[i];
 
-                    Color textColor = isSelected ? UI::GOLD_LIGHT : WHITE;
-                    DrawText(choice.title.c_str(), (int)cardX + 28, (int)cardY + 15, 22, textColor);
-                    DrawText(choice.description.c_str(), (int)cardX + 28, (int)cardY + 46, 14, LIGHTGRAY);
-                    if (isSelected) {
-                        float dx = cardX - 18.0f + 3.0f * sinf(uiTime * 6.0f);
-                        float dy = cardY + cardHeight / 2.0f;
-                        DrawTriangle({ dx - 9, dy - 9 }, { dx - 9, dy + 9 }, { dx + 3, dy }, UI::GOLD_LIGHT);
+                        // Kortene glir opp ett og ett
+                        float enter = Clamp((since - 0.08f * i) / 0.3f, 0.0f, 1.0f);
+                        float ease = 1.0f - (1.0f - enter) * (1.0f - enter);
+                        float lift = isSelected ? 16.0f + 3.0f * sinf(uiTime * 3.0f) : 0.0f;
+                        float cardX = CX - totalW / 2.0f + i * (cardW + gap);
+                        float cardY = baseY + (1.0f - ease) * 80.0f - lift;
+                        Rectangle card = { cardX, cardY, cardW, cardH };
+                        Color accent = choice.color;
+
+                        if (isSelected) {
+                            UI::DrawSunburst({ cardX + cardW / 2.0f, cardY + 110.0f }, cardW * 0.95f, 14, -uiTime * 0.4f, Fade(accent, 0.22f * ease));
+                            UI::DrawGlow({ cardX + cardW / 2.0f, cardY + cardH / 2.0f }, cardW, Fade(accent, 0.25f * ease), Fade(accent, 0.0f));
+                        }
+
+                        UI::DrawPanel(card, 1.0f, isSelected ? UI::GOLD_LIGHT : UI::PANEL_EDGE,
+                                      isSelected ? Color{ 44, 32, 46, 250 } : Color{ 26, 22, 34, 245 });
+
+                        // Fargebanner øverst med rutemønster (narredrakt)
+                        Rectangle banner = { cardX + 6.0f, cardY + 6.0f, cardW - 12.0f, 78.0f };
+                        DrawRectangleRec(banner, accent);
+                        for (int d = 0; d < 9; d++) {
+                            float dx = banner.x + 14.0f + d * (banner.width - 28.0f) / 8.0f;
+                            float dy = banner.y + banner.height / 2.0f;
+                            DrawTriangle({ dx, dy - 10 }, { dx - 8, dy }, { dx, dy + 10 }, Fade(WHITE, 0.12f));
+                            DrawTriangle({ dx, dy - 10 }, { dx, dy + 10 }, { dx + 8, dy }, Fade(BLACK, 0.12f));
+                        }
+                        DrawRectangleGradientV((int)banner.x, (int)banner.y, (int)banner.width, (int)banner.height, Fade(WHITE, 0.18f), Fade(BLACK, 0.25f));
+                        DrawRectangleRec({ banner.x, banner.y + banner.height - 3.0f, banner.width, 3.0f }, UI::GOLD_DARK);
+
+                        // Merke: NY! / LV x > y / HEAL
+                        std::string title;
+                        std::string badge;
+                        Color badgeColor;
+                        Weapon* existing = choice.type == ChoiceType::UPGRADE_ABILITY ? player.findAbility(choice.ability) : nullptr;
+                        if (choice.type == ChoiceType::NEW_ABILITY) {
+                            title = GetAbilityDefinition(choice.ability).name;
+                            badge = "NY!";
+                            badgeColor = Color{ 110, 220, 110, 255 };
+                        } else if (choice.type == ChoiceType::UPGRADE_ABILITY && existing) {
+                            title = GetAbilityDefinition(choice.ability).name;
+                            badge = TextFormat("LV %d > %d", existing->level, existing->level + 1);
+                            badgeColor = UI::GOLD_LIGHT;
+                        } else {
+                            title = choice.title;
+                            badge = "HEAL";
+                            badgeColor = Color{ 255, 120, 120, 255 };
+                        }
+                        float bw = MeasureText(badge.c_str(), 16) + 18.0f;
+                        Rectangle badgeRect = { cardX + cardW - bw - 12.0f, cardY + 12.0f, bw, 24.0f };
+                        DrawRectangleRounded(badgeRect, 0.5f, 6, UI::INK);
+                        DrawRectangleRoundedLinesEx(badgeRect, 0.5f, 6, 2.0f, badgeColor);
+                        DrawText(badge.c_str(), (int)(badgeRect.x + 9), (int)badgeRect.y + 5, 16, badgeColor);
+
+                        // Stort ikon som overlapper banneret
+                        Vector2 ic = { cardX + cardW / 2.0f, cardY + 104.0f };
+                        DrawCircleV(ic, 50.0f, UI::INK);
+                        DrawCircleV(ic, 47.0f, isSelected ? UI::GOLD_LIGHT : UI::GOLD_DARK);
+                        DrawCircleV(ic, 42.0f, Color{ 40, 30, 46, 255 });
+                        UI::DrawGlow(ic, 42.0f, Fade(accent, 0.45f), Fade(accent, 0.0f));
+                        DrawAbilityIcon(choice.ability, ic, isSelected ? 30.0f + sinf(uiTime * 5.0f) : 29.0f);
+
+                        // Navn
+                        UI::DrawCenteredText(title.c_str(), cardX + cardW / 2.0f, cardY + 166.0f, title.size() > 12 ? 22.0f : 26.0f, isSelected ? UI::GOLD_LIGHT : WHITE);
+
+                        // Nivå-prikker: fylte = nåværende, blinkende grønn = den du får
+                        if (choice.type != ChoiceType::HEAL) {
+                            int current = existing ? existing->level : 0;
+                            const float pip = 12.0f, pipGap = 5.0f;
+                            float pipsW = MAX_ABILITY_LEVEL * pip + (MAX_ABILITY_LEVEL - 1) * pipGap;
+                            float px = cardX + cardW / 2.0f - pipsW / 2.0f;
+                            for (int l = 0; l < MAX_ABILITY_LEVEL; l++) {
+                                Rectangle pr = { px + l * (pip + pipGap), cardY + 202.0f, pip, pip };
+                                Color pc = Color{ 60, 54, 70, 255 };
+                                if (l < current) pc = UI::GOLD_LIGHT;
+                                else if (l == current) pc = Fade(Color{ 120, 235, 120, 255 }, 0.55f + 0.45f * sinf(uiTime * 8.0f));
+                                DrawRectangleRec({ pr.x - 1.5f, pr.y - 1.5f, pr.width + 3.0f, pr.height + 3.0f }, UI::INK);
+                                DrawRectangleRec(pr, pc);
+                            }
+                        }
+
+                        // Beskrivelse
+                        DrawLineEx({ cardX + 24.0f, cardY + 228.0f }, { cardX + cardW - 24.0f, cardY + 228.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
+                        UI::DrawWrappedText(choice.description.c_str(), cardX + 20.0f, cardY + 242.0f, cardW - 40.0f, 16.0f, Color{ 215, 205, 190, 255 }, true);
+
+                        if (isSelected) {
+                            // Tast-hint nederst på det valgte kortet
+                            Rectangle pick = { cardX + 30.0f, cardY + cardH - 50.0f, cardW - 60.0f, 36.0f };
+                            DrawRectangleRounded(pick, 0.3f, 6, UI::ROYAL_RED);
+                            DrawRectangleRoundedLinesEx(pick, 0.3f, 6, 2.0f, UI::GOLD_LIGHT);
+                            UI::DrawCenteredText("[ENTER] VELG", pick.x + pick.width / 2.0f, pick.y + 9.0f, 18.0f, UI::GOLD_LIGHT);
+                        } else {
+                            // Litt mørkere når de ikke er valgt, så det valgte kortet popper
+                            DrawRectangleRec(card, Fade(BLACK, 0.25f));
+                        }
+
+                        // Fade inn
+                        if (ease < 1.0f) DrawRectangleRec({ card.x - 4, card.y - 4, card.width + 12, card.height + 12 }, Fade(Color{ 8, 6, 14, 255 }, (1.0f - ease) * 0.82f));
                     }
                 }
 
-                hint("[W/S] eller [Piltaster] og [ENTER] for aa velge");
+                hint("[A/D] eller [Piltaster] for aa bla   |   [ENTER] for aa velge");
                 UI::EndCanvas();
             }
         }

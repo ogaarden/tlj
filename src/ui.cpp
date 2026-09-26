@@ -4,6 +4,7 @@
 #include <rlgl.h>
 #include <cmath>
 #include <algorithm>
+#include <string>
 
 namespace {
 
@@ -249,6 +250,46 @@ void DrawGlow(Vector2 center, float radius, Color inner, Color outer) {
         rlVertex2f(center.x + cosf(a0) * radius, center.y + sinf(a0) * radius);
     }
     rlEnd();
+}
+
+float DrawWrappedText(const char* text, float x, float y, float width, float size, Color color, bool centered) {
+    Font font = GetFontDefault();
+    float sp = textSpacing(size);
+    std::string remaining = text;
+    float lineY = y;
+    while (!remaining.empty()) {
+        // Ta med så mange ord som får plass på linja
+        size_t cut = remaining.size();
+        while (MeasureTextEx(font, remaining.substr(0, cut).c_str(), size, sp).x > width) {
+            size_t space = remaining.rfind(' ', cut - 1);
+            if (space == std::string::npos || space == 0) break;
+            cut = space;
+        }
+        std::string line = remaining.substr(0, cut);
+        float lx = x;
+        if (centered) lx = x + (width - MeasureTextEx(font, line.c_str(), size, sp).x) / 2.0f;
+        DrawTextEx(font, line.c_str(), { std::round(lx), std::round(lineY) }, size, sp, color);
+        lineY += size * 1.3f;
+        remaining = cut < remaining.size() ? remaining.substr(cut + 1) : "";
+    }
+    return lineY - y;
+}
+
+void DrawSunburst(Vector2 center, float radius, int rays, float time, Color color) {
+    for (int i = 0; i < rays; i++) {
+        float a0 = time + i * 2.0f * PI / rays;
+        float a1 = a0 + PI / rays;
+        Vector2 p0 = { center.x + cosf(a0) * radius, center.y + sinf(a0) * radius };
+        Vector2 p1 = { center.x + cosf(a1) * radius, center.y + sinf(a1) * radius };
+        // Hvert strålestykke tones ut mot kanten
+        rlBegin(RL_TRIANGLES);
+        rlColor4ub(color.r, color.g, color.b, color.a);
+        rlVertex2f(center.x, center.y);
+        rlColor4ub(color.r, color.g, color.b, 0);
+        rlVertex2f(p1.x, p1.y);
+        rlVertex2f(p0.x, p0.y);
+        rlEnd();
+    }
 }
 
 void DrawPanel(Rectangle r, float scale, Color edge, Color fill) {
