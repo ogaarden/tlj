@@ -411,3 +411,19 @@ void VfxMuzzle(Vector2 g, Vector2 dir, Color color) {
         spawn({ VfxTex::GLOW, at, v, 300.0f, 3.0f, 0.25f, 0.25f, 5.0f, 1.0f, 0, 0, color, false });
     }
 }
+
+void VfxParticle(VfxTex tex, Vector3 pos, Vector3 vel, float life, float size, float sizeEnd, Color color,
+                 float gravity, float drag, float rotation, float rotSpeed, bool decal) {
+    spawn({ tex, pos, vel, gravity, drag, life, life, size, sizeEnd, rotation, rotSpeed, color, decal });
+}
+
+void VfxFrost(Vector2 g, float radius) {
+    Color ice = { 150, 210, 255, 255 };
+    spawn({ VfxTex::SHOCKWAVE, ToWorld3D(g, 0.9f), { 0, 0, 0 }, 0, 0, 0.5f, 0.5f, radius * 0.5f, radius * 2.3f, frand(0, 360), 30.0f, ice, true });
+    spawn({ VfxTex::GLOW, ToWorld3D(g, 1.0f), { 0, 0, 0 }, 0, 0, 0.4f, 0.4f, radius * 1.4f, radius * 2.2f, 0, 0, Color{ 60, 110, 170, 255 }, true });
+    for (int i = 0; i < 28; i++) {
+        float a = frand(0, 2.0f * PI);
+        Vector3 v = { cosf(a) * frand(180, 420), frand(20, 90), sinf(a) * frand(180, 420) };
+        spawn({ VfxTex::SPARK, ToWorld3D(g, 14.0f), v, 40.0f, 3.5f, frand(0.4f, 0.7f), 0.7f, frand(8, 14), 3.0f, frand(0, 90), 150.0f, Color{ 200, 235, 255, 255 }, false });
+    }
+}

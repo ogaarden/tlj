@@ -170,6 +170,141 @@ std::vector<AbilityDefinition> buildDefinitions() {
         }
     });
 
+    defs.push_back({
+        AbilityId::FIRE_BREATH, "Ildsluker", "Spruter en ildkjegle mot naermeste fiende.", Color{ 255, 120, 40, 255 },
+        { .damage = 22.0f /* per tikk */, .cooldown = 2.4f, .projectiles = 1, .radius = 150.0f, .area = 26.0f, .duration = 0.8f },
+        {
+            addRadius(25.0f, "+25 rekkevidde"),
+            damageMult(1.3f, "+30% skade"),
+            { "+0.3 sek lengre pust", [](AbilityStats& s) { s.duration += 0.3f; } },
+            addProjectiles(1, "+1 ildkjegle"),
+            { "Bredere kjegle", [](AbilityStats& s) { s.area += 8.0f; } },
+            damageMult(2.0f, "2x skade"),
+            cooldownMult(0.8f, "-20% cooldown"),
+            { "+1 ildkjegle og +30 rekkevidde", [](AbilityStats& s) { s.projectiles += 1; s.radius += 30.0f; } },
+        }
+    });
+
+    defs.push_back({
+        AbilityId::BOOMERANG, "Bumerang", "Flyr ut og kommer tilbake. Treffer paa vei ut og inn.", Color{ 230, 170, 80, 255 },
+        { .damage = 55.0f, .cooldown = 1.5f, .speed = 430.0f, .projectiles = 1, .radius = 240.0f },
+        {
+            addProjectiles(1, "+1 bumerang"),
+            damageMult(1.3f, "+30% skade"),
+            addRadius(60.0f, "+60 rekkevidde"),
+            cooldownMult(0.85f, "-15% cooldown"),
+            addProjectiles(1, "+1 bumerang"),
+            damageMult(2.0f, "2x skade"),
+            { "+30% fart", [](AbilityStats& s) { s.speed *= 1.3f; } },
+            addProjectiles(2, "+2 bumeranger"),
+        }
+    });
+
+    defs.push_back({
+        AbilityId::CARDS, "Kortstokk", "Kaster spillkort i alle retninger rundt deg.", Color{ 240, 240, 250, 255 },
+        { .damage = 35.0f, .cooldown = 1.6f, .speed = 420.0f, .projectiles = 6, .pierce = 0 },
+        {
+            addProjectiles(2, "+2 kort"),
+            damageMult(1.3f, "+30% skade"),
+            addPierce(1, "+1 gjennomboring"),
+            cooldownMult(0.85f, "-15% cooldown"),
+            addProjectiles(3, "+3 kort"),
+            damageMult(2.0f, "2x skade"),
+            addPierce(1, "+1 gjennomboring"),
+            { "+4 kort og -15% cooldown", [](AbilityStats& s) { s.projectiles += 4; s.cooldown *= 0.85f; } },
+        }
+    });
+
+    defs.push_back({
+        AbilityId::FROST_NOVA, "Frostnova", "Isboelge som skader og bremser alle fiender rundt deg.", Color{ 140, 210, 255, 255 },
+        { .damage = 45.0f, .cooldown = 3.2f, .radius = 150.0f, .duration = 1.8f, .effect = 0.45f },
+        {
+            addRadius(20.0f, "+20 radius"),
+            damageMult(1.4f, "+40% skade"),
+            { "Sterkere frost (60% tregere)", [](AbilityStats& s) { s.effect = 0.6f; } },
+            cooldownMult(0.85f, "-15% cooldown"),
+            addRadius(30.0f, "+30 radius"),
+            damageMult(2.0f, "2x skade"),
+            { "+1 sek frost", [](AbilityStats& s) { s.duration += 1.0f; } },
+            { "-25% cooldown og +30 radius", [](AbilityStats& s) { s.cooldown *= 0.75f; s.radius += 30.0f; } },
+        }
+    });
+
+    defs.push_back({
+        AbilityId::CATAPULT, "Katapult", "Steinblokker faller ned fra himmelen paa fiendene.", Color{ 200, 170, 130, 255 },
+        { .damage = 160.0f, .cooldown = 3.0f, .projectiles = 1, .radius = 520.0f /* rekkevidde */, .area = 70.0f },
+        {
+            addProjectiles(1, "+1 stein"),
+            damageMult(1.3f, "+30% skade"),
+            { "+15 eksplosjonsradius", [](AbilityStats& s) { s.area += 15.0f; } },
+            cooldownMult(0.85f, "-15% cooldown"),
+            addProjectiles(1, "+1 stein"),
+            damageMult(2.0f, "2x skade"),
+            { "+20 eksplosjonsradius", [](AbilityStats& s) { s.area += 20.0f; } },
+            addProjectiles(2, "+2 steiner"),
+        }
+    });
+
+    defs.push_back({
+        AbilityId::BELLS, "Narrebjeller", "Bjelleklang i ringer som skader og dytter fiender bort.", Color{ 255, 210, 80, 255 },
+        { .damage = 40.0f, .cooldown = 2.6f, .speed = 330.0f, .projectiles = 1, .radius = 210.0f, .effect = 260.0f },
+        {
+            addRadius(30.0f, "+30 rekkevidde"),
+            damageMult(1.4f, "+40% skade"),
+            addProjectiles(1, "+1 ring"),
+            cooldownMult(0.85f, "-15% cooldown"),
+            { "Sterkere dytt", [](AbilityStats& s) { s.effect += 120.0f; } },
+            damageMult(2.0f, "2x skade"),
+            addProjectiles(1, "+1 ring"),
+            { "+50 rekkevidde og +50% skade", [](AbilityStats& s) { s.radius += 50.0f; s.damage *= 1.5f; } },
+        }
+    });
+
+    defs.push_back({
+        AbilityId::SPOTLIGHT, "Rampelys", "Lysstraaler som feier rundt deg og brenner alt de treffer.", Color{ 255, 240, 170, 255 },
+        { .damage = 28.0f, .cooldown = 0.4f /* tid mellom treff paa samme fiende */, .speed = 75.0f, .projectiles = 1, .radius = 220.0f, .area = 20.0f },
+        {
+            damageMult(1.3f, "+30% skade"),
+            addProjectiles(1, "+1 straale"),
+            addRadius(40.0f, "+40 lengde"),
+            { "+30% rotasjonsfart", [](AbilityStats& s) { s.speed *= 1.3f; } },
+            damageMult(1.5f, "+50% skade"),
+            addProjectiles(1, "+1 straale"),
+            { "Bredere straaler", [](AbilityStats& s) { s.area += 10.0f; } },
+            { "2x skade og +1 straale", [](AbilityStats& s) { s.damage *= 2.0f; s.projectiles += 1; } },
+        }
+    });
+
+    defs.push_back({
+        AbilityId::SABRE, "Sabelhugg", "Brede sabelhugg mot naermeste fiende.", Color{ 255, 140, 140, 255 },
+        { .damage = 85.0f, .cooldown = 1.4f, .projectiles = 1, .radius = 110.0f, .area = 140.0f /* buens vinkel */ },
+        {
+            addProjectiles(1, "+1 hugg (bakover)"),
+            damageMult(1.3f, "+30% skade"),
+            addRadius(20.0f, "+20 rekkevidde"),
+            cooldownMult(0.85f, "-15% cooldown"),
+            { "Bredere bue", [](AbilityStats& s) { s.area += 40.0f; } },
+            damageMult(2.0f, "2x skade"),
+            addProjectiles(1, "+1 hugg"),
+            { "+2 hugg og +20 rekkevidde", [](AbilityStats& s) { s.projectiles += 2; s.radius += 20.0f; } },
+        }
+    });
+
+    defs.push_back({
+        AbilityId::TORNADO, "Virvelvind", "Vandrende virvelvinder som suger inn og maler fiender.", Color{ 180, 235, 215, 255 },
+        { .damage = 22.0f /* per 0.25 sek */, .cooldown = 4.5f, .speed = 95.0f, .projectiles = 1, .radius = 40.0f, .duration = 4.0f, .effect = 90.0f },
+        {
+            damageMult(1.3f, "+30% skade"),
+            addProjectiles(1, "+1 virvel"),
+            { "+1.5 sek varighet", [](AbilityStats& s) { s.duration += 1.5f; } },
+            addRadius(10.0f, "+10 radius"),
+            damageMult(1.5f, "+50% skade"),
+            addProjectiles(1, "+1 virvel"),
+            cooldownMult(0.8f, "-20% cooldown"),
+            { "+1 virvel og +50% skade", [](AbilityStats& s) { s.projectiles += 1; s.damage *= 1.5f; } },
+        }
+    });
+
     return defs;
 }
 
@@ -199,6 +334,15 @@ std::unique_ptr<Weapon> CreateAbility(AbilityId id) {
         case AbilityId::ORBIT_BLADES:  ability = std::make_unique<OrbitWeapon>(); break;
         case AbilityId::LIGHTNING:     ability = std::make_unique<LightningWeapon>(); break;
         case AbilityId::PIE:           ability = std::make_unique<PieWeapon>(); break;
+        case AbilityId::FIRE_BREATH:   ability = std::make_unique<FlameWeapon>(); break;
+        case AbilityId::BOOMERANG:     ability = std::make_unique<BoomerangWeapon>(); break;
+        case AbilityId::CARDS:         ability = std::make_unique<CardWeapon>(); break;
+        case AbilityId::FROST_NOVA:    ability = std::make_unique<FrostNovaWeapon>(); break;
+        case AbilityId::CATAPULT:      ability = std::make_unique<CatapultWeapon>(); break;
+        case AbilityId::BELLS:         ability = std::make_unique<BellWeapon>(); break;
+        case AbilityId::SPOTLIGHT:     ability = std::make_unique<SpotlightWeapon>(); break;
+        case AbilityId::SABRE:         ability = std::make_unique<SabreWeapon>(); break;
+        case AbilityId::TORNADO:       ability = std::make_unique<TornadoWeapon>(); break;
         case AbilityId::COUNT:         return nullptr;
     }
 
@@ -270,6 +414,24 @@ const std::vector<EvolutionData>& evolutions() {
           [](AbilityStats& s) { s.projectiles += 4; s.damage *= 2.0f; s.speed *= 1.6f; s.radius += 30.0f; } },
         { { AbilityId::LIGHTNING, ItemId::HOURGLASS, "Tordenguden", "+3 lyn, +4 kjede-hopp, -40% cooldown og +50% skade", Color{ 255, 250, 140, 255 } },
           [](AbilityStats& s) { s.projectiles += 3; s.bounces += 4; s.cooldown *= 0.6f; s.damage *= 1.5f; } },
+        { { AbilityId::FIRE_BREATH, ItemId::CANDLE, "Drakepust", "Blaa drakeild: +60 rekkevidde, bredere, 2x skade og lengre pust", Color{ 110, 170, 255, 255 } },
+          [](AbilityStats& s) { s.radius += 60.0f; s.area += 12.0f; s.damage *= 2.0f; s.duration += 0.6f; } },
+        { { AbilityId::BOOMERANG, ItemId::SPYGLASS, "Stormbumerang", "+3 bumeranger, +50% skade, +100 rekkevidde og +30% fart", Color{ 120, 220, 255, 255 } },
+          [](AbilityStats& s) { s.projectiles += 3; s.damage *= 1.5f; s.radius += 100.0f; s.speed *= 1.3f; } },
+        { { AbilityId::CARDS, ItemId::MAGIC_MIRROR, "Full kortstokk", "+10 kort, +2 gjennomboring og +40% skade", Color{ 255, 225, 140, 255 } },
+          [](AbilityStats& s) { s.projectiles += 10; s.pierce += 2; s.damage *= 1.4f; } },
+        { { AbilityId::FROST_NOVA, ItemId::SHADOW_CLOAK, "Evig vinter", "Fiender nesten fryser fast, +60 radius, 2x skade og +2 sek frost", Color{ 220, 245, 255, 255 } },
+          [](AbilityStats& s) { s.effect = 0.85f; s.radius += 60.0f; s.damage *= 2.0f; s.duration += 2.0f; } },
+        { { AbilityId::CATAPULT, ItemId::CROWN_JEWEL, "Kongelig bombardement", "+4 gullsteiner, +30 eksplosjonsradius, +50% skade, -30% cooldown", Color{ 255, 200, 80, 255 } },
+          [](AbilityStats& s) { s.projectiles += 4; s.area += 30.0f; s.damage *= 1.5f; s.cooldown *= 0.7f; } },
+        { { AbilityId::BELLS, ItemId::THORN_COLLAR, "Dommedagsklokker", "+2 ringer, 2x skade, +80 rekkevidde og kraftig dytt", Color{ 255, 140, 220, 255 } },
+          [](AbilityStats& s) { s.projectiles += 2; s.damage *= 2.0f; s.radius += 80.0f; s.effect += 200.0f; } },
+        { { AbilityId::SPOTLIGHT, ItemId::CLOVER, "Primadonna", "+2 straaler, 2x skade, +60 lengde og raskere treff", Color{ 255, 160, 240, 255 } },
+          [](AbilityStats& s) { s.projectiles += 2; s.damage *= 2.0f; s.radius += 60.0f; s.cooldown *= 0.7f; } },
+        { { AbilityId::SABRE, ItemId::VAMPIRE_FANG, "Blodsabel", "2x skade, +30 rekkevidde og hvert treff gir liv tilbake", Color{ 230, 40, 60, 255 } },
+          [](AbilityStats& s) { s.damage *= 2.0f; s.radius += 30.0f; s.effect = 0.6f; } },
+        { { AbilityId::TORNADO, ItemId::LODESTONE, "Malstroem", "+2 virvler, stoerre, 2x skade, +2 sek og suger inn alt", Color{ 170, 120, 255, 255 } },
+          [](AbilityStats& s) { s.projectiles += 2; s.radius += 25.0f; s.damage *= 2.0f; s.duration += 2.0f; s.effect += 200.0f; } },
     };
     return list;
 }
@@ -302,19 +464,30 @@ void EvolveAbility(Weapon& weapon) {
     }
 }
 
+namespace {
+// Trekker n tilfeldige valg fra `from` (uten å legge tilbake)
+void pickRandom(std::vector<AbilityChoice>& from, int n, std::vector<AbilityChoice>& into) {
+    while (n-- > 0 && !from.empty()) {
+        int idx = GetRandomValue(0, (int)from.size() - 1);
+        into.push_back(from[idx]);
+        from.erase(from.begin() + idx);
+    }
+}
+} // namespace
+
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count) {
-    std::vector<AbilityChoice> abilityCandidates;
-    std::vector<AbilityChoice> itemCandidates;
+    std::vector<AbilityChoice> upgrades;
+    std::vector<AbilityChoice> newOnes;
 
     // 1. Oppgraderinger for abilities vi allerede har (inkl. innate)
     for (const auto& w : player.weapons) {
         if (w->level >= MAX_ABILITY_LEVEL) continue;
         const AbilityDefinition& def = GetAbilityDefinition(w->id);
-        abilityCandidates.push_back({
+        upgrades.push_back({
             ChoiceType::UPGRADE_ABILITY, w->id,
-            TextFormat("%s  Lv %d -> %d", def.name.c_str(), w->level, w->level + 1),
+            TextFormat("%s  Lv %d -> %d", w->name.c_str(), w->level, w->level + 1),
             def.levels[w->level - 1].description,
-            def.color
+            w->color
         });
     }
 
@@ -323,11 +496,42 @@ std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int coun
         for (AbilityId id : GetSharedAbilityPool()) {
             if (player.findAbility(id)) continue; // Har den allerede -> tilbys som oppgradering over
             const AbilityDefinition& def = GetAbilityDefinition(id);
-            abilityCandidates.push_back({ ChoiceType::NEW_ABILITY, id, def.name + "  (NY)", def.description, def.color });
+            newOnes.push_back({ ChoiceType::NEW_ABILITY, id, def.name + "  (NY)", def.description, def.color });
         }
     }
 
-    // 3. Items: neste nivå av de man har, og nye så lenge det er ledige item-plasser
+    // Blanding: minst én ny ability så lenge det er plass (ellers blir det lite variasjon),
+    // og minst én oppgradering når det finnes noe å oppgradere
+    std::vector<AbilityChoice> chosen;
+    if (!newOnes.empty() && !upgrades.empty()) {
+        int newPicks = std::clamp(GetRandomValue(1, std::max(1, count - 1)), 1, (int)newOnes.size());
+        pickRandom(newOnes, newPicks, chosen);
+    }
+    pickRandom(upgrades, count - (int)chosen.size(), chosen);
+    pickRandom(newOnes, count - (int)chosen.size(), chosen);
+    for (int i = (int)chosen.size() - 1; i > 0; i--) std::swap(chosen[i], chosen[GetRandomValue(0, i)]);
+
+    // Alt er maks-level og alle slots er fulle
+    if (chosen.empty()) {
+        chosen.push_back({ ChoiceType::HEAL, AbilityId::COUNT, "Restituer", "Fyller opp all HP.", RED });
+    }
+    return chosen;
+}
+
+std::vector<AbilityChoice> GenerateChestChoices(const Player& player, int count) {
+    std::vector<AbilityChoice> chosen;
+
+    // 1. Evolusjon trumfer alt: en ability på maks level + riktig item
+    for (const auto& w : player.weapons) {
+        if (!CanEvolve(player, *w)) continue;
+        const Evolution* evo = GetEvolution(w->id);
+        chosen.push_back({ ChoiceType::EVOLUTION, w->id, evo->name, evo->description, evo->color });
+        return chosen;
+    }
+
+    // 2. Items: neste nivå av de man har, og nye så lenge det er ledige item-plasser.
+    //    Items som er nøkkel til en evolusjon for en ability man HAR, dukker litt oftere opp.
+    std::vector<AbilityChoice> items;
     for (int i = 0; i < (int)ItemId::COUNT; i++) {
         int level = player.itemLevels[i];
         if (level >= MAX_ITEM_LEVEL) continue;
@@ -335,33 +539,20 @@ std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int coun
         const ItemDef& def = GetItemDef((ItemId)i);
         AbilityChoice c{ ChoiceType::ITEM, AbilityId::COUNT, def.name, def.description, def.color };
         c.item = (ItemId)i;
-        itemCandidates.push_back(c);
+        items.push_back(c);
+        const Evolution* evo = GetEvolutionForItem((ItemId)i);
+        if (level == 0 && evo && player.findAbility(evo->ability)) items.push_back(c);
+    }
+    while ((int)chosen.size() < count && !items.empty()) {
+        int idx = GetRandomValue(0, (int)items.size() - 1);
+        AbilityChoice c = items[idx];
+        chosen.push_back(c);
+        // Fjern alle kopier av samme item
+        items.erase(std::remove_if(items.begin(), items.end(), [&](const AbilityChoice& o) { return o.item == c.item; }), items.end());
     }
 
-    // Fordeling: minst ett av hver når det finnes, ellers fyll opp med det som er igjen
-    int itemPicks = 0;
-    if (!itemCandidates.empty()) {
-        itemPicks = abilityCandidates.empty() ? count : (count >= 4 ? 2 : GetRandomValue(1, 2));
-        itemPicks = std::min(itemPicks, count - (abilityCandidates.empty() ? 0 : 1));
-        itemPicks = std::max(itemPicks, 1);
-    }
-    std::vector<AbilityChoice> chosen;
-    auto pickFrom = [&](std::vector<AbilityChoice>& from, int n) {
-        while (n-- > 0 && !from.empty()) {
-            int idx = GetRandomValue(0, (int)from.size() - 1);
-            chosen.push_back(from[idx]);
-            from.erase(from.begin() + idx);
-        }
-    };
-    pickFrom(itemCandidates, itemPicks);
-    pickFrom(abilityCandidates, count - (int)chosen.size());
-    pickFrom(itemCandidates, count - (int)chosen.size());
-    for (int i = (int)chosen.size() - 1; i > 0; i--) std::swap(chosen[i], chosen[GetRandomValue(0, i)]);
-
-    // Alt er maks-level og alle slots er fulle
-    if (chosen.empty()) {
-        chosen.push_back({ ChoiceType::HEAL, AbilityId::COUNT, "Restituer", "Fyller opp all HP.", RED });
-    }
+    // 3. Alle items er fulle og maks: kista gir en gratis ability-oppgradering i stedet
+    if (chosen.empty()) return GenerateLevelUpChoices(player, count);
     return chosen;
 }
 
@@ -472,7 +663,14 @@ void DrawAbilityHud(const Player& player, float centerX, float bottom, float sca
             DrawCircleV({ x + 7.0f * s, y + 7.0f * s }, 2.8f * s, UI::GOLD_LIGHT);
         }
 
-        // Navn under slotten
-        text(w.name.c_str(), x + slotSize / 2.0f, y + slotSize + 5.0f * s, 10.0f * s, Color{ 225, 218, 200, 255 });
+        // Navn under slotten – lange navn (evolusjoner) krympes og kuttes så de ikke går inn i naboen
+        {
+            std::string label = w.name;
+            float size = 10.0f * s, maxW = slotSize + gap * 0.6f;
+            auto width = [&](const std::string& t, float sz) { return MeasureTextEx(GetFontDefault(), t.c_str(), std::round(sz), std::round(sz) / 10.0f).x; };
+            while (size > 7.5f * s && width(label, size) > maxW) size -= 0.5f * s;
+            while (label.size() > 3 && width(label, size) > maxW) label = label.substr(0, label.size() - 2) + ".";
+            text(label.c_str(), x + slotSize / 2.0f, y + slotSize + 5.0f * s, size, Color{ 225, 218, 200, 255 });
+        }
     }
 }

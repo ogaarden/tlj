@@ -189,6 +189,9 @@ int main() {
     int xpCombo = 0;           // XP plukket opp rett etter hverandre (tonen stiger)
     float xpComboTimer = 0.0f;
     bool levelUpFromChest = false;
+    float worldChestTimer = 0.0f; // Nedtelling til neste skattekiste som dukker opp i slottet
+    int lastKillCount = 0;         // For Vampyrtann (liv per drap)
+    float lifeStealBank = 0.0f;
 
     // --- SPAWNER OG FIENDER ---
     WaveSpawner spawner;
@@ -209,8 +212,19 @@ int main() {
         player.invulnerableTimer = 0.0f;
         player.slowTimer = 0.0f;
         player.critChance = 0.05f;
+        player.projectileSpeedMult = 1.0f;
+        player.durationMult = 1.0f;
+        player.lifePerKill = 0.0f;
+        player.thorns = 0.0f;
+        player.luck = 1.0f;
+        player.bonusRerolls = 0;
         for (int& l : player.itemLevels) l = 0;
         player.items.clear();
+        worldChestTimer = 40.0f; // Første kiste dukker opp etter 40 sek
+        lastKillCount = 0;
+        lifeStealBank = 0.0f;
+        Enemy::chestCooldown = 0.0f;
+        Weapon::pendingHeal = 0.0f;
         rerollsLeft = 3;
         vacuumTimer = 0.0f;
         xpCombo = 0;
@@ -407,7 +421,7 @@ int main() {
                 levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
             } else if (chestsPending > 0) {
-                // Skattekiste: evolusjon hvis en ability er klar, ellers et gratis oppgraderingsvalg
+                // Skattekiste: evolusjon hvis en ability er klar, ellers items
                 chestsPending--;
                 currentState = LEVEL_UP;
                 levelUpFromChest = true;
@@ -415,14 +429,7 @@ int main() {
                 VfxShockwave(player.position, 110.0f, GOLD);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
-                activeUpgradeChoices.clear();
-                for (const auto& w : player.weapons) {
-                    if (!CanEvolve(player, *w)) continue;
-                    const Evolution* evo = GetEvolution(w->id);
-                    activeUpgradeChoices.push_back({ ChoiceType::EVOLUTION, w->id, evo->name, evo->description, evo->color });
-                    break;
-                }
-                if (activeUpgradeChoices.empty()) activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
+                activeUpgradeChoices = GenerateChestChoices(player, player.levelUpChoices);
             }
 
             // 1. INPUT & OPPDRATERING
@@ -483,7 +490,9 @@ int main() {
             // Oppdater alle fiender (bossen står stille mens intro-teksten vises)
             if (arenaIntroTimer <= 0.0f) {
                 for (auto& enemy : enemies) {
+                    Vector2 before = enemy->position;
                     enemy->update(player.position);
+                    enemy->applyStatusMovement(before, deltaTime); // Frost og dytt
                     if (inBossArena) enemy->position = ClampToArena(enemy->position, enemy->hitRadius);
                 }
             }
@@ -510,6 +519,11 @@ int main() {
                     if (enemy->contactDamage() <= 0) continue; // F.eks. kamikaze skader bare med eksplosjonen
                     if (CheckCollisionCircles(player.position, playerHitRadius, enemy->position, enemy->hitRadius)) {
                         hurtPlayer((float)enemy->contactDamage());
+                        // Piggkrage: fienden som traff deg får igjen (og dyttes unna)
+                        if (player.thorns > 0.0f) {
+                            enemy->takeDamage((int)(player.thorns * player.damageMult), Color{ 200, 200, 210, 255 });
+                            enemy->knockBack(Vector2Subtract(enemy->position, player.position), 260.0f);
+                        }
                         break;
                     }
                 }
@@ -584,9 +598,40 @@ int main() {
 
             // Oppdater alle abilities
             Enemy::critChance = player.critChance;
+            Enemy::luck = player.luck;
+            Enemy::chestCooldown -= deltaTime;
             CombatModifiers mods = player.combatModifiers();
             for (auto& w : player.weapons) {
                 w->update(deltaTime, player.position, enemies, pickups, mods);
+            }
+
+            // Liv tilbake: Vampyrtann (per drap) og Blodsabel (per treff)
+            {
+                int kills = Enemy::killCount - lastKillCount;
+                lastKillCount = Enemy::killCount;
+                lifeStealBank += kills * player.lifePerKill + Weapon::pendingHeal;
+                Weapon::pendingHeal = 0.0f;
+                if (lifeStealBank >= 1.0f) {
+                    float heal = std::floor(lifeStealBank);
+                    lifeStealBank -= heal;
+                    player.hp = std::min(player.maxHp, player.hp + heal);
+                }
+            }
+            // Trollspeil: flere rerolls
+            rerollsLeft += player.bonusRerolls;
+            player.bonusRerolls = 0;
+
+            // Skattekister dukker opp i slottet med jevne mellomrom (se minimapet!)
+            if (!inBossArena) {
+                worldChestTimer -= deltaTime;
+                if (worldChestTimer <= 0.0f) {
+                    worldChestTimer = 80.0f / player.luck;
+                    float a = GetRandomValue(0, 628) / 100.0f;
+                    float d = (float)GetRandomValue(380, 620);
+                    Vector2 pos = { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d };
+                    pickups.push_back({ pos, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+                    VfxShockwave(pos, 80.0f, GOLD);
+                }
             }
 
             UpdateDamageNumbers(deltaTime);
@@ -668,7 +713,8 @@ int main() {
             bool isEvolution = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
             if (IsKeyPressed(KEY_R) && rerollsLeft > 0 && !isEvolution) {
                 rerollsLeft--;
-                activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
+                activeUpgradeChoices = levelUpFromChest ? GenerateChestChoices(player, player.levelUpChoices)
+                                                        : GenerateLevelUpChoices(player, player.levelUpChoices);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
                 PlaySfx(Sfx::UI_SELECT);
@@ -1081,7 +1127,16 @@ int main() {
                         // Spor bak krystaller som suges inn
                         if (pickup.pull > 0.05f) VfxTrail(at, glow, pickup.radius * 2.5f, 0.12f);
                     }
-                    for (auto& enemy : enemies) enemy->drawVfx();
+                    for (auto& enemy : enemies) {
+                        enemy->drawVfx();
+                        if (enemy->slowTimer > 0.0f) {
+                            // Frosset: blå glød rundt fienden
+                            float k = std::min(1.0f, enemy->slowTimer) * enemy->slowAmount;
+                            Color ice = { (unsigned char)(90 * k), (unsigned char)(170 * k), (unsigned char)(255 * k), 255 };
+                            VfxDecal(VfxTex::GLOW, enemy->position, enemy->hitRadius * 3.5f, ice);
+                            VfxBillboard(VfxTex::GLOW, ToWorld3D(enemy->position, enemy->modelHeight() * 0.5f), enemy->hitRadius * 3.0f, ice);
+                        }
+                    }
                     DrawEnemyShotsVfx();
                     for (auto& w : player.weapons) w->drawVfx();
                     DrawVfxParticles();
@@ -1101,6 +1156,41 @@ int main() {
 
             // --- SKADETALL (projiseres fra 3D-posisjonen, så teksten alltid er rett vei) ---
             DrawDamageNumbers(view);
+
+            // --- PILER MOT SKATTEKISTER utenfor skjermen (items kommer bare fra kister!) ---
+            {
+                float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
+                Vector2 mid = { sw / 2.0f, sh / 2.0f };
+                float margin = 46.0f * barScale;
+                auto tri = [](Vector2 a, Vector2 b, Vector2 c, Color col) { // Uansett hjørnerekkefølge
+                    float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+                    if (cross < 0.0f) DrawTriangle(a, b, c, col); else DrawTriangle(a, c, b, col);
+                };
+                for (const auto& pk : pickups) {
+                    if (pk.type != PickupType::CHEST) continue;
+                    Vector2 sp = GroundToScreen(view, pk.position, 12.0f);
+                    if (sp.x > 0 && sp.x < sw && sp.y > 0 && sp.y < sh) continue;
+                    Vector2 d = Vector2Normalize(Vector2Subtract(sp, mid));
+                    // Skalér retningen så pila havner langs kanten av et rektangel inne på skjermen
+                    float tx = d.x != 0.0f ? (mid.x - margin) / fabsf(d.x) : 1e9f;
+                    float ty = d.y != 0.0f ? (mid.y - margin) / fabsf(d.y) : 1e9f;
+                    Vector2 at = Vector2Add(mid, Vector2Scale(d, std::min(tx, ty)));
+                    float pulse = 0.75f + 0.25f * sinf(uiTime * 6.0f);
+                    float r = 16.0f * barScale;
+                    Vector2 n = { -d.y, d.x };
+                    Vector2 tip = Vector2Add(at, Vector2Scale(d, r * 1.4f));
+                    Vector2 b0 = Vector2Add(at, Vector2Scale(n, r * 0.8f)), b1 = Vector2Subtract(at, Vector2Scale(n, r * 0.8f));
+                    UI::DrawGlow(at, r * 2.4f, Fade(GOLD, 0.35f * pulse), Fade(GOLD, 0.0f));
+                    tri(tip, b1, b0, UI::INK);
+                    tri(Vector2Add(tip, Vector2Scale(d, -3.0f)), Vector2Add(b1, Vector2Scale(n, 2.5f)), Vector2Subtract(b0, Vector2Scale(n, 2.5f)), Fade(UI::GOLD_LIGHT, pulse));
+                    // Liten kiste bak pila
+                    Vector2 c = Vector2Subtract(at, Vector2Scale(d, r * 1.1f));
+                    DrawRectangleRec({ c.x - r * 0.7f - 2, c.y - r * 0.45f - 2, r * 1.4f + 4, r * 0.95f + 4 }, UI::INK);
+                    DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.45f, r * 1.4f, r * 0.95f }, Color{ 150, 90, 40, 255 });
+                    DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.12f, r * 1.4f, r * 0.14f }, UI::GOLD_LIGHT);
+                    DrawRectangleRec({ c.x - r * 0.12f, c.y - r * 0.2f, r * 0.24f, r * 0.3f }, UI::GOLD_LIGHT);
+                }
+            }
 
             // --- HUD (festet til vinduskantene, skalerer med vindusstørrelsen) ---
             HudState hud;
@@ -1174,7 +1264,7 @@ int main() {
                 DrawText(TextFormat("Tid %02d:%02d   Level %d   Kills %d", (int)spawner.gameTime / 60, (int)spawner.gameTime % 60, player.level, Enemy::killCount), 140, 380, 18, WHITE);
 
                 // --- Stats til høyre: alt som påvirker runden, med forklarte tall ---
-                Rectangle sp = { 520.0f, 130.0f, 620.0f, 480.0f };
+                Rectangle sp = { 520.0f, 120.0f, 620.0f, 520.0f };
                 UI::DrawPanel(sp);
                 UI::DrawCenteredText("DINE STATS", sp.x + sp.width / 2.0f, sp.y + 16.0f, 24.0f, UI::GOLD_LIGHT);
                 // NB: TextFormat gjenbruker noen få interne buffere, så verdiene må kopieres til std::string
@@ -1194,22 +1284,27 @@ int main() {
                     { "XP", TextFormat("x%.2f", player.xpMultiplier) },
                     { "Aegis", TextFormat("%d", player.aegis) },
                     { "Kritisk treff", TextFormat("%.0f%%  (x2 skade)", player.critChance * 100.0f) },
+                    { "Prosjektilfart", TextFormat("x%.2f", cm.speedMult) },
+                    { "Varighet", TextFormat("x%.2f", cm.durationMult) },
+                    { "Liv per drap", TextFormat("%.2f HP", player.lifePerKill) },
+                    { "Piggkrage", TextFormat("%.0f skade", player.thorns) },
+                    { "Flaks", TextFormat("x%.2f", player.luck) },
                 };
                 int rowCount = (int)(sizeof(rows) / sizeof(rows[0]));
                 for (int i = 0; i < rowCount; i++) {
-                    int col = i / 7, row = i % 7;
+                    int col = i / 9, row = i % 9;
                     float x = sp.x + 30.0f + col * 300.0f;
-                    float y = sp.y + 60.0f + row * 27.0f;
+                    float y = sp.y + 56.0f + row * 22.0f;
                     DrawText(rows[i].label, (int)x, (int)y, 18, Color{ 190, 180, 165, 255 });
                     DrawText(rows[i].value.c_str(), (int)(x + 270.0f) - MeasureText(rows[i].value.c_str(), 18), (int)y, 18, WHITE);
                 }
 
                 // Items (maks 6) med nivå-prikker
-                DrawLineEx({ sp.x + 30.0f, sp.y + 256.0f }, { sp.x + sp.width - 30.0f, sp.y + 256.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
-                DrawText(TextFormat("Items (%d/%d):", (int)player.items.size(), MAX_ITEM_SLOTS), (int)sp.x + 30, (int)sp.y + 264, 16, Color{ 190, 180, 165, 255 });
+                DrawLineEx({ sp.x + 30.0f, sp.y + 262.0f }, { sp.x + sp.width - 30.0f, sp.y + 262.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
+                DrawText(TextFormat("Items (%d/%d):", (int)player.items.size(), MAX_ITEM_SLOTS), (int)sp.x + 30, (int)sp.y + 270, 16, Color{ 190, 180, 165, 255 });
                 for (int i = 0; i < MAX_ITEM_SLOTS; i++) {
                     float x = sp.x + 30.0f + i * 95.0f;
-                    float y = sp.y + 290.0f;
+                    float y = sp.y + 294.0f;
                     Vector2 ic = { x + 22.0f, y + 22.0f };
                     DrawCircleV(ic, 22.0f, UI::INK);
                     DrawCircleV(ic, 20.0f, i < (int)player.items.size() ? Color{ 70, 50, 70, 255 } : Color{ 30, 26, 36, 255 });
@@ -1222,7 +1317,7 @@ int main() {
                 }
 
                 // Oppskrifter: hvor langt hver ability er fra evolusjonen sin
-                DrawText("Evolusjoner (ability paa lv 9 + item, aapnes med en skattekiste):", (int)sp.x + 30, (int)sp.y + 372, 14, Color{ 190, 180, 165, 255 });
+                DrawText("Evolusjoner (ability paa lv 9 + item, aapnes med en skattekiste):", (int)sp.x + 30, (int)sp.y + 378, 14, Color{ 190, 180, 165, 255 });
                 int line = 0;
                 for (const auto& w : player.weapons) {
                     const Evolution* evo = GetEvolution(w->id);
@@ -1233,7 +1328,7 @@ int main() {
                     if (w->evolved) { status = TextFormat("%s  - FERDIG!", evo->name); c = Color{ 255, 140, 255, 255 }; }
                     else if (CanEvolve(player, *w)) { status = TextFormat("%s  - KLAR! Finn en kiste", evo->name); c = UI::GOLD_LIGHT; }
                     else { status = TextFormat("%s lv %d/9 + %s%s  ->  %s", GetAbilityDefinition(w->id).name.c_str(), w->level, GetItemDef(evo->item).name, hasItem ? " (har)" : "", evo->name); c = Color{ 200, 195, 185, 255 }; }
-                    DrawText(status, (int)sp.x + 30, (int)sp.y + 394 + line * 16, 14, c);
+                    DrawText(status, (int)sp.x + 30, (int)sp.y + 400 + line * 17, 14, c);
                     line++;
                 }
 
@@ -1255,7 +1350,8 @@ int main() {
                 bool evolving = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
                 UI::DrawCenteredText(evolving ? "EVOLUSJON!" : (levelUpFromChest ? "SKATTEKISTE!" : "LEVEL UP!"), CX, 88.0f - titleSize * 0.45f, titleSize, evolving ? Color{ 255, 140, 255, 255 } : UI::GOLD_LIGHT, 4.0f);
                 const char* sub = evolving ? "Abilityen og itemet ditt smelter sammen til noe mye sterkere"
-                                : levelUpFromChest ? "En elite-fiende slapp en kiste  -  velg en gratis belonning"
+                                : levelUpFromChest ? (activeUpgradeChoices[0].type == ChoiceType::ITEM ? "Du fant en skattekiste  -  velg et item"
+                                                                                                        : "Alle items er fulle  -  velg en gratis oppgradering")
                                                    : TextFormat("Du er naa level %d  -  velg en belonning", lastPlayerLevel);
                 UI::DrawCenteredText(sub, CX, 134.0f, 20.0f, Color{ 230, 220, 200, 255 });
 

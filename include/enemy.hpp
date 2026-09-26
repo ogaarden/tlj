@@ -75,7 +75,23 @@ public:
     float modelScale = 1.0f; // Hele 3D-modellen skaleres rundt føttene
 
     void makeElite();
-    float walkCycle() const; // Fase for gangeanimasjonen (forskjellig for hver fiende)
+    float walkCycle() const;
+
+    // --- Statuseffekter fra abilities (brukes i spill-løkka etter update()) ---
+    float slowTimer = 0.0f;           // Frost: fienden går tregere så lenge denne er > 0
+    float slowAmount = 0.0f;          // 0.5 = halv fart
+    Vector2 knockVelocity = { 0, 0 }; // Dytt (bjeller, bumerang), dør ut raskt
+    float knockbackScale = 1.0f;      // Store fiender dyttes mindre (bossen nesten ikke)
+    bool chestCarrier = false;        // Slipper alltid en skattekiste (horde-kaptein)
+    void applySlow(float amount, float duration);
+    void knockBack(Vector2 direction, float strength);
+    // Kalles etter update(): demper bevegelsen fra frost og legger på dytt
+    void applyStatusMovement(Vector2 positionBeforeUpdate, float deltaTime);
+
+    // Kister fra elites har en felles nedkjøling, så de ikke regner ned sent i runden.
+    // luck (Firkløver) gjør både kister og sjeldne drops vanligere.
+    static inline float chestCooldown = 0.0f;
+    static inline float luck = 1.0f; // Fase for gangeanimasjonen (forskjellig for hver fiende)
 
     // Tegning i to lag (se render3d.hpp):
     //  draw()   – på gulvet: skygge, varsel-linjer osv. (2D-koordinater)

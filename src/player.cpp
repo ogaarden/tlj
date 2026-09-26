@@ -110,6 +110,8 @@ CombatModifiers Player::combatModifiers() const {
     mods.damageMult = spellAmp * damageMult;
     mods.cooldownMult = cooldownMult;
     mods.areaMult = areaMult;
+    mods.speedMult = projectileSpeedMult;
+    mods.durationMult = durationMult;
     return mods;
 }
 

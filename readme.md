@@ -162,4 +162,24 @@ Notes:
    raskere og raskere. Tonen stiger når man plukker mange på rad.
 6) Sjeldne drops: magnet (suger inn all XP) og kyllinglår (+30 % liv)
 
+// 8 oktober – dobbelt så mange abilities, items fra kister
+1) Level-up gir nå BARE abilities (nye og oppgraderinger). Items finnes bare i skattekister.
+   Kista gir evolusjon hvis en ability er klar, ellers 3 item-valg. Er alle items fulle,
+   gir den en gratis ability-oppgradering i stedet.
+2) Flere kister: en kiste dukker opp i slottet hvert 80. sek (første etter 40 sek),
+   hver horde har en elite-kaptein med kiste, og elites slipper kister (felles nedkjøling
+   på 22 sek så det ikke regner kister sent i runden). Gule piler i skjermkanten peker mot kister.
+3) 9 nye abilities (18 totalt), i src/weapons_extra.cpp:
+   Ildsluker (ildkjegle), Bumerang, Kortstokk (kort i alle retninger), Frostnova (bremser fiender),
+   Katapult (steiner fra himmelen), Narrebjeller (lydringer som dytter), Rampelys (roterende
+   lysstråler), Sabelhugg og Virvelvind (vandrende virvler som suger inn fiender)
+4) 8 nye items (18 totalt): Vampyrtann (liv per drap), Piggkrage (torner), Kronjuvel (+gull/XP),
+   Skyggekappe (+dodge), Kikkert (+prosjektilfart), Evighetslys (+varighet),
+   Trollspeil (+1 reroll), Firkløver (+flaks)
+5) 9 nye evolusjoner: Ildsluker+Evighetslys=Drakepust, Bumerang+Kikkert=Stormbumerang,
+   Kortstokk+Trollspeil=Full kortstokk, Frostnova+Skyggekappe=Evig vinter,
+   Katapult+Kronjuvel=Kongelig bombardement, Narrebjeller+Piggkrage=Dommedagsklokker,
+   Rampelys+Firkløver=Primadonna, Sabelhugg+Vampyrtann=Blodsabel, Virvelvind+Magnetstein=Malstrøm
+6) 6 ability-slots (1 innate + 5). Fiender kan nå bremses (frost) og dyttes (bjeller, bumerang, torner).
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

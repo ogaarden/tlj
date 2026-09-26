@@ -70,6 +70,30 @@ void Enemy::makeElite() {
     goldValue += 2;
     hitRadius *= 1.4f;
     orbRadius *= 1.4f;
+    knockbackScale *= 0.4f;
+}
+
+void Enemy::applySlow(float amount, float duration) {
+    slowAmount = fmaxf(slowAmount * (slowTimer > 0.0f ? 1.0f : 0.0f), fminf(0.9f, amount));
+    slowTimer = fmaxf(slowTimer, duration);
+}
+
+void Enemy::knockBack(Vector2 direction, float strength) {
+    Vector2 d = Vector2Normalize(direction);
+    knockVelocity = Vector2Add(knockVelocity, Vector2Scale(d, strength * knockbackScale));
+}
+
+void Enemy::applyStatusMovement(Vector2 before, float dt) {
+    if (slowTimer > 0.0f) {
+        slowTimer -= dt;
+        position = Vector2Add(before, Vector2Scale(Vector2Subtract(position, before), 1.0f - slowAmount));
+        if (slowTimer <= 0.0f) slowAmount = 0.0f;
+    }
+    if (knockVelocity.x != 0.0f || knockVelocity.y != 0.0f) {
+        position = Vector2Add(position, Vector2Scale(knockVelocity, dt));
+        knockVelocity = Vector2Scale(knockVelocity, fmaxf(0.0f, 1.0f - 9.0f * dt));
+        if (Vector2LengthSqr(knockVelocity) < 4.0f) knockVelocity = { 0, 0 };
+    }
 }
 
 float Enemy::walkCycle() const {
@@ -248,14 +272,22 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
     // XP-krystall med farge etter verdi, som spretter litt ut fra fienden
     Vector2 scatter = { position.x + (float)GetRandomValue(-10, 10), position.y + (float)GetRandomValue(-10, 10) };
     pickups.push_back({ scatter, xpValue, XpTierColor(xpValue), XpTierRadius(xpValue), 15.0f, PickupType::XP });
-    if (elite) {
-        pickups.push_back({ { position.x + 12.0f, position.y }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
-        if (GetRandomValue(1, 100) <= 30) pickups.push_back({ { position.x - 14.0f, position.y + 6.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
+    if (elite || chestCarrier) {
+        // Skattekiste, men elites deler en nedkjøling (Firkløver gjør den kortere).
+        // Uten kiste slipper eliten en ekstra stor krystall i stedet.
+        if (chestCarrier || chestCooldown <= 0.0f) {
+            pickups.push_back({ { position.x + 12.0f, position.y }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+            chestCooldown = 22.0f / luck;
+        } else {
+            int bonus = xpValue * 2;
+            pickups.push_back({ { position.x + 12.0f, position.y }, bonus, XpTierColor(bonus), XpTierRadius(bonus), 15.0f, PickupType::XP });
+        }
+        if (GetRandomValue(1, 100) <= (int)(30 * luck)) pickups.push_back({ { position.x - 14.0f, position.y + 6.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
     } else {
         // Sjeldne godbiter
         int roll = GetRandomValue(1, 10000);
-        if (roll <= 25) pickups.push_back({ { position.x, position.y - 10.0f }, 1, SKYBLUE, 12.0f, 0.0f, PickupType::VACUUM });
-        else if (roll <= 85) pickups.push_back({ { position.x, position.y - 10.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
+        if (roll <= (int)(25 * luck)) pickups.push_back({ { position.x, position.y - 10.0f }, 1, SKYBLUE, 12.0f, 0.0f, PickupType::VACUUM });
+        else if (roll <= (int)(85 * luck)) pickups.push_back({ { position.x, position.y - 10.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
     }
 
     // Gull er metaprogresjon, så sjansen er lav med vilje
@@ -354,6 +386,7 @@ Boss::Boss(Vector2 spawnPos, Texture2D tex) {
     orbColor = MAROON;
     orbRadius = 0.0f;
     hitRadius = 40.0f;
+    knockbackScale = 0.05f;
     texture = tex;
 }
 

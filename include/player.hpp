@@ -44,6 +44,14 @@ struct Player {
     int aegis = 0;
     float critChance = 0.05f; // Sjanse for kritisk treff (dobbel skade)
 
+    // Fra items
+    float projectileSpeedMult = 1.0f; // Kikkert
+    float durationMult = 1.0f;        // Evighetslys
+    float lifePerKill = 0.0f;         // Vampyrtann
+    float thorns = 0.0f;              // Piggkrage: skade på fiender som treffer deg
+    float luck = 1.0f;                // Firkløver: oftere kister og sjeldne drops
+    int bonusRerolls = 0;             // Trollspeil: spillet flytter dem over til reroll-telleren
+
     // Items denne runden: nivå per item (0 = har ikke) og rekkefølgen de ble plukket i
     int itemLevels[(int)ItemId::COUNT] = {};
     std::vector<ItemId> items;

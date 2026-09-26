@@ -41,7 +41,7 @@ std::vector<AbilityId> GetSharedAbilityPool();
 enum class ChoiceType {
     NEW_ABILITY,
     UPGRADE_ABILITY,
-    ITEM,       // Nytt item eller neste nivå av et item
+    ITEM,       // Nytt item eller neste nivå av et item (bare fra skattekister)
     EVOLUTION,  // Fra skattekiste: ability på maks level + riktig item
     HEAL        // Reserve når alt er fullt og maks-level
 };
@@ -68,8 +68,10 @@ const Evolution* GetEvolutionForItem(ItemId item);         // Hvilken evolusjon 
 bool CanEvolve(const Player& player, const Weapon& weapon); // Maks level + har itemet + ikke evolvert
 void EvolveAbility(Weapon& weapon);
 
-// Neste level-up: ability-valg + item-valg (minst ett av hver når det går)
+// Level-up: bare abilities (nye og oppgraderinger)
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count = 3);
+// Skattekiste: evolusjon hvis en ability er klar, ellers items
+std::vector<AbilityChoice> GenerateChestChoices(const Player& player, int count = 3);
 void ApplyAbilityChoice(Player& player, const AbilityChoice& choice);
 
 // --- HUD med de 5 ability-slotsene (i et panel, sentrert på centerX, med underkant på bottom) ---

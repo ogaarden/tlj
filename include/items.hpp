@@ -6,7 +6,7 @@
 
 struct Player;
 
-// Items er passive gjenstander man velger i level-up (se ability_types.hpp for listen).
+// Items er passive gjenstander man finner i skattekister (se ability_types.hpp for listen).
 // De nullstilles hver runde og har 5 nivåer hver.
 
 struct ItemDef {

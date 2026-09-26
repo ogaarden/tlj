@@ -198,6 +198,109 @@ void DrawAbilityIcon(AbilityId id, Vector2 c, float s) {
             inkCircle(P(c, s, 0.0f, -0.35f), s * 0.2f, Color{ 220, 30, 40, 255 });
             DrawLineEx(P(c, s, 0.0f, -0.5f), P(c, s, 0.25f, -0.9f), 2.0f, Color{ 60, 120, 40, 255 });
         } break;
+        case AbilityId::FIRE_BREATH: { // Flammetunge som vokser ut fra venstre
+            const Color outer = { 230, 70, 30, 255 }, mid = { 255, 150, 40, 255 }, core = { 255, 240, 150, 255 };
+            float w = sinf(t * 9.0f) * 0.05f;
+            auto flame = [&](float scale, Color col, float g) {
+                tri(P(c, s, -0.95f - g, 0.35f), P(c, s, 0.95f * scale + g, -0.55f * scale + w - g), P(c, s, 0.95f * scale + g, 0.55f * scale + w + g), col);
+                DrawCircleV(P(c, s, 0.55f * scale, w), s * 0.45f * scale + g * s, col);
+            };
+            flame(1.0f, INK, 0.12f);
+            flame(1.0f, outer, 0.0f);
+            flame(0.72f, mid, 0.0f);
+            flame(0.45f, core, 0.0f);
+            inkCircle(P(c, s, -0.85f, 0.35f), s * 0.16f, Color{ 250, 244, 235, 255 });
+        } break;
+        case AbilityId::BOOMERANG: { // V-formet bumerang som snurrer
+            float a = t * 3.0f;
+            Vector2 d1 = { cosf(a), sinf(a) }, d2 = { cosf(a + 1.9f), sinf(a + 1.9f) };
+            Vector2 e1 = { c.x + d1.x * s * 0.85f, c.y + d1.y * s * 0.85f };
+            Vector2 e2 = { c.x + d2.x * s * 0.85f, c.y + d2.y * s * 0.85f };
+            inkLine(c, e1, s * 0.34f, Color{ 190, 120, 60, 255 });
+            inkLine(c, e2, s * 0.34f, Color{ 190, 120, 60, 255 });
+            DrawLineEx(c, e1, s * 0.1f, Color{ 240, 200, 90, 255 });
+            DrawLineEx(c, e2, s * 0.1f, Color{ 240, 200, 90, 255 });
+            DrawRing(c, s * 0.95f, s * 1.02f, a * RAD2DEG + 200.0f, a * RAD2DEG + 300.0f, 12, Fade(WHITE, 0.5f));
+        } break;
+        case AbilityId::CARDS: { // Tre spillkort i vifte
+            for (int i = -1; i <= 1; i++) {
+                float ang = i * 0.35f;
+                Vector2 cc = P(c, s, i * 0.28f, 0.1f + fabsf((float)i) * 0.08f);
+                Vector2 u = { sinf(ang), -cosf(ang) }, r = { cosf(ang), sinf(ang) };
+                auto at = [&](float x, float y) { return Vector2{ cc.x + (r.x * x + u.x * y) * s, cc.y + (r.y * x + u.y * y) * s }; };
+                quad(at(-0.42f, -0.62f), at(0.42f, -0.62f), at(0.42f, 0.62f), at(-0.42f, 0.62f), INK);
+                quad(at(-0.35f, -0.55f), at(0.35f, -0.55f), at(0.35f, 0.55f), at(-0.35f, 0.55f), Color{ 250, 246, 235, 255 });
+                Color suit = (i == 0) ? Color{ 200, 30, 50, 255 } : INK;
+                Vector2 m = at(0.0f, 0.1f);
+                if (i == 0) { // Hjerter
+                    DrawCircleV(at(-0.08f, 0.2f), s * 0.1f, suit); DrawCircleV(at(0.08f, 0.2f), s * 0.1f, suit);
+                    tri(at(-0.18f, 0.16f), at(0.18f, 0.16f), at(0.0f, -0.08f), suit);
+                } else {      // Ruter
+                    quad(at(0.0f, 0.32f), at(0.14f, 0.1f), at(0.0f, -0.12f), at(-0.14f, 0.1f), suit);
+                }
+                (void)m;
+            }
+        } break;
+        case AbilityId::FROST_NOVA: { // Snøkrystall
+            Color ice = { 170, 225, 255, 255 };
+            for (int i = 0; i < 6; i++) {
+                float a = i * PI / 3.0f + t * 0.5f;
+                Vector2 tip = { c.x + cosf(a) * s * 0.95f, c.y + sinf(a) * s * 0.95f };
+                inkLine(c, tip, s * 0.12f, ice);
+                for (int k = -1; k <= 1; k += 2) {
+                    Vector2 b = { c.x + cosf(a) * s * 0.55f, c.y + sinf(a) * s * 0.55f };
+                    Vector2 e = { b.x + cosf(a + k * 0.8f) * s * 0.28f, b.y + sinf(a + k * 0.8f) * s * 0.28f };
+                    DrawLineEx(b, e, s * 0.08f, WHITE);
+                }
+            }
+            inkCircle(c, s * 0.2f, WHITE);
+        } break;
+        case AbilityId::CATAPULT: { // Steinblokk som faller med fartsstreker
+            for (int i = 0; i < 3; i++) {
+                float x = -0.5f + i * 0.3f;
+                DrawLineEx(P(c, s, x - 0.35f, -0.95f), P(c, s, x, -0.35f), s * 0.07f, Fade(Color{ 255, 190, 110, 255 }, 0.8f));
+            }
+            DrawEllipse((int)(c.x + s * 0.1f), (int)(c.y + s * 0.8f), s * 0.8f, s * 0.2f, Fade(BLACK, 0.4f));
+            inkCircle(P(c, s, 0.15f, 0.15f), s * 0.55f, Color{ 150, 140, 130, 255 });
+            DrawCircleV(P(c, s, 0.3f, 0.3f), s * 0.12f, Color{ 110, 100, 95, 255 });
+            DrawCircleV(P(c, s, -0.05f, 0.35f), s * 0.08f, Color{ 110, 100, 95, 255 });
+        } break;
+        case AbilityId::BELLS: { // Gullbjelle med lydbølger
+            for (int k = 0; k < 2; k++) {
+                float r = s * (0.8f + k * 0.2f + fmodf(t, 0.5f) * 0.2f);
+                DrawRing(P(c, s, 0.0f, 0.1f), r, r + s * 0.06f, 200.0f, 340.0f, 16, Fade(GOLD_L, 0.6f - k * 0.25f));
+                DrawRing(P(c, s, 0.0f, 0.1f), r, r + s * 0.06f, 20.0f, 160.0f, 16, Fade(GOLD_L, 0.6f - k * 0.25f));
+            }
+            float sw = sinf(t * 8.0f) * 0.08f;
+            Vector2 top = P(c, s, sw, -0.55f);
+            tri(P(c, s, -0.62f - 0.1f, 0.5f), P(c, s, 0.62f + 0.1f, 0.5f), P(top, s, 0.0f, -0.12f), INK);
+            DrawCircleV(P(top, s, 0.0f, 0.15f), s * 0.38f, INK);
+            tri(P(c, s, -0.6f, 0.45f), P(c, s, 0.6f, 0.45f), top, GOLD_L);
+            DrawCircleV(P(top, s, 0.0f, 0.18f), s * 0.3f, GOLD_L);
+            DrawRectangleRec({ c.x - s * 0.66f, c.y + s * 0.4f, s * 1.32f, s * 0.14f }, GOLD_D);
+            inkCircle(P(c, s, sw * 2.0f, 0.62f), s * 0.13f, GOLD_D);
+        } break;
+        case AbilityId::SPOTLIGHT: { // Lyskaster med kjegle
+            tri(P(c, s, -0.35f, -0.35f), P(c, s, 1.0f, 0.4f), P(c, s, 0.35f, 1.0f), Fade(Color{ 255, 245, 190, 255 }, 0.35f + 0.1f * sinf(t * 5.0f)));
+            tri(P(c, s, -0.35f, -0.35f), P(c, s, 0.75f, 0.45f), P(c, s, 0.4f, 0.75f), Fade(WHITE, 0.35f));
+            Vector2 h = P(c, s, -0.45f, -0.45f);
+            inkLine(P(c, s, -0.9f, -0.9f), h, s * 0.45f, Color{ 60, 60, 70, 255 });
+            inkCircle(P(c, s, -0.3f, -0.3f), s * 0.22f, Color{ 255, 250, 210, 255 });
+        } break;
+        case AbilityId::SABRE: { // Krum sabel med hugg-bue
+            DrawRing(c, s * 0.8f, s * 0.95f, 190.0f, 320.0f, 20, Fade(Color{ 255, 120, 110, 255 }, 0.6f));
+            sword(P(c, s, 0.0f, 0.1f), s * 0.9f, -PI * 0.3f, Color{ 230, 235, 245, 255 });
+        } break;
+        case AbilityId::TORNADO: { // Virvel som smalner nedover
+            Color wind = { 180, 225, 210, 255 };
+            for (int i = 0; i < 5; i++) {
+                float y = -0.75f + i * 0.35f;
+                float w = 0.85f - i * 0.15f;
+                float off = sinf(t * 6.0f + i) * 0.08f;
+                DrawEllipse((int)(c.x + off * s), (int)(c.y + y * s), w * s + 2.0f, s * 0.14f + 2.0f, INK);
+                DrawEllipse((int)(c.x + off * s), (int)(c.y + y * s), w * s, s * 0.14f, i % 2 ? wind : Color{ 230, 250, 240, 255 });
+            }
+        } break;
         default: { // Restituer: hjerte med pluss
             heart(c, s * 0.9f, HEART);
             plus(P(c, s, 0.45f, 0.45f), s * 0.5f, GREEN_L);

@@ -118,6 +118,11 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
             float angle = (float)i / count * 2.0f * PI;
             Vector2 pos = { playerPos.x + cosf(angle) * Difficulty::SPAWN_DISTANCE, playerPos.y + sinf(angle) * Difficulty::SPAWN_DISTANCE };
             spawnEnemy(type, pos, enemies, enemyTexture);
+            // Den første er hordens kaptein: en elite som alltid bærer en skattekiste
+            if (i == 0 && !enemies.empty()) {
+                if (!enemies.back()->elite) enemies.back()->makeElite();
+                enemies.back()->chestCarrier = true;
+            }
         }
     }
 

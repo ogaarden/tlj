@@ -15,6 +15,8 @@ struct CombatModifiers {
     float damageMult = 1.0f;   // Spillerens spellAmp * shop "Might"
     float cooldownMult = 1.0f; // Shop "Haste" (0.9 = 10% kortere cooldown)
     float areaMult = 1.0f;     // Shop "Area" (radius og treffområde)
+    float speedMult = 1.0f;    // Prosjektilfart og rekkevidde (Kikkert)
+    float durationMult = 1.0f; // Hvor lenge effekter varer (Evighetslys)
 };
 
 // Baseklassen for ALLE abilities/våpen.
@@ -29,6 +31,7 @@ protected:
     float cooldown() const { return stats.cooldown * mods.cooldownMult; }
     float radius() const { return stats.radius * mods.areaMult; }
     float area() const { return stats.area * mods.areaMult; }
+    float projSpeed() const { return stats.speed * mods.speedMult; }
 
     // Hver ability implementerer sin egen logikk her
     virtual void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) = 0;
@@ -40,6 +43,9 @@ public:
     int level = 1;
     bool evolved = false; // Evolusjon: ability på maks level + riktig item + en skattekiste
     AbilityStats stats;
+
+    // Liv som våpen gir tilbake (f.eks. Blodsabel). Spillet henter og nullstiller den hver frame.
+    static inline float pendingHeal = 0.0f;
 
     // Virtuell destruktør er obligatorisk når man bruker arv i C++
     virtual ~Weapon() = default;
@@ -225,6 +231,144 @@ public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
+};
+
+// =====================================================================
+// NYE ABILITIES
+// =====================================================================
+
+// --- Ildsluker: blåser en ildkjegle mot nærmeste fiende i et lite øyeblikk ---
+class FlameWeapon : public Weapon {
+private:
+    float breathTimer = 0.0f;       // > 0 mens den blåser
+    float tickTimer = 0.0f;
+    std::vector<Vector2> directions; // Én kjegle per "prosjektil"
+    Vector2 lastPlayerPos = { 0, 0 };
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void drawVfx() const override;
+    float cooldownProgress() const override { return breathTimer > 0.0f ? 0.0f : Weapon::cooldownProgress(); }
+};
+
+// --- Bumerang: flyr ut, snur og kommer tilbake (treffer på vei ut OG inn) ---
+struct Boomer {
+    Vector2 position, direction;
+    float traveled;
+    bool returning;
+    float spin;
+    float lifetime;
+    int damage;
+    std::vector<int> hitIds;
+};
+class BoomerangWeapon : public Weapon {
+private:
+    std::vector<Boomer> boomers;
+    Vector2 lastPlayerPos = { 0, 0 };
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+};
+
+// --- Kortstokk: spillkort i en ring rundt spilleren ---
+struct Card {
+    Vector2 position, direction;
+    float lifetime;
+    int damage;
+    int pierceLeft;
+    bool red;
+    std::vector<int> hitIds;
+};
+class CardWeapon : public Weapon {
+private:
+    std::vector<Card> cards;
+    float volleyAngle = 0.0f;
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+};
+
+// --- Frostnova: isbølge som skader og bremser alt rundt deg ---
+struct IceShard { Vector2 position; float timer; float size; float spin; };
+class FrostNovaWeapon : public Weapon {
+private:
+    std::vector<IceShard> shards;
+    Vector2 lastPlayerPos = { 0, 0 };
+    float flashTimer = 0.0f;
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+};
+
+// --- Katapult: steinblokker faller fra himmelen på tilfeldige fiender ---
+struct Boulder { Vector2 target; float t; float fallTime; int damage; float spin; };
+class CatapultWeapon : public Weapon {
+private:
+    std::vector<Boulder> boulders;
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+};
+
+// --- Narrebjeller: lydringer som brer seg ut og dytter fiender bort ---
+struct SoundRing { float radius; float delay; std::vector<int> hitIds; };
+class BellWeapon : public Weapon {
+private:
+    std::vector<SoundRing> rings;
+    Vector2 lastPlayerPos = { 0, 0 };
+    float jingle = 0.0f; // Bjellene svinger etter et slag
+    float time = 0.0f;
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+};
+
+// --- Rampelys: lysstråler som feier rundt spilleren ---
+class SpotlightWeapon : public Weapon {
+private:
+    float angle = 0.0f;
+    float time = 0.0f;
+    int beamCount = 0;
+    Vector2 lastPlayerPos = { 0, 0 };
+    std::unordered_map<int, float> lastHitTime;
+    Vector2 beamDirection(int index) const;
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void drawVfx() const override;
+    float cooldownProgress() const override { return 1.0f; }
+};
+
+// --- Sabelhugg: brede hugg foran (og bak) deg ---
+struct SabreSlash { Vector2 direction; float delay; };
+class SabreWeapon : public Weapon {
+private:
+    std::vector<SabreSlash> queued;
+    Vector2 lastPlayerPos = { 0, 0 };
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+};
+
+// --- Virvelvind: vandrende virvler som suger inn og maler fiender ---
+struct Twister { Vector2 position; Vector2 velocity; float life, maxLife; float tickTimer; float spin; };
+class TornadoWeapon : public Weapon {
+private:
+    std::vector<Twister> twisters;
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
     void drawVfx() const override;
 };
 

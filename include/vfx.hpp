@@ -45,6 +45,10 @@ void UpdateVfx(float deltaTime);
 void DrawVfxParticles();
 void ClearVfx();
 
+// Én fri partikkel (for våpen som lager sine egne effekter)
+void VfxParticle(VfxTex tex, Vector3 pos, Vector3 vel, float life, float size, float sizeEnd, Color color,
+                 float gravity = 0.0f, float drag = 0.0f, float rotation = 0.0f, float rotSpeed = 0.0f, bool decal = false);
+
 // Ferdige effekter
 void VfxHit(Vector2 ground, Color color);                          // Gnister når noe blir truffet
 void VfxDeath(Vector2 ground, Color color);                        // Fiende dør: lysglimt og gnister
@@ -55,5 +59,6 @@ void VfxExplosion(Vector2 ground, float radius);                   // Kamikaze-e
 void VfxBubble(Vector2 ground, float height, Color color);         // Giftbobler som stiger opp
 void VfxZap(Vector2 from, Vector2 to, float height, Color color);  // Kort elektrisk bue (Ricochet-sprett)
 void VfxMuzzle(Vector2 ground, Vector2 dir, Color color);          // Glimt når et våpen skyter
+void VfxFrost(Vector2 ground, float radius);                       // Frostnova: isring og snøfnugg
 
 #endif // VFX_HPP
