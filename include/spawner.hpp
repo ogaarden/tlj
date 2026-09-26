@@ -35,7 +35,7 @@ private:
 
 public:
     // Lager én fiende med echelon- og tidsskalering (brukes også når kongen kaller inn hjelp)
-    void spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture);
+    void spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture, float xpMult = 1.0f);
 
 public:
     // Nullstill for en ny runde med echelon-effektene som gjelder

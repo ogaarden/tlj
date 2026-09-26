@@ -221,6 +221,7 @@ void Lackey::draw3D() const {
 
 void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
     if (amount <= 0) return;
+    if (damageTakenMult < 1.0f) amount = std::max(1, (int)(amount * damageTakenMult));
     bool crit = !isDamageOverTime && GetRandomValue(1, 1000) <= (int)(critChance * 1000.0f);
     if (crit) amount = (int)(amount * critMultiplier);
     hp -= amount;
@@ -271,7 +272,20 @@ void Enemy::applyEchelonModifiers(float hpMult, float damageMult, float speedMul
 void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
     // XP-krystall med farge etter verdi, som spretter litt ut fra fienden
     Vector2 scatter = { position.x + (float)GetRandomValue(-10, 10), position.y + (float)GetRandomValue(-10, 10) };
-    pickups.push_back({ scatter, xpValue, XpTierColor(xpValue), XpTierRadius(xpValue), 15.0f, PickupType::XP });
+    // Med hundrevis av fiender slås krystaller som ligger tett sammen til én større
+    // (samme XP, men færre ting på bakken og en fin "oppgradering" av krystallfargen)
+    bool merged = false;
+    for (auto& p : pickups) {
+        if (p.type != PickupType::XP || p.pull > 0.0f) continue;
+        if (Vector2DistanceSqr(p.position, scatter) < 28.0f * 28.0f) {
+            p.value += xpValue;
+            p.color = XpTierColor(p.value);
+            p.radius = XpTierRadius(p.value);
+            merged = true;
+            break;
+        }
+    }
+    if (!merged) pickups.push_back({ scatter, xpValue, XpTierColor(xpValue), XpTierRadius(xpValue), 15.0f, PickupType::XP });
     if (miniboss) {
         // Miniboss: Kongens septer, en skattekiste og en haug med XP
         pickups.push_back({ { position.x, position.y - 20.0f }, 1, SKYBLUE, 16.0f, 0.0f, PickupType::SCEPTER });
@@ -379,77 +393,214 @@ void Lackey::update(Vector2 playerPosition) {
     position.y += (dir.y * speed + perp.y * offset) * GetFrameTime();
 }
 // --- Boss ---
-namespace {
-    constexpr float BOSS_CHASE_TIME = 3.0f;
-    constexpr float BOSS_WINDUP_TIME = 0.8f; // Tid spilleren har til å se dashen komme
-    constexpr float BOSS_DASH_TIME = 0.5f;
-    constexpr float BOSS_DASH_SPEED = 700.0f;
-}
 
 Boss::Boss(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
-    speed = 90.0f;
-    // ~20-30 sek for en typisk build ved 10 min. Echelon-effekter (f.eks. +HP på E9) legges på i tillegg.
-    hp = 30000;
+    speed = 150.0f;
+    // Sluttbossen: skal ta 1-2 minutter med et godt build. Echelon-effekter legges på i tillegg.
+    hp = 150000;
     maxHp = hp;
-    damage = 30;
+    damage = 45;
     xpValue = 0;
     orbColor = MAROON;
     orbRadius = 0.0f;
     hitRadius = 40.0f;
-    knockbackScale = 0.05f;
+    knockbackScale = 0.0f;
     texture = tex;
+}
+
+void Boss::announce(const char* text) {
+    announcement = text;
+    enragedAt = (float)GetTime();
+    PlaySfx(Sfx::BOSS_GONG);
+    AddCameraShake(0.8f);
+}
+
+void Boss::shootRing(int count, float speed, float offset, float dmg) {
+    for (int i = 0; i < count; i++) {
+        float a = offset + (float)i / count * 2.0f * PI;
+        SpawnEnemyShot(position, { cosf(a), sinf(a) }, speed, dmg);
+    }
+}
+
+void Boss::shootFan(Vector2 dir, int count, float spreadDeg, float speed, float dmg) {
+    for (int i = 0; i < count; i++) {
+        float off = (count > 1 ? (i / (float)(count - 1) - 0.5f) : 0.0f) * spreadDeg * DEG2RAD;
+        SpawnEnemyShot(position, Vector2Rotate(dir, off), speed, dmg);
+    }
 }
 
 void Boss::update(Vector2 playerPosition) {
     float dt = GetFrameTime();
     lastPlayerPos = playerPosition;
     phaseTimer += dt;
+    Vector2 toPlayer = Vector2Normalize(Vector2Subtract(playerPosition, position));
+    float shotDmg = damage * 0.5f;
 
-    // Fase 2: rasende under halv HP
-    if (!enraged && hp <= maxHp / 2) {
+    // --- Dekreter: røde sirkler som eksploderer etter en stund ---
+    for (size_t i = 0; i < decrees.size(); ) {
+        decrees[i].t += dt / 1.3f;
+        if (decrees[i].t >= 1.0f) {
+            SpawnExplosion(decrees[i].pos, 95.0f, damage * 1.2f);
+            VfxExplosion(decrees[i].pos, 80.0f);
+            decrees[i] = decrees.back();
+            decrees.pop_back();
+            continue;
+        }
+        i++;
+    }
+
+    // --- Fasebytter ---
+    if (mode == Mode::THRONE && hp <= maxHp * 55 / 100) {
+        mode = Mode::LEAP;
+        phaseTimer = 0.0f;
+        leapFrom = position;
+        leapTo = Vector2Add(position, Vector2Scale(Vector2Subtract(playerPosition, position), 0.6f));
+        announce("KONGEN REISER SEG!");
+    }
+    // I fase 2 står kongen midt i alle AOE-våpnene dine, så han har rustning der
+    damageTakenMult = mode == Mode::HUNT ? (enraged ? 0.45f : 0.55f) : 1.0f;
+    if (mode == Mode::HUNT && !enraged && hp <= maxHp / 4) {
         enraged = true;
-        enragedAt = (float)GetTime();
         speed *= 1.35f;
         summonsRequested += 8;
-        summonTimer = 0.0f;
-        PlaySfx(Sfx::BOSS_GONG);
-        AddCameraShake(0.8f);
-        VfxShockwave(position, 220.0f, RED);
+        announce("KONGEN ER RASENDE!");
+        shootRing(32, 260.0f, 0.0f, shotDmg);
     }
-    if (enraged) {
-        summonTimer += dt;
-        if (summonTimer >= 10.0f) { summonTimer = 0.0f; summonsRequested += 5; }
-    }
-    float chaseTime = enraged ? BOSS_CHASE_TIME * 0.55f : BOSS_CHASE_TIME;
-    float dashSpeed = enraged ? BOSS_DASH_SPEED * 1.3f : BOSS_DASH_SPEED;
 
-    switch (phase) {
-        case Phase::CHASE: {
-            Vector2 dir = Vector2Normalize(Vector2Subtract(playerPosition, position));
-            position = Vector2Add(position, Vector2Scale(dir, speed * dt));
-            if (phaseTimer >= chaseTime) {
-                phase = Phase::WINDUP;
-                phaseTimer = 0.0f;
-                PlaySfx(Sfx::BOSS_CHARGE);
-            }
+    switch (mode) {
+    // ================= FASE 1: PÅ TRONEN =================
+    case Mode::THRONE: {
+        position = Vector2Lerp(position, thronePos, std::min(1.0f, 3.0f * dt)); // Går opp og setter seg
+        facing = toPlayer;
+        if (attackTimer > 0.0f) {
+            attackTimer -= dt;
+            if (attackTimer <= 0.0f) { patternTime = 0.0f; shotTimer = 0.0f; volleysLeft = 3; PlaySfx(Sfx::BOSS_CHARGE); }
             break;
         }
-        case Phase::WINDUP:
-            // Står stille og sikter – retningen låses når dashen starter
-            dashDirection = Vector2Normalize(Vector2Subtract(playerPosition, position));
-            if (phaseTimer >= BOSS_WINDUP_TIME) {
-                phase = Phase::DASH;
-                phaseTimer = 0.0f;
-            }
-            break;
-        case Phase::DASH:
-            position = Vector2Add(position, Vector2Scale(dashDirection, dashSpeed * dt));
-            if (phaseTimer >= BOSS_DASH_TIME) {
-                phase = Phase::CHASE;
-                phaseTimer = 0.0f;
-            }
-            break;
+        patternTime += dt;
+        shotTimer -= dt;
+        bool done = false;
+        switch (throneAttack % 4) {
+            case 0: // Dobbel spiral av septerkuler
+                if (shotTimer <= 0.0f) {
+                    shotTimer = 0.09f;
+                    spiralAngle += 0.23f;
+                    for (int k = 0; k < 3; k++) {
+                        float a = spiralAngle + k * 2.0f * PI / 3.0f;
+                        SpawnEnemyShot(position, { cosf(a), sinf(a) }, 210.0f, shotDmg);
+                    }
+                }
+                done = patternTime > 4.0f;
+                break;
+            case 1: // Vifter rett mot spilleren
+                if (shotTimer <= 0.0f && volleysLeft > 0) {
+                    shotTimer = 0.45f;
+                    volleysLeft--;
+                    shootFan(toPlayer, 11, 70.0f, 330.0f, shotDmg);
+                    PlaySfxPitch(Sfx::ZAP, 0.8f);
+                }
+                done = volleysLeft == 0 && shotTimer <= 0.0f;
+                break;
+            case 2: // Kongelige dekreter: røde sirkler der spilleren står og er på vei
+                if (shotTimer <= 0.0f && volleysLeft > 0) {
+                    shotTimer = 0.5f;
+                    volleysLeft--;
+                    decrees.push_back({ playerPosition, 0.0f });
+                    for (int k = 0; k < 3; k++) {
+                        float a = GetRandomValue(0, 628) / 100.0f;
+                        float d = (float)GetRandomValue(110, 220);
+                        decrees.push_back({ { playerPosition.x + cosf(a) * d, playerPosition.y + sinf(a) * d }, 0.0f });
+                    }
+                }
+                done = volleysLeft == 0 && shotTimer <= 0.0f;
+                break;
+            case 3: // Vaktene kommer + en ring av kuler
+                summonsRequested += 6;
+                shootRing(24, 180.0f, spiralAngle, shotDmg);
+                done = true;
+                break;
+        }
+        if (done) { throneAttack++; attackTimer = 1.1f; }
+        break;
+    }
+    // ================= OVERGANG: HOPPER NED =================
+    case Mode::LEAP: {
+        float t = std::min(1.0f, phaseTimer / 0.9f);
+        position = Vector2Lerp(leapFrom, leapTo, t);
+        if (t >= 1.0f) {
+            SpawnExplosion(position, 220.0f, damage * 1.3f);
+            VfxShockwave(position, 260.0f, Color{ 255, 80, 40, 255 });
+            VfxExplosion(position, 160.0f);
+            shootRing(28, 240.0f, 0.0f, shotDmg);
+            summonsRequested += 6;
+            mode = Mode::HUNT;
+            phase = Phase::CHASE;
+            phaseTimer = 0.0f;
+            dashesLeft = 0;
+        }
+        break;
+    }
+    // ================= FASE 2: JAKTEN =================
+    case Mode::HUNT: {
+        summonTimer += dt;
+        if (summonTimer >= (enraged ? 9.0f : 14.0f)) { summonTimer = 0.0f; summonsRequested += enraged ? 6 : 4; }
+        float windup = enraged ? 0.5f : 0.7f;
+        float dashSpeed = enraged ? 1000.0f : 820.0f;
+        switch (phase) {
+            case Phase::CHASE:
+                facing = toPlayer;
+                position = Vector2Add(position, Vector2Scale(toPlayer, speed * dt));
+                if (enraged) { // Spiral mens han jager
+                    chaseShotTimer -= dt;
+                    if (chaseShotTimer <= 0.0f) {
+                        chaseShotTimer = 0.2f;
+                        spiralAngle += 0.4f;
+                        shootRing(4, 200.0f, spiralAngle, shotDmg);
+                    }
+                }
+                if (phaseTimer >= (enraged ? 1.4f : 2.2f)) {
+                    phaseTimer = 0.0f;
+                    // Annenhver gang: tre storminger på rad, eller et tramp
+                    if (dashesLeft <= 0 && GetRandomValue(0, 2) == 0) {
+                        phase = Phase::STOMP;
+                        PlaySfxPitch(Sfx::BOSS_CHARGE, 0.8f);
+                    } else {
+                        if (dashesLeft <= 0) dashesLeft = 3;
+                        phase = Phase::WINDUP;
+                        PlaySfx(Sfx::BOSS_CHARGE);
+                    }
+                }
+                break;
+            case Phase::WINDUP:
+                dashDirection = toPlayer;
+                facing = toPlayer;
+                if (phaseTimer >= windup) { phase = Phase::DASH; phaseTimer = 0.0f; }
+                break;
+            case Phase::DASH:
+                position = Vector2Add(position, Vector2Scale(dashDirection, dashSpeed * dt));
+                if (phaseTimer >= 0.45f) {
+                    phaseTimer = 0.0f;
+                    dashesLeft--;
+                    shootFan(Vector2Scale(dashDirection, -1.0f), 7, 120.0f, 220.0f, shotDmg); // Kuler bak seg
+                    phase = dashesLeft > 0 ? Phase::WINDUP : Phase::CHASE;
+                    if (phase == Phase::WINDUP) phaseTimer = windup * 0.4f; // Kortere sikting mellom stormene
+                }
+                break;
+            case Phase::STOMP:
+                if (phaseTimer >= 1.0f) {
+                    SpawnExplosion(position, 230.0f, damage * 1.4f);
+                    VfxShockwave(position, 260.0f, Color{ 255, 120, 40, 255 });
+                    AddCameraShake(0.7f);
+                    PlaySfx(Sfx::EXPLOSION);
+                    shootRing(enraged ? 36 : 24, 230.0f, spiralAngle, shotDmg);
+                    phase = Phase::CHASE;
+                    phaseTimer = 0.0f;
+                }
+                break;
+        }
+        break;
+    }
     }
 }
 
@@ -459,10 +610,25 @@ static Vector2 kingFacing(bool locked, Vector2 dashDirection, Vector2 from, Vect
 }
 
 void Boss::draw() const {
+    // Dekreter: rød sirkel som fylles opp før den eksploderer
+    for (const auto& d : decrees) {
+        DrawCircleV(d.pos, 95.0f, Fade(RED, 0.12f + 0.12f * d.t));
+        DrawCircleV(d.pos, 95.0f * d.t, Fade(RED, 0.25f));
+        DrawRing(d.pos, 91.0f, 95.0f, 0, 360, 40, Fade(RED, 0.8f));
+    }
+    // Tramp: stor ring rundt kongen
+    if (mode == Mode::HUNT && phase == Phase::STOMP) {
+        float t = phaseTimer;
+        DrawCircleV(position, 230.0f, Fade(Color{ 255, 90, 30, 255 }, 0.1f + 0.15f * t));
+        DrawCircleV(position, 230.0f * t, Fade(Color{ 255, 90, 30, 255 }, 0.2f));
+        DrawRing(position, 225.0f, 230.0f, 0, 360, 64, Fade(RED, 0.8f));
+    }
+    // Landingssted når han hopper ned fra tronen
+    if (mode == Mode::LEAP) DrawRing(leapTo, 200.0f, 220.0f, 0, 360, 64, Fade(RED, 0.7f));
     // På gulvet: varsel-felt for Royal Charge + skygge
     if (phase == Phase::WINDUP) {
-        float t = phaseTimer / BOSS_WINDUP_TIME;
-        Vector2 end = Vector2Add(position, Vector2Scale(dashDirection, BOSS_DASH_SPEED * (enraged ? 1.3f : 1.0f) * BOSS_DASH_TIME));
+        float t = std::min(1.0f, phaseTimer / 0.7f);
+        Vector2 end = Vector2Add(position, Vector2Scale(dashDirection, (enraged ? 1000.0f : 820.0f) * 0.45f));
         DrawLineEx(position, end, hitRadius * 2.0f, Fade(RED, 0.2f + 0.3f * t));
         DrawCircleV(end, hitRadius, Fade(RED, 0.25f + 0.3f * t));
     }
@@ -539,7 +705,7 @@ void Boss::drawVfx() const {
         Vector2 side = { -look.y, look.x };
         Vector2 tip = Vector2Add(Vector2Add(position, Vector2Scale(side, 30.0f)), Vector2Scale(look, 4.0f));
         float pulse = 0.5f + 0.5f * sinf(t * 20.0f);
-        float k = phaseTimer / BOSS_WINDUP_TIME;
+        float k = std::min(1.0f, phaseTimer / 0.7f);
         VfxBillboard(VfxTex::GLOW, ToWorld3D(tip, 115.0f), 60.0f + 30.0f * pulse, Color{ 255, 200, 80, 255 });
         VfxBillboard(VfxTex::SPARK, ToWorld3D(tip, 115.0f), 70.0f + 40.0f * k, WHITE, t * 300.0f);
         VfxDecal(VfxTex::SHOCKWAVE, position, 120.0f + 60.0f * k, Color{ 255, 80, 60, 255 }, t * 200.0f, 1.5f);

@@ -9,16 +9,28 @@
 // og hver echelon legger til 30 sek = én ekstra wave.
 //
 // Starten er rolig (ca. 13 fiender den første halve minuttet), men antallet
-// vokser kvadratisk: ~100 i wave 10 og ~300 i wave 20. I tillegg blir hver
-// fiende sterkere med tiden (se Difficulty under), elite-fiender dukker opp
-// etter 2 minutter, og hvert 2. minutt kommer en horde som omringer deg.
+// vokser raskt: ~130 i wave 10 og ~750 i wave 20 (en konstant strøm sent i runden).
+// I tillegg blir hver fiende sterkere med tiden (se Difficulty under), elite-fiender
+// dukker opp etter 2 minutter, og hvert minutt fra 1:45 kommer en horde som omringer deg.
+// Fordi det kommer så mange flere fiender, gir hver fiende MINDRE XP jo senere det er
+// (xpScale), så levelingen går omtrent like fort som før.
 // Exploder-grupper tas bare med når echelon 2+ er aktiv.
 // =====================================================================
 namespace Difficulty {
     constexpr float SPAWN_DISTANCE = 950.0f;   // Utenfor skjermen, også med kameraet zoomet ut
-    constexpr int MAX_ALIVE = 500;             // Tak på fiender samtidig (ytelse)
+    constexpr int MAX_ALIVE = 800;             // Tak på fiender samtidig (ytelse)
 
-    int waveSize(int n) { return (int)(8 + 4 * n + 0.55f * n * n); }
+    // Gammel kurve (8 + 4n + 0.55n²) + et kubisk ledd som først merkes etter ca. 2 min
+    float baseWaveSize(int n) { return 8.0f + 4.0f * n + 0.55f * n * n; }
+    int waveSize(int n) {
+        float late = (float)std::max(0, n - 3);
+        return (int)(baseWaveSize(n) + 0.09f * late * late * late);
+    }
+    // XP per fiende: like mye XP per wave som med den gamle kurven (litt mindre sent)
+    float xpScale(int n) {
+        float s = baseWaveSize(n) / (float)waveSize(n);
+        return n >= 6 ? s * 0.85f : s;
+    }
 
     // Fiender blir sterkere jo lenger runden varer (m = minutter)
     float hpMult(float m)     { return 1.0f + 0.10f * m + 0.02f * m * m; }   // 10 min: x4
@@ -28,9 +40,9 @@ namespace Difficulty {
     // Sjanse for elite: 0 de første 2 minuttene, så 2 % + 0.6 % per minutt (maks 10 %)
     float eliteChance(float m) { return m < 2.0f ? 0.0f : fminf(0.10f, 0.02f + 0.006f * (m - 2.0f)); }
 
-    // Horde hvert 2. minutt, midt i waven (1:30, 3:30, 5:30 ...)
-    bool isHordeWave(int waveIndex) { return waveIndex % 4 == 3; }
-    int hordeSize(int n) { return 10 + 3 * n; }
+    // Horde hvert minutt, midt i waven (1:45, 2:45, 3:45 ...)
+    bool isHordeWave(int waveIndex) { return waveIndex >= 3 && waveIndex % 2 == 1; }
+    int hordeSize(int n) { return (int)(12 + 4 * n + 0.15f * n * n); }
 }
 
 std::vector<WaveDefinition> BuildWaves() {
@@ -113,21 +125,31 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
         lastHordeTime = gameTime;
         int n = currentWaveIndex + 1;
         int count = Difficulty::hordeSize(n);
-        EnemyType type = n < 8 ? EnemyType::LACKEY : EnemyType::FOOTMAN;
-        for (int i = 0; i < count; i++) {
-            float angle = (float)i / count * 2.0f * PI;
-            Vector2 pos = { playerPos.x + cosf(angle) * Difficulty::SPAWN_DISTANCE, playerPos.y + sinf(angle) * Difficulty::SPAWN_DISTANCE };
-            spawnEnemy(type, pos, enemies, enemyTexture);
-            // Den første er hordens kaptein: en elite som alltid bærer en skattekiste
-            if (i == 0 && !enemies.empty()) {
-                if (!enemies.back()->elite) enemies.back()->makeElite();
-                enemies.back()->chestCarrier = true;
+        // Blanding som blir tøffere: lakeier først, så soldater og troll, så armbrøstskyttere.
+        // Etter 7 min kommer hordene i to ringer, den ytre litt lenger ute.
+        int rings = n >= 14 ? 2 : 1;
+        for (int ring = 0; ring < rings; ring++) {
+            float dist = Difficulty::SPAWN_DISTANCE + ring * 220.0f;
+            for (int i = 0; i < count; i++) {
+                float angle = (float)i / count * 2.0f * PI + ring * 0.13f;
+                Vector2 pos = { playerPos.x + cosf(angle) * dist, playerPos.y + sinf(angle) * dist };
+                EnemyType type = EnemyType::LACKEY;
+                if (n >= 6) type = (i % 4 == 0) ? EnemyType::GOON : EnemyType::FOOTMAN;
+                if (n >= 10 && i % 5 == 2) type = EnemyType::ARCHER;
+                if (ring == 1) type = (i % 2 == 0) ? EnemyType::FOOTMAN : EnemyType::ARCHER;
+                spawnEnemy(type, pos, enemies, enemyTexture, 0.5f); // Hordefiender gir halv XP
+                // Den første er hordens kaptein: en elite som alltid bærer en skattekiste
+                if (ring == 0 && i == 0 && !enemies.empty()) {
+                    if (!enemies.back()->elite) enemies.back()->makeElite();
+                    enemies.back()->chestCarrier = true;
+                }
             }
         }
     }
 
-    if (spawnTimer >= spawnInterval && !spawnQueue.empty() && (int)enemies.size() < Difficulty::MAX_ALIVE) {
-        spawnTimer = 0.0f;
+    // Kan spawne flere per frame når waven er stor (sent i runden kommer det 20+ i sekundet)
+    while (spawnTimer >= spawnInterval && !spawnQueue.empty() && (int)enemies.size() < Difficulty::MAX_ALIVE) {
+        spawnTimer -= spawnInterval;
 
         EnemyType nextType = spawnQueue.back();
         spawnQueue.pop_back();
@@ -139,9 +161,11 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
         };
         spawnEnemy(nextType, spawnPos, enemies, enemyTexture);
     }
+    // Når taket er nådd skal det ikke hope seg opp et stort rykk som kommer med én gang
+    spawnTimer = std::min(spawnTimer, spawnInterval * 4.0f);
 }
 
-void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture) {
+void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture, float xpMult) {
     // Polymorf instansiering basert på type
     std::unique_ptr<Enemy> enemy;
     if (type == EnemyType::FOOTMAN) {
@@ -162,6 +186,15 @@ void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::
     enemy->applyEchelonModifiers(modifiers.enemyHpMult * Difficulty::hpMult(m),
                                  modifiers.enemyDamageMult * Difficulty::damageMult(m),
                                  modifiers.enemySpeedMult * Difficulty::speedMult(m));
+    // Mindre XP per fiende sent i runden (det kommer så mange flere). Tilfeldig avrunding,
+    // så en fiende med 2.4 XP gir 2 eller 3 (i snitt 2.4).
+    {
+        int n = (int)(gameTime / 30.0f) + 1;
+        float xp = enemy->xpValue * Difficulty::xpScale(n) * xpMult;
+        int whole = (int)xp;
+        if (GetRandomValue(0, 999) < (int)((xp - whole) * 1000.0f)) whole++;
+        enemy->xpValue = std::max(1, whole);
+    }
     if (type != EnemyType::EXPLODER && GetRandomValue(1, 1000) <= (int)(Difficulty::eliteChance(m) * 1000.0f)) {
         enemy->makeElite();
     }

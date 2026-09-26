@@ -83,6 +83,7 @@ public:
     float slowAmount = 0.0f;          // 0.5 = halv fart
     Vector2 knockVelocity = { 0, 0 }; // Dytt (bjeller, bumerang), dør ut raskt
     float knockbackScale = 1.0f;      // Store fiender dyttes mindre (bossen nesten ikke)
+    float damageTakenMult = 1.0f;     // < 1 = rustning (kongen i fase 2)
     bool chestCarrier = false;        // Slipper alltid en skattekiste (horde-kaptein)
     bool miniboss = false;            // Miniboss: slipper Kongens septer (se miniboss.hpp)
     const char* title = "";           // Navn som vises over HP-baren (minibosser)
@@ -140,18 +141,42 @@ public:
 // Jager spilleren, stopper opp for å varsle, og dasher så mot spilleren.
 class Boss : public Enemy {
 private:
-    enum class Phase { CHASE, WINDUP, DASH };
+    // Fase 1 (TRONE): sitter på tronen og skyter mønstre, sender dekreter og kaller inn vakter.
+    // Under 55 % HP: HOPPER ned (LEAP) og går over til fase 2 (JAKT): jager, stormer og tramper.
+    // Under 25 % HP: rasende – raskere, og skyter spiraler mens han jager.
+    enum class Mode { THRONE, LEAP, HUNT };
+    enum class Phase { CHASE, WINDUP, DASH, STOMP };
+    Mode mode = Mode::THRONE;
     Phase phase = Phase::CHASE;
     float phaseTimer = 0.0f;
     Vector2 dashDirection = { 0, 0 };
     Vector2 lastPlayerPos = { 0, 0 };
     float summonTimer = 0.0f;
 
+    // Tronemønstre
+    int throneAttack = 0;       // Hvilket mønster som går nå
+    float attackTimer = 1.5f;   // Pause før neste mønster
+    float patternTime = 0.0f;   // Hvor lenge mønsteret har gått
+    float shotTimer = 0.0f;
+    float spiralAngle = 0.0f;
+    int volleysLeft = 0;
+    int dashesLeft = 0;
+    float chaseShotTimer = 0.0f;
+    struct Decree { Vector2 pos; float t; };     // Rød sirkel som eksploderer når t når 1
+    std::vector<Decree> decrees;
+    Vector2 leapFrom = { 0, 0 }, leapTo = { 0, 0 };
+
+    void announce(const char* text);
+    void shootRing(int count, float speed, float offset, float dmg);
+    void shootFan(Vector2 dir, int count, float spreadDeg, float speed, float dmg);
+
 public:
-    // Under 50 % HP blir kongen rasende: raskere dash, kortere pauser og hjelpere
+    Vector2 thronePos = { 0, 0 };   // Settes av spillet: hvor tronen står
     bool enraged = false;
-    float enragedAt = -100.0f;  // Når raseriet startet (for varselteksten)
-    int summonsRequested = 0;   // Hvor mange lakeier spillet skal kalle inn rundt kongen
+    float enragedAt = -100.0f;      // Når siste store fasebytte skjedde (for varselteksten)
+    const char* announcement = "";  // Teksten som vises ("KONGEN REISER SEG!" osv.)
+    int summonsRequested = 0;       // Hvor mange vakter spillet skal kalle inn rundt kongen
+    bool onThrone() const { return mode == Mode::THRONE; }
 
     Boss(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;

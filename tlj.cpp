@@ -530,6 +530,7 @@ int main() {
                 auto boss = std::make_unique<Boss>(Vector2{ Arena::CENTER.x, Arena::CENTER.y - Arena::RADIUS * 0.6f }, enemyTexture);
                 boss->applyEchelonModifiers(runModifiers.enemyHpMult, runModifiers.enemyDamageMult, runModifiers.enemySpeedMult);
                 bossId = boss->id;
+                boss->thronePos = { Arena::CENTER.x, Arena::CENTER.y - Arena::RADIUS + 95.0f }; // Foran tronen
                 enemies.push_back(std::move(boss));
             }
 
@@ -571,7 +572,9 @@ int main() {
                 for (int i = 0; i < n; i++) {
                     float a = (float)i / n * 2.0f * PI;
                     Vector2 pos = ClampToArena({ kingPos.x + cosf(a) * 110.0f, kingPos.y + sinf(a) * 110.0f }, 20.0f);
-                    spawner.spawnEnemy(EnemyType::LACKEY, pos, enemies, enemyTexture);
+                    // Kongens vakter: fotsoldater og armbrøstskyttere, og lakeier når han er rasende
+                    EnemyType type = king->enraged ? EnemyType::LACKEY : (i % 3 == 0 ? EnemyType::ARCHER : EnemyType::FOOTMAN);
+                    spawner.spawnEnemy(type, pos, enemies, enemyTexture);
                     VfxDeath(pos, Color{ 255, 80, 60, 255 });
                 }
             }
@@ -1491,7 +1494,7 @@ int main() {
                 if (since >= 0.0f && since < 2.5f) {
                     float a = since < 2.0f ? 1.0f : (2.5f - since) / 0.5f;
                     UI::BeginCanvas();
-                    UI::DrawCenteredText("KONGEN ER RASENDE!", CX, 190.0f, 44.0f, Fade(Color{ 255, 70, 50, 255 }, a), 3.0f);
+                    UI::DrawCenteredText(static_cast<const Boss*>(e.get())->announcement, CX, 190.0f, 44.0f, Fade(Color{ 255, 70, 50, 255 }, a), 3.0f);
                     UI::EndCanvas();
                 }
             }

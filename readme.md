@@ -211,4 +211,18 @@ Notes:
    stjernefliser i bånd mellom. Begge ligger i én tekstur, så gulvet tegnes i én batch.
 4) Innstillinger -> Figurer: bytt mellom TEGNET og de gamle 3D-MODELLENE (lagres).
 
+// 11 oktober – fiendehav og en mye farligere konge
+1) Mange flere fiender sent i runden: samme rolige start, men wave-størrelsen har fått et kubisk ledd
+   (ca. 130 fiender i wave 10 og 750 i wave 20, dvs. over 20 i sekundet). Tak på 800 samtidig.
+2) Horder hvert minutt fra 1:45 (før: hvert 2. minutt), større og tøffere: soldater og troll fra 3 min,
+   armbrøstskyttere fra 5 min, og to ringer etter 7 min. Hver horde har fortsatt en elite-kaptein med kiste.
+3) Mindre XP per fiende jo senere det er (xpScale i spawner.cpp): hver wave gir omtrent like mye XP som før,
+   selv om det er mange flere fiender. Hordefiender gir halv XP. Krystaller som ligger tett slås sammen.
+4) Kongen (150 000 HP) har to faser:
+   - Fase 1, PÅ TRONEN: spiraler av septerkuler, vifter rett mot deg, kongelige dekreter
+     (røde sirkler som eksploderer) og vakter (soldater og armbrøstskyttere).
+   - Under 55 %: KONGEN REISER SEG! Hopper ned med en sjokkbølge og JAGER deg: tre storminger på rad,
+     tramp med stor eksplosjon og kulering, kuler bak seg etter hver storming. Rustning i denne fasen.
+   - Under 25 %: KONGEN ER RASENDE! Raskere, flere vakter og spiraler mens han jager.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj
