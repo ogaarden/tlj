@@ -1,6 +1,7 @@
 #include "player.hpp"
 #include "castle.hpp"
 #include "render3d.hpp"
+#include "clowns.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -30,8 +31,6 @@ void Player::update(float cameraRotation)
 
         // Klovnen peker i den retningen du trykker på skjermen (0 deg = rett opp)
         facingRotation = std::atan2(screenInput.x, -screenInput.y) * RAD2DEG;
-        if (screenInput.x < 0.0f) facingLeft = true;
-        else if (screenInput.x > 0.0f) facingLeft = false;
     }
 
     // 2. Transformer skjerm-bevegelsen til verdens-bevegelse basert på KAMERAROTASJONEN.
@@ -42,26 +41,36 @@ void Player::update(float cameraRotation)
         -screenInput.x * sinf(rad) + screenInput.y * cosf(rad)
     };
 
+    // Gangeanimasjon: klovnen snur seg mot der den går
+    isMoving = length > 0.0f;
+    if (isMoving) {
+        walkTime += deltaTime;
+        facingDir = worldMovement;
+    }
+
     // 3. Oppdater posisjonen i verden
     float currentSpeed = speed * (slowTimer > 0.0f ? (1.0f - slowAmount) : 1.0f);
     position.x += worldMovement.x * currentSpeed * deltaTime;
     position.y += worldMovement.y * currentSpeed * deltaTime;
 }
 
-namespace {
-    constexpr float PLAYER_SPRITE_HEIGHT = 56.0f;
-}
-
 void Player::drawShadow() const {
-    DrawShadow({ position.x + 4.0f, position.y + 4.0f }, 16.0f, 9.0f);
+    float w = ClownShadowWidth(clown);
+    DrawShadow({ position.x + 4.0f, position.y + 4.0f }, w, w * 0.6f);
 }
 
-void Player::drawSprite(const Camera3D& camera) const {
+void Player::drawModel() const {
     // Blålig når man er slowet, blinker rødt mens man er udødelig etter et treff
     Color tint = (slowTimer > 0.0f) ? SKYBLUE : WHITE;
     if (invulnerableTimer > 0.0f && ((int)(invulnerableTimer * 20.0f) % 2 == 0)) tint = RED;
 
-    DrawSpriteStanding(camera, texture, position, PLAYER_SPRITE_HEIGHT, facingLeft, tint);
+    ClownPose pose;
+    pose.position = position;
+    pose.facing = facingDir;
+    pose.walkTime = walkTime;
+    pose.moving = isMoving;
+    pose.tint = tint;
+    DrawClown(clown, pose);
 }
 
 // Beregn skade basert på Armor og Evasion

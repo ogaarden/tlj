@@ -66,5 +66,8 @@ Notes:
 2) Lydeffekter (syntetisert i audio.cpp): XP, gull, treff, kills, skade,
    level up, lyn, eksplosjon, gong i tronsalen, Royal Charge, seier, død, menyer
 3) Volumkontroll under Settings (lagres i save.txt)
+4) Kamera mer ovenfra (72 grader) med smal linse = nesten flatt 2D-perspektiv
+5) 3D-klovner: Jester (sirkusklovn), Wester (feit Wario-klovn), tok geek (lang nerd med briller)
+6) Karaktervalg viser klovnene roterende i 3D
 
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

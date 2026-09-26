@@ -17,9 +17,11 @@
 // =====================================================================
 
 namespace View3D {
-    constexpr float CAMERA_HEIGHT = 540.0f;   // Hvor høyt over bakken kameraet er
-    constexpr float CAMERA_DISTANCE = 315.0f; // Hvor langt bak spilleren kameraet er (gir ~60° vinkel)
-    constexpr float FOVY = 45.0f;
+    // Kameraet står langt unna med smal linse. Da blir perspektivet nesten flatt
+    // (som et 2D-spill), mens figurene fortsatt har volum, lys og skygge.
+    constexpr float CAMERA_PITCH = 72.0f;      // Vinkel ned mot bakken (90 = rett ovenfra)
+    constexpr float CAMERA_DISTANCE = 1550.0f; // Avstand fra kameraet til spilleren
+    constexpr float FOVY = 20.0f;              // Smal linse = lite perspektiv-forvrengning (lavere = mer zoom)
     constexpr int GROUND_SIZE = 2560;         // Hvor stort område av gulvet som tegnes rundt spilleren
 }
 
@@ -45,7 +47,8 @@ void ShadedSphere(Vector3 center, float radius, Color color, int rings = 8, int 
 void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadius, Color color, int slices = 12);
 void ShadedCube(Vector3 center, Vector3 size, float yawDegrees, Color color);
 
-// Sprite som alltid vender mot kameraet, med føttene på bakken
-void DrawSpriteStanding(const Camera3D& camera, Texture2D texture, Vector2 feet, float height, bool flipX, Color tint);
+// Ellipsoide (strukket kule) orientert etter en retning på gulvet.
+// radii = { fremover, opp, sidelengs }
+void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color, int rings = 8, int slices = 12);
 
 #endif // RENDER3D_HPP

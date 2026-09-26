@@ -34,11 +34,11 @@ void triangle(Vector3 a, Vector3 b, Vector3 c, Color ca, Color cb, Color cc) {
 } // namespace
 
 void InitRenderer3D() {
-    // Kameraet står ~830 enheter fra bakken. Standard nærplan (0.01-0.05) gir for dårlig
+    // Kameraet står ~1550 enheter fra bakken. Standard nærplan (0.01-0.05) gir for dårlig
     // dybdepresisjon på den avstanden, så figurer kan "forsvinne" inn i gulvet.
     // rlSetClipPlanes finnes fra raylib 5.5.
 #if defined(RAYLIB_VERSION_MAJOR) && (RAYLIB_VERSION_MAJOR > 5 || (RAYLIB_VERSION_MAJOR == 5 && RAYLIB_VERSION_MINOR >= 5))
-    rlSetClipPlanes(10.0, 5000.0);
+    rlSetClipPlanes(50.0, 6000.0);
 #endif
 
     groundTexture = LoadRenderTexture(View3D::GROUND_SIZE, View3D::GROUND_SIZE);
@@ -53,12 +53,16 @@ Camera3D MakeGameCamera(Vector2 focus, float yawDegrees) {
     // Samme konvensjon som 2D-kameraet: "opp" på skjermen er (-sin, -cos) i verden,
     // så kameraet står motsatt vei, bak spilleren.
     float yaw = yawDegrees * DEG2RAD;
+    float pitch = View3D::CAMERA_PITCH * DEG2RAD;
+    float height = sinf(pitch) * View3D::CAMERA_DISTANCE;
+    float back = cosf(pitch) * View3D::CAMERA_DISTANCE;
+
     Camera3D cam{};
     cam.target = ToWorld3D(focus, 0.0f);
     cam.position = {
-        focus.x + sinf(yaw) * View3D::CAMERA_DISTANCE,
-        View3D::CAMERA_HEIGHT,
-        focus.y + cosf(yaw) * View3D::CAMERA_DISTANCE
+        focus.x + sinf(yaw) * back,
+        height,
+        focus.y + cosf(yaw) * back
     };
     cam.up = { 0.0f, 1.0f, 0.0f };
     cam.fovy = View3D::FOVY;
@@ -203,17 +207,40 @@ void ShadedCube(Vector3 center, Vector3 size, float yawDegrees, Color color) {
     rlEnableBackfaceCulling();
 }
 
-void DrawSpriteStanding(const Camera3D& camera, Texture2D texture, Vector2 feet, float height, bool flipX, Color tint) {
-    // Kameraets "opp"-retning, så bunnen av spriten treffer bakken akkurat ved føttene
-    Vector3 forward = Vector3Normalize(Vector3Subtract(camera.target, camera.position));
-    Vector3 right = Vector3Normalize(Vector3CrossProduct(forward, { 0, 1, 0 }));
-    Vector3 up = Vector3CrossProduct(right, forward);
+void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color, int rings, int slices) {
+    // Lokale akser: fremover (f), opp (u) og sidelengs (s)
+    Vector3 f = { forward.x, 0.0f, forward.y };
+    if (Vector3Length(f) < 0.001f) f = { 0.0f, 0.0f, 1.0f };
+    f = Vector3Normalize(f);
+    Vector3 u = { 0.0f, 1.0f, 0.0f };
+    Vector3 sd = Vector3CrossProduct(u, f);
 
-    float width = height * (float)texture.width / (float)texture.height;
-    Vector3 center = Vector3Add(ToWorld3D(feet, 0.0f), Vector3Scale(up, height / 2.0f));
-    Rectangle source = { 0.0f, 0.0f, flipX ? -(float)texture.width : (float)texture.width, (float)texture.height };
-    // DrawBillboardRec holder spriten loddrett i verden (blir sammenklemt sett ovenfra).
-    // Med kameraets egen opp-retning vender spriten rett mot kameraet, som i Vampire Survivors.
-    Vector2 size = { width, height };
-    DrawBillboardPro(camera, texture, source, center, up, size, Vector2Scale(size, 0.5f), 0.0f, tint);
+    auto point = [&](float lat, float lon, Color& outColor) {
+        // Enhetskule-koordinater
+        float nf = cosf(lat) * cosf(lon), nu = sinf(lat), ns = cosf(lat) * sinf(lon);
+        Vector3 p = Vector3Add(center, Vector3Add(Vector3Scale(f, nf * radii.x), Vector3Add(Vector3Scale(u, nu * radii.y), Vector3Scale(sd, ns * radii.z))));
+        // Normalen på en strukket kule: del på radiene
+        Vector3 n = Vector3Normalize(Vector3Add(Vector3Scale(f, nf / radii.x), Vector3Add(Vector3Scale(u, nu / radii.y), Vector3Scale(sd, ns / radii.z))));
+        outColor = lit(color, n);
+        return p;
+    };
+
+    rlCheckRenderBatchLimit(rings * slices * 6);
+    rlDisableBackfaceCulling();
+    rlBegin(RL_TRIANGLES);
+    for (int i = 0; i < rings; i++) {
+        float lat0 = -PI / 2.0f + PI * i / rings;
+        float lat1 = -PI / 2.0f + PI * (i + 1) / rings;
+        for (int j = 0; j < slices; j++) {
+            float lon0 = 2.0f * PI * j / slices;
+            float lon1 = 2.0f * PI * (j + 1) / slices;
+            Color c00, c01, c10, c11;
+            Vector3 p00 = point(lat0, lon0, c00), p01 = point(lat0, lon1, c01);
+            Vector3 p10 = point(lat1, lon0, c10), p11 = point(lat1, lon1, c11);
+            triangle(p00, p10, p11, c00, c10, c11);
+            triangle(p00, p11, p01, c00, c11, c01);
+        }
+    }
+    rlEnd();
+    rlEnableBackfaceCulling();
 }

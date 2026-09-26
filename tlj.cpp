@@ -21,6 +21,7 @@
 #include "castle.hpp"
 #include "render3d.hpp"
 #include "audio.hpp"
+#include "clowns.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -119,6 +120,11 @@ int main() {
         characterTextures.push_back(LoadTexture(charData.texturePath.c_str()));
     }
 
+    // 3D-forhåndsvisning av klovnene på karaktervalg-skjermen (én liten scene per kort)
+    const int PREVIEW_W = 200, PREVIEW_H = 190;
+    std::vector<RenderTexture2D> clownPreviews;
+    for (size_t i = 0; i < characters.size(); i++) clownPreviews.push_back(LoadRenderTexture(PREVIEW_W, PREVIEW_H));
+
     // Last inn felles tekstur for fiender
     Texture2D enemyTexture = LoadTexture("assets/jester_real.png"); // Bytt ut med egen enemy.png om du har
 
@@ -185,6 +191,9 @@ int main() {
         if (runModifiers.noRegen) player.hpRegen = 0.0f;
 
         player.texture = characterTextures[selectedCharacter];
+        player.clown = choice.clown;
+        player.facingDir = { 0.0f, 1.0f };
+        player.walkTime = 0.0f;
 
         // Karakterens unike ability tar alltid første slot
         player.innateAbility = choice.innateAbility;
@@ -545,7 +554,35 @@ int main() {
             DrawText("VELG KARAKTER", Settings::SCREEN_WIDTH / 2 - 130, 50, 30, WHITE);
 
             int cardWidth = 220;
-            int cardHeight = 350;
+            int cardHeight = 430;
+
+            // Tegn hver klovn i sin egen lille 3D-scene
+            Camera3D previewCam{};
+            previewCam.position = { 0.0f, 52.0f, 125.0f };
+            previewCam.target = { 0.0f, 30.0f, 0.0f };
+            previewCam.up = { 0.0f, 1.0f, 0.0f };
+            previewCam.fovy = 38.0f;
+            previewCam.projection = CAMERA_PERSPECTIVE;
+            for (size_t i = 0; i < characters.size(); i++) {
+                bool isSelected = (static_cast<int>(i) == selectedCharacter);
+                float spin = (float)GetTime() * (isSelected ? 1.6f : 0.5f) + i * 2.0f;
+
+                BeginTextureMode(clownPreviews[i]);
+                ClearBackground(isSelected ? Color{ 45, 38, 25, 255 } : Color{ 24, 22, 32, 255 });
+                BeginMode3D(previewCam);
+                    // Liten sokkel med rød løper-farge og gullkant
+                    ShadedCylinder({ 0.0f, -6.0f, 0.0f }, { 0.0f, 0.0f, 0.0f }, 34.0f, 32.0f, Color{ 212, 175, 55, 255 }, 24);
+                    ShadedCylinder({ 0.0f, -0.5f, 0.0f }, { 0.0f, 0.2f, 0.0f }, 30.0f, 30.0f, Color{ 130, 20, 30, 255 }, 24);
+
+                    ClownPose pose;
+                    pose.position = { 0.0f, 0.0f };
+                    pose.facing = { sinf(spin), cosf(spin) };
+                    pose.moving = isSelected;               // Den valgte klovnen går på stedet
+                    pose.walkTime = (float)GetTime() * 0.8f;
+                    DrawClown(characters[i].clown, pose);
+                EndMode3D();
+                EndTextureMode();
+            }
             int startX = (Settings::SCREEN_WIDTH - (static_cast<int>(characters.size()) * cardWidth + (static_cast<int>(characters.size()) - 1) * 20)) / 2;
 
             for (size_t i = 0; i < characters.size(); i++) {
@@ -558,26 +595,26 @@ int main() {
                 // Navn
                 DrawText(characters[i].name.c_str(), posX + 15, 115, 22, isSelected ? YELLOW : WHITE);
 
-                // Karakterbilde (skalert til 80x80 px midt på kortet)
-                Texture2D icon = characterTextures[i];
-                Rectangle srcRect = { 0.0f, 0.0f, (float)icon.width, (float)icon.height };
-                Rectangle destRect = { posX + (cardWidth / 2.0f) - 40.0f, 150.0f, 80.0f, 80.0f };
-                DrawTexturePro(icon, srcRect, destRect, { 0.0f, 0.0f }, 0.0f, WHITE);
+                // 3D-klovnen (render-teksturer er lagret opp-ned, derav negativ høyde)
+                Rectangle srcRect = { 0.0f, 0.0f, (float)PREVIEW_W, -(float)PREVIEW_H };
+                Rectangle destRect = { posX + (cardWidth - PREVIEW_W) / 2.0f, 145.0f, (float)PREVIEW_W, (float)PREVIEW_H };
+                DrawTexturePro(clownPreviews[i].texture, srcRect, destRect, { 0.0f, 0.0f }, 0.0f, WHITE);
 
                 // Beskrivelse og oppgangende stats med Shop-bonuser
                 float finalHp = characters[i].maxHp * shop.hpMult();
                 float finalSpeed = characters[i].speed * shop.speedMult();
                 float finalArmor = characters[i].armor + shop.armorBonus();
 
-                DrawText(characters[i].description.c_str(), posX + 15, 240, 12, GRAY);
-                DrawText(TextFormat("HP: %.0f", finalHp), posX + 15, 270, 16, WHITE);
-                DrawText(TextFormat("Fart: %.0f", finalSpeed), posX + 15, 295, 16, WHITE);
-                DrawText(TextFormat("Armor: %.1f", finalArmor), posX + 15, 320, 16, WHITE);
-                DrawText(TextFormat("Radius: %.0f", characters[i].lootRadius), posX + 15, 345, 16, WHITE);
-                DrawText(TextFormat("Aegis: +%d", shop.aegisBonus()), posX + 15, 370, 16, GREEN);
+                int textY = 342;
+                DrawText(characters[i].description.c_str(), posX + 15, textY, 12, GRAY);
+                DrawText(TextFormat("Innate: %s", GetAbilityDefinition(characters[i].innateAbility).name.c_str()), posX + 15, textY + 20, 16, GOLD);
+                DrawText(TextFormat("HP: %.0f", finalHp), posX + 15, textY + 44, 16, WHITE);
+                DrawText(TextFormat("Fart: %.0f", finalSpeed), posX + 15, textY + 64, 16, WHITE);
+                DrawText(TextFormat("Armor: %.1f", finalArmor), posX + 15, textY + 84, 16, WHITE);
+                DrawText(TextFormat("Radius: %.0f   Aegis: +%d", characters[i].lootRadius, shop.aegisBonus()), posX + 15, textY + 104, 16, WHITE);
             }
 
-            DrawText("[A/D] Velg karakter   |   [ENTER] Videre   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 290, 480, 20, GRAY);
+            DrawText("[A/D] Velg karakter   |   [ENTER] Videre   |   [ESC] Tilbake", Settings::SCREEN_WIDTH / 2 - 290, 560, 20, GRAY);
         }
         else if (currentState == ECHELON_SELECT) {
             DrawText("VELG ECHELON", Settings::SCREEN_WIDTH / 2 - MeasureText("VELG ECHELON", 32) / 2, 30, 32, ORANGE);
@@ -698,7 +735,7 @@ int main() {
 
                 for (auto& enemy : enemies) enemy->draw3D();
                 for (auto& w : player.weapons) w->draw3D();
-                player.drawSprite(view);
+                player.drawModel();
                 DrawExplosions3D();
             EndMode3D();
 
@@ -860,6 +897,7 @@ int main() {
     UnloadTexture(enemyTexture);
 
     saveProgress();
+    for (auto& rt : clownPreviews) UnloadRenderTexture(rt);
     UnloadRenderer3D();
     UnloadGameAudio();
     CloseWindow();

@@ -6,6 +6,7 @@
 #include <memory>
 #include "enemy.hpp"
 #include "weapon.hpp"
+#include "character.hpp"
 
 struct Player {
 
@@ -54,10 +55,14 @@ struct Player {
     float facingRotation = 0.0f;
 
     void update(float cameraRotation = 0.0f);
-    bool facingLeft = false; // Speilvend spriten når man går mot venstre på skjermen
+    // 3D-klovnen og gangeanimasjonen
+    ClownStyle clown = ClownStyle::JESTER;
+    Vector2 facingDir = { 0.0f, 1.0f }; // Retningen klovnen ser på gulvet (starter mot kameraet)
+    float walkTime = 0.0f;
+    bool isMoving = false;
 
-    void drawShadow() const;                   // I gulvlaget
-    void drawSprite(const Camera3D& camera) const; // I 3D-laget
+    void drawShadow() const; // I gulvlaget
+    void drawModel() const;  // I 3D-laget
     float takeDamage(float rawDamage); // Returnerer faktisk skade (0 hvis dodge)
     CombatModifiers combatModifiers() const;
     void addXP(int amount);

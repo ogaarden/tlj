@@ -5,6 +5,13 @@
 #include <vector>
 #include "ability_types.hpp"
 
+// Hvilken 3D-klovn karakteren tegnes som (se clowns.cpp)
+enum class ClownStyle {
+    JESTER, // Helt vanlig sirkusklovn
+    WESTER, // Feit, Wario-aktig klovn
+    GEEK    // Lang og tynn nerde-klovn med briller
+};
+
 struct CharacterData {
     std::string name;
     std::string description;
@@ -23,6 +30,8 @@ struct CharacterData {
     // og kan aldri dukke opp som valg for de andre karakterene.
     // Stats og level-oppgraderinger for abilityen ligger i abilities.cpp.
     AbilityId innateAbility;
+
+    ClownStyle clown; // Hvilken 3D-modell som brukes
 };
 // Enkel hjelpefunksjon som returnerer alle karakterene
 inline std::vector<CharacterData> GetAvailableCharacters() {
@@ -40,6 +49,7 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .size         = 1.0f,
             .xpMultiplier = 1.0f,
             .innateAbility = AbilityId::TREFORK,
+            .clown = ClownStyle::JESTER,
         },
 
         // --- WESTER ---
@@ -55,6 +65,7 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .size         = 2.3f, // Feitere/større
             .xpMultiplier = 1.0f,
             .innateAbility = AbilityId::GROUND_SLAM,
+            .clown = ClownStyle::WESTER,
         },
 
         // --- TOK GEEK ---
@@ -70,6 +81,7 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .size         = 0.9f,
             .xpMultiplier = 1.5f,  // Høyere XP-rate som sin unike trait
             .innateAbility = AbilityId::RICOCHET,
+            .clown = ClownStyle::GEEK,
         }
     };
 }
