@@ -13,6 +13,10 @@ void SpawnExplosion(Vector2 position, float radius, float damage);
 // fra nye eksplosjoner som treffer (0 hvis ingen).
 float UpdateExplosions(float deltaTime, Vector2 playerPos, float playerRadius);
 
+// Granat fra en kanonér: flyr i en bue fra `from` til `to` på `flightTime` sekunder
+// (med rød varselsirkel på gulvet), og eksploderer når den lander.
+void SpawnMortarShell(Vector2 from, Vector2 to, float flightTime, float radius, float damage);
+
 void DrawExplosions();   // På gulvet (i gulvlaget)
 void DrawExplosions3D(); // Ildkule i 3D
 void ClearExplosions();

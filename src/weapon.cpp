@@ -30,7 +30,7 @@ void ProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std:
                 .direction = dir,
                 .speed = projSpeed(),
                 .damage = dmg,
-                .lifetime = 2.0f,
+                .lifetime = 2.8f,
                 .pierceLeft = stats.pierce,
                 .hitEnemyIds = {}
             });
@@ -191,7 +191,7 @@ void BouncingProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vec
                 .direction = dir,
                 .speed = projSpeed(),
                 .damage = stats.damage * mods.damageMult,
-                .lifetime = 3.0f,
+                .lifetime = 4.2f,
                 .bouncesLeft = stats.bounces,
                 .bounceRange = stats.bounceRange,
                 .targetId = target->id,

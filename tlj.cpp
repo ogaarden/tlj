@@ -54,8 +54,8 @@ enum GameState {
 // og alt i shoppen koster ~9100 gull -> ca. 30-35 gode runs for å kjøpe alt.
 // =====================================================================
 namespace Rewards {
-    constexpr float GOLD_PER_MINUTE = 10.0f;
-    constexpr int GOLD_PER_LEVEL = 3;
+    constexpr float GOLD_PER_MINUTE = 6.0f;
+    constexpr int GOLD_PER_LEVEL = 1;
     constexpr int BOSS_GOLD_PER_ECHELON = 100; // Bonus for å slå bossen (x echelon-nummer)
     const char* SAVE_FILE = "save.txt";
 }
@@ -507,6 +507,7 @@ int main() {
             // --- TIMEREN ER FERDIG: TELEPORTER TIL BOSS-ARENAEN ---
             if (!inBossArena && spawner.gameTime >= GetBossTimer(selectedEchelon)) {
                 inBossArena = true;
+                spawner.decree = Decree::NONE; // Dekretene gjelder ikke i tronsalen
                 arenaIntroTimer = Arena::INTRO_TIME;
                 PlaySfx(Sfx::BOSS_GONG);
 
@@ -543,6 +544,16 @@ int main() {
             } else {
                 // Oppdater spawneren (spawner fiender rundt spilleren)
                 spawner.update(deltaTime, player.position, enemies, enemyTexture);
+                // Gong når kongen leser opp et nytt dekret
+                static float gongFor = -1.0f; // decreeStart for dekretet det sist ble spilt gong for
+                if (spawner.gameTime < 1.0f) gongFor = -1.0f; // Ny runde
+                if (spawner.decree != Decree::NONE && spawner.decreeStart != gongFor) {
+                    gongFor = spawner.decreeStart;
+                    PlaySfxPitch(Sfx::BOSS_GONG, 1.25f);
+                }
+                // Kongens fest: alle vanlige fiender går fortere så lenge dekretet varer
+                if (spawner.decree == Decree::FEAST)
+                    for (auto& e : enemies) if (!e->miniboss) e->hasteTimer = 0.2f;
             }
             camera.target = player.position;
 
@@ -562,6 +573,26 @@ int main() {
                     if (inBossArena) enemy->position = ClampToArena(enemy->position, enemy->hitRadius);
                     else ResolvePillarCollision(enemy->position, enemy->hitRadius * 0.8f, player.position, enemy->speed * 0.7f * deltaTime);
                 }
+            }
+
+            // Auraer: presten helbreder og trommeslageren gir fart til fiendene rundt seg
+            for (auto& s : enemies) {
+                Enemy::Aura aura = s->aura();
+                if (aura == Enemy::Aura::NONE) continue;
+                if (aura == Enemy::Aura::HEAL && !s->auraPulse) continue;
+                s->auraPulse = false;
+                float r2 = s->auraRadius() * s->auraRadius();
+                bool healedAny = false;
+                for (auto& e : enemies) {
+                    if (e->miniboss || e->id == bossId) continue;
+                    if (Vector2DistanceSqr(e->position, s->position) > r2) continue;
+                    if (aura == Enemy::Aura::HASTE) { e->hasteTimer = 0.2f; continue; }
+                    if (e->hp >= e->maxHp) continue;
+                    e->hp = std::min(e->maxHp, e->hp + std::max(1, e->maxHp / 8)); // 12.5 % av maks-HP
+                    VfxHit(e->position, Color{ 255, 220, 120, 255 });
+                    healedAny = true;
+                }
+                if (healedAny) VfxDeath(s->position, Color{ 255, 215, 110, 255 });
             }
 
             // Den rasende kongen kaller inn lakeier i en ring rundt seg
@@ -1235,23 +1266,33 @@ int main() {
 
                 // Mange fiender -> færre trekanter per fiende (de er små på skjermen uansett)
                 SetShapeDetail(1.0f - Clamp(((float)enemies.size() - 80.0f) / 300.0f, 0.0f, 0.45f));
+                const bool animate = currentState == GAMEPLAY; // Figurene står stille i menyer og pause
                 for (auto& enemy : enemies) {
                     // Nye fiender stiger opp av gulvet; elite-fiender er større. Treff gir hvitt glimt.
                     float rise = std::min(1.0f, enemy->age / 0.45f);
                     rise = 1.0f - (1.0f - rise) * (1.0f - rise);
                     float scale = enemy->modelScale * (0.5f + 0.5f * rise);
                     if (HasSprite(enemy->spriteId())) {
-                        // Tegnet figur: hopper og vugger i takt med gangen
+                        // Tegnet figur: går med beina, snur seg som en papirfigur
                         float w = enemy->walkCycle();
+                        if (animate) {
+                            // Hvor fort den faktisk beveger seg (står stille når den sikter, slår osv.)
+                            float moved = enemy->spriteLastPos.x > 1e8f ? 0.0f : Vector2Distance(enemy->position, enemy->spriteLastPos);
+                            float target = Clamp(moved / fmaxf(deltaTime, 0.001f) / 45.0f, 0.0f, 1.0f);
+                            enemy->spriteStride += (target - enemy->spriteStride) * fminf(1.0f, deltaTime * 10.0f);
+                            enemy->spriteLastPos = enemy->position;
+                            UpdateSpriteTurn(enemy->spriteTurn, view, enemy->facing, deltaTime);
+                        }
                         SpriteDraw sd;
                         sd.id = enemy->spriteId();
                         sd.feet = enemy->position;
                         sd.height = SpriteBaseHeight(sd.id) * enemy->modelScale * (0.6f + 0.4f * rise);
-                        sd.flip = FacesLeftOnScreen(view, enemy->facing);
+                        sd.flip = TurnFlip(enemy->spriteTurn);
+                        sd.widthScale = TurnWidth(enemy->spriteTurn);
+                        sd.walk = w;
+                        sd.stride = enemy->spriteStride;
                         sd.flash = enemy->hitFlash * 0.85f;
-                        sd.squash = sinf(w * 2.0f) * 0.6f;
-                        sd.lean = sinf(w) * 5.0f;
-                        sd.hop = fabsf(sinf(w)) * 3.0f * enemy->modelScale;
+                        sd.lean = sinf(w) * 2.5f * enemy->spriteStride;
                         sd.sink = (1.0f - rise) * sd.height;
                         sd.tint = enemy->spriteTint();
                         if (enemy->slowTimer > 0.0f) sd.tint = ColorTint(sd.tint, Color{ 170, 210, 255, 255 });
@@ -1274,12 +1315,19 @@ int main() {
                     sd.id = clownSprite(player.clown);
                     sd.feet = player.position;
                     sd.height = SpriteBaseHeight(sd.id);
-                    sd.flip = FacesLeftOnScreen(view, player.facingDir);
-                    float w = player.walkTime * 1.0f;
+                    static float playerTurn = 0.0f, playerStride = 0.0f, playerStep = 0.0f;
+                    if (animate) {
+                        UpdateSpriteTurn(playerTurn, view, player.facingDir, deltaTime);
+                        playerStride += ((player.isMoving ? 1.0f : 0.0f) - playerStride) * fminf(1.0f, deltaTime * 10.0f);
+                        if (player.isMoving) playerStep += deltaTime * player.speed * 0.045f; // Kadens følger farten
+                    }
+                    sd.flip = TurnFlip(playerTurn);
+                    sd.widthScale = TurnWidth(playerTurn);
+                    sd.walk = playerStep;
+                    sd.stride = playerStride;
                     float breathe = sinf(uiTime * 2.5f);
-                    sd.squash = player.isMoving ? sinf(w * 2.0f) * 0.7f : breathe * 0.3f;
-                    sd.lean = player.isMoving ? sinf(w) * 6.0f : 0.0f;
-                    sd.hop = player.isMoving ? fabsf(sinf(w)) * 5.0f : 0.0f;
+                    sd.squash = breathe * 0.3f * (1.0f - playerStride);
+                    sd.lean = sinf(playerStep) * 2.5f * playerStride - 3.0f * playerStride * (sd.flip ? -1.0f : 1.0f); // Lener seg litt frem når han går
                     if (!player.weapons.empty()) {
                         float p = player.weapons[0]->cooldownProgress();
                         if (p < 0.2f) sd.squash -= (1.0f - p / 0.2f) * 0.8f; // Liten "puff" når standardvåpenet brukes
@@ -1479,6 +1527,30 @@ int main() {
                     UI::DrawCenteredText(minibossAnnounceText.c_str(), CX, 230.0f, 36.0f, Fade(Color{ 210, 120, 255, 255 }, a), 3.0f);
                     UI::EndCanvas();
                 }
+            }
+
+            // --- KONGELIGE DEKRETER ---
+            if (!inBossArena && spawner.decree != Decree::NONE) {
+                float since = spawner.gameTime - spawner.decreeStart;
+                float left = spawner.decreeLeft();
+                if (spawner.decree == Decree::BLOOD_MOON) {
+                    // Rødt skjær over hele skjermen
+                    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(Color{ 120, 0, 10, 255 }, 0.16f), Fade(Color{ 60, 0, 0, 255 }, 0.06f));
+                }
+                UI::BeginCanvas();
+                if (since < 3.5f) {
+                    // Stort opprop når dekretet kommer
+                    float a = since < 2.8f ? 1.0f : (3.5f - since) / 0.7f;
+                    float grow = 1.0f + 0.25f * fmaxf(0.0f, 1.0f - since * 4.0f);
+                    UI::DrawCenteredText("KONGELIG DEKRET", CX, 150.0f, 22.0f, Fade(UI::GOLD_LIGHT, a), 2.0f);
+                    UI::DrawCenteredText(DecreeTitle(spawner.decree), CX, 178.0f, 46.0f * grow, Fade(Color{ 255, 205, 90, 255 }, a), 3.0f);
+                    UI::DrawCenteredText(DecreeText(spawner.decree), CX, 234.0f, 20.0f, Fade(WHITE, a), 2.0f);
+                } else {
+                    // Lite skilt under klokka resten av tiden
+                    const char* label = TextFormat("%s  %d", DecreeTitle(spawner.decree), (int)ceilf(left));
+                    UI::DrawCenteredText(label, CX, 96.0f, 18.0f, Color{ 255, 205, 90, 255 }, 2.0f);
+                }
+                UI::EndCanvas();
             }
 
             // --- HORDE-VARSEL ---

@@ -7,6 +7,19 @@
 #include "enemy.hpp"
 #include "echelon.hpp"
 
+// Kongelige dekreter: hvert 2. minutt fra 2:30 bestemmer kongen noe nytt i 30 sekunder.
+// Alle gjør runden farligere, men de fleste gir også noe tilbake.
+enum class Decree {
+    NONE,
+    FEAST,       // Kongens fest: fiendene går 40 % fortere, men gir dobbelt XP
+    BLOOD_MOON,  // Blodmåne: nye fiender slår 50 % hardere, men slipper mye mer gull
+    HUNT,        // Den store jakten: tre hundeflokker slippes løs rundt deg
+    MUSTER,      // Mobilisering: dobbelt så mange fiender, +50 % XP
+    COUNT
+};
+const char* DecreeTitle(Decree d);
+const char* DecreeText(Decree d);
+
 struct EnemyGroup {
     EnemyType type;
     int count;
@@ -24,12 +37,22 @@ public:
     float spawnInterval = 1.0f;
     float lastHordeTime = -100.0f; // Når siste horde kom (HUD-en viser et varsel)
 
+    // Dekretet som gjelder nå (NONE mellom dekretene), og når det startet
+    static constexpr float DECREE_FIRST = 150.0f;
+    static constexpr float DECREE_EVERY = 120.0f;
+    static constexpr float DECREE_LENGTH = 30.0f;
+    Decree decree = Decree::NONE;
+    float decreeStart = -100.0f;
+    float decreeLeft() const { return decree == Decree::NONE ? 0.0f : decreeStart + DECREE_LENGTH - gameTime; }
+
 private:
     int currentWaveIndex = -1;
     EchelonModifiers modifiers;
     std::vector<EnemyType> spawnQueue;
 
     int hordeSpawnedWave = -1;
+    int decreesStarted = 0;
+    Decree lastDecree = Decree::NONE;
 
     void spawnWave(int waveIndex);
 

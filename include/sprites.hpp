@@ -16,6 +16,7 @@
 enum class SpriteId {
     JESTER, WESTER, GEEK, PIERROT,                       // Spillbare klovner
     FOOTMAN, GOON, LACKEY, EXPLODER, ARCHER,             // Vanlige fiender
+    HOUND, PRIEST, DRUMMER, CANNONEER,                   // Kongens hunder og tjenere (fra 2-4 min)
     EXECUTIONER, MAGUS, IRON_KNIGHT, KING,               // Minibosser og kongen
     COUNT
 };
@@ -37,6 +38,9 @@ struct SpriteDraw {
     Vector2 feet;          // Posisjon på gulvet
     float height;          // Høyde i verden
     bool flip;             // Speilvend (figurene ser mot høyre i bildet)
+    float widthScale = 1.0f; // 0..1: figuren snur seg (smalner inn og vider ut igjen, som en papirfigur)
+    float walk = 0.0f;     // Fase i gangen (radianer): styrer hvilket bein som er fremme
+    float stride = 0.0f;   // 0 = står stille, 1 = full gange
     float flash = 0.0f;    // 0..1 hvitt treffglimt
     float squash = 0.0f;   // -1..1: + = høy og smal, - = lav og bred
     float lean = 0.0f;     // Vipping i grader (gange)
@@ -49,5 +53,10 @@ void DrawQueuedSprites(const Camera3D& camera); // Kalles inne i BeginMode3D
 
 // Er figuren vendt mot venstre på skjermen? (for speilvending)
 bool FacesLeftOnScreen(const Camera3D& camera, Vector2 facing);
+// Myk snuing: `turn` går mot -1 (venstre) eller 1 (høyre) når figuren bytter retning.
+// Gir flip og widthScale til SpriteDraw. Litt dødsone, så figurer som går rett opp/ned ikke flakker.
+void UpdateSpriteTurn(float& turn, const Camera3D& camera, Vector2 facing, float deltaTime);
+inline bool TurnFlip(float turn) { return turn < 0.0f; }
+inline float TurnWidth(float turn) { return turn < 0.0f ? (-turn > 0.12f ? -turn : 0.12f) : (turn > 0.12f ? turn : 0.12f); }
 
 #endif // SPRITES_HPP

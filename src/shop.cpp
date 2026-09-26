@@ -9,11 +9,11 @@
 
 // =====================================================================
 // BALANSE
-// Gull er metaprogresjon: målet er at det tar ~30-40 gode runs å kjøpe alt,
+// Gull er metaprogresjon: målet er at det tar ~60+ gode runs å kjøpe alt,
 // og at spillet da er ganske enkelt. Prisen øker med COST_GROWTH per nivå.
 // =====================================================================
 namespace {
-    constexpr float COST_GROWTH = 1.4f;
+    constexpr float COST_GROWTH = 1.5f;
 }
 
 int ShopItem::cost() const {
@@ -22,20 +22,20 @@ int ShopItem::cost() const {
 
 Shop::Shop() {
     //            oppgradering              lagringsnøkkel  navn                      beskrivelse (per nivå)          pris  maks
-    items.push_back({ ShopUpgrade::VITALITY,     "vitality",   "Vitality",               "+10% maks HP",                  60,  5 });
-    items.push_back({ ShopUpgrade::ARMOR,        "armor",      "Reinforced Armor",       "+3 armor",                      50,  5 });
-    items.push_back({ ShopUpgrade::REGEN,        "regen",      "Regeneration",           "+0.4 HP per sekund",            60,  5 });
-    items.push_back({ ShopUpgrade::EVASION,      "evasion",    "Float like a butterfly", "+4% evasion",                   60,  5 });
-    items.push_back({ ShopUpgrade::SPEED,        "speed",      "Swift Boots",            "+5% fart",                      50,  5 });
-    items.push_back({ ShopUpgrade::MIGHT,        "might",      "Might",                  "+10% skade",                    80,  5 });
-    items.push_back({ ShopUpgrade::HASTE,        "haste",      "Haste",                  "-5% cooldown",                  80,  5 });
-    items.push_back({ ShopUpgrade::AREA,         "area",       "Area",                   "+10% radius og treffomraade",   60,  5 });
-    items.push_back({ ShopUpgrade::PROJECTILE,   "projectile", "Projectile count",       "+1 prosjektil",                200,  3 });
-    items.push_back({ ShopUpgrade::MAGNET,       "magnet",     "Loot Magnet",            "+30 pickup-radius",             40,  5 });
-    items.push_back({ ShopUpgrade::GROWTH,       "growth",     "Growth",                 "+8% XP",                        60,  5 });
-    items.push_back({ ShopUpgrade::GREED,        "greed",      "Greed",                  "+10% gull",                     70,  5 });
-    items.push_back({ ShopUpgrade::EXTRA_CHOICE, "choice",     "Flere valg",             "+1 valg ved level up",         400,  1 });
-    items.push_back({ ShopUpgrade::AEGIS,        "aegis",      "Aegis Protection",       "+1 ekstra liv",                500,  1 });
+    items.push_back({ ShopUpgrade::VITALITY,     "vitality",   "Vitality",               "+10% maks HP",                  90,  5 });
+    items.push_back({ ShopUpgrade::ARMOR,        "armor",      "Reinforced Armor",       "+3 armor",                      75,  5 });
+    items.push_back({ ShopUpgrade::REGEN,        "regen",      "Regeneration",           "+0.4 HP per sekund",            90,  5 });
+    items.push_back({ ShopUpgrade::EVASION,      "evasion",    "Float like a butterfly", "+4% evasion",                   90,  5 });
+    items.push_back({ ShopUpgrade::SPEED,        "speed",      "Swift Boots",            "+5% fart",                      75,  5 });
+    items.push_back({ ShopUpgrade::MIGHT,        "might",      "Might",                  "+10% skade",                   120,  5 });
+    items.push_back({ ShopUpgrade::HASTE,        "haste",      "Haste",                  "-5% cooldown",                 120,  5 });
+    items.push_back({ ShopUpgrade::AREA,         "area",       "Area",                   "+10% radius og treffomraade",   90,  5 });
+    items.push_back({ ShopUpgrade::PROJECTILE,   "projectile", "Projectile count",       "+1 prosjektil",                300,  3 });
+    items.push_back({ ShopUpgrade::MAGNET,       "magnet",     "Loot Magnet",            "+30 pickup-radius",             60,  5 });
+    items.push_back({ ShopUpgrade::GROWTH,       "growth",     "Growth",                 "+8% XP",                        90,  5 });
+    items.push_back({ ShopUpgrade::GREED,        "greed",      "Greed",                  "+10% gull",                    105,  5 });
+    items.push_back({ ShopUpgrade::EXTRA_CHOICE, "choice",     "Flere valg",             "+1 valg ved level up",         600,  1 });
+    items.push_back({ ShopUpgrade::AEGIS,        "aegis",      "Aegis Protection",       "+1 ekstra liv",                750,  1 });
 }
 
 int Shop::level(ShopUpgrade upgrade) const {

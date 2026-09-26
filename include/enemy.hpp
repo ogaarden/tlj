@@ -12,7 +12,11 @@ enum class EnemyType {
     GOON,
     LACKEY,
     EXPLODER,
-    ARCHER   // Armbrøstskytter: holder avstand og skyter piler
+    ARCHER,     // Armbrøstskytter: holder avstand og skyter piler
+    HOUND,      // Kongens hund: kommer i flokk, kryper sammen og hopper på deg
+    PRIEST,     // Hoffprest: holder seg bak og helbreder fiendene rundt seg
+    DRUMMER,    // Trommeslager: fiendene rundt ham går mye fortere
+    CANNONEER   // Kanonér: lobber granater som lander der du står (rød sirkel)
 };
 
 struct Pickup;
@@ -74,6 +78,10 @@ public:
     float age = 0.0f;        // Sekunder siden den spawnet (brukes til å stige opp av gulvet)
     bool elite = false;      // Elite: større, mye mer HP og loot, gyllen aura
     float modelScale = 1.0f; // Hele 3D-modellen skaleres rundt føttene
+    // Papirfiguren: snuing (-1..1), hvor mye den går (0..1) og hvor den stod forrige frame
+    float spriteTurn = 0.0f;
+    float spriteStride = 0.0f;
+    Vector2 spriteLastPos = { 1e9f, 1e9f };
 
     void makeElite();
     float walkCycle() const;
@@ -86,6 +94,12 @@ public:
     float damageTakenMult = 1.0f;     // < 1 = rustning (kongen i fase 2)
     bool chestCarrier = false;        // Slipper alltid en skattekiste (horde-kaptein)
     bool miniboss = false;            // Miniboss: slipper Kongens septer (se miniboss.hpp)
+    float hasteTimer = 0.0f;          // Trommeslagerens takt: går 40 % fortere så lenge denne er > 0
+    // Aura (prest og trommeslager): spill-løkka bruker den på fiendene rundt
+    enum class Aura { NONE, HEAL, HASTE };
+    virtual Aura aura() const { return Aura::NONE; }
+    virtual float auraRadius() const { return 0.0f; }
+    bool auraPulse = false;           // Presten: satt når den skal helbrede (spill-løkka nullstiller)
     const char* title = "";           // Navn som vises over HP-baren (minibosser)
     void applySlow(float amount, float duration);
     void knockBack(Vector2 direction, float strength);
@@ -226,6 +240,56 @@ public:
     void drawVfx() const override;
     int contactDamage() const override { return damage / 2; }
     SpriteId spriteId() const override { return SpriteId::ARCHER; }
+};
+
+// Kongens hund: løper i flokk, kryper sammen (varsel) og kaster seg mot deg
+class Hound : public Enemy {
+    enum class State { RUN, CROUCH, LUNGE };
+    State state = State::RUN;
+    float timer = 0.0f;
+    float lungeCooldown = 1.0f;
+    Vector2 lungeDir = { 0, 1 };
+public:
+    Hound(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void draw() const override;
+    SpriteId spriteId() const override { return SpriteId::HOUND; }
+    Color spriteTint() const override;
+};
+
+// Hoffprest: holder avstand og helbreder alle fiender i nærheten hvert 1.6 sek. Drep ham først!
+class Priest : public Enemy {
+    float pulseTimer = 1.6f;
+public:
+    Priest(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void drawVfx() const override;
+    Aura aura() const override { return Aura::HEAL; }
+    float auraRadius() const override { return 190.0f; }
+    SpriteId spriteId() const override { return SpriteId::PRIEST; }
+};
+
+// Trommeslager: marsjerer med de andre, og alle rundt ham går 40 % fortere
+class Drummer : public Enemy {
+public:
+    Drummer(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void drawVfx() const override;
+    Aura aura() const override { return Aura::HASTE; }
+    float auraRadius() const override { return 210.0f; }
+    SpriteId spriteId() const override { return SpriteId::DRUMMER; }
+};
+
+// Kanonér: holder god avstand og lobber granater der du står. Rød sirkel = flytt deg!
+class Cannoneer : public Enemy {
+    float shootTimer = 2.5f;
+    float windup = 0.0f;
+public:
+    Cannoneer(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void drawVfx() const override;
+    int contactDamage() const override { return damage / 3; }
+    SpriteId spriteId() const override { return SpriteId::CANNONEER; }
 };
 
 enum class PickupType {

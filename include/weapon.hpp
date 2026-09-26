@@ -31,7 +31,10 @@ protected:
     float cooldown() const { return stats.cooldown * mods.cooldownMult; }
     float radius() const { return stats.radius * mods.areaMult; }
     float area() const { return stats.area * mods.areaMult; }
-    float projSpeed() const { return stats.speed * mods.speedMult; }
+    // Alle prosjektiler går i et roligere tempo (PROJECTILE_PACE), så man rekker å se dem fly.
+    // Levetidene er gjort tilsvarende lengre, så rekkevidden er omtrent den samme.
+    static constexpr float PROJECTILE_PACE = 0.7f;
+    float projSpeed() const { return stats.speed * mods.speedMult * PROJECTILE_PACE; }
 
     // Hver ability implementerer sin egen logikk her
     virtual void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) = 0;

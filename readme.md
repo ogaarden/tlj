@@ -244,4 +244,25 @@ Notes:
 3) Søylene er mye sjeldnere (ett par midt på hver løper, 4 per sal i stedet for 16), tykkere og går
    helt opp til taket, ut av bildet. Står en søyle mellom kameraet og spilleren, blir den gjennomsiktig.
 
+// 14 oktober – gange, balanse, nye fiender og kongelige dekreter
+1) Figurene går ordentlig: beina svinger vekselvis (bildet deles mellom føttene), kroppen hever seg
+   i takt med stegene, og kapper/kjoler svinger. Når en figur bytter retning, snur den seg som en
+   papirfigur (smalner inn og vider ut igjen) i stedet for å speilvendes med et rykk.
+2) Mindre gull: mynter skaleres ned med antall fiender (akkurat som XP), lavere sjanse per fiende,
+   elites gir mindre, og 6 g per minutt / 1 g per level. Shoppen er ca. 70 % dyrere
+   (høyere startpris og prisen øker x1.5 per nivå). Å kjøpe alt tar nå 50+ gode runder.
+3) Brattere XP-kurve: ca. level 24 ved 10 min, 30-35 i de lengste rundene (før: 40-50+).
+   Level-up helbreder 12 % (før 20 %).
+4) Vanskeligere: fiendene har x6 HP ved 10 min (før x4), dobbel skade (før x1.6), litt raskere,
+   større waves og elites fra 1:30 (opptil 14 %).
+5) Alle prosjektiler går 30 % saktere (levetiden er lengre, så rekkevidden er omtrent lik).
+6) Fire nye fiender (tegnet i samme stil):
+   - Kongens hunder (fra 2 min): kommer i flokker på 4-5, kryper sammen (rød pil) og kaster seg mot deg
+   - Hoffprest (fra 3 min): holder avstand og helbreder alle fiender rundt seg (gyllen ring). Drep ham først!
+   - Trommeslager (fra 3 min): alle rundt ham går 40 % fortere. Er også med i de sene hordene.
+   - Kanonér (fra 4 min): lobber granater som lander der du står – rød sirkel på gulvet
+7) Kongelige dekreter: kl. 2:30 og deretter hvert 2. minutt leser kongen opp et dekret som varer i 30 sek:
+   Kongens fest (raskere fiender, dobbel XP), Blodmåne (fiendene slår hardere, mye mer gull),
+   Den store jakten (tre hundeflokker) og Mobilisering (dobbelt så mange fiender, +50 % XP).
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

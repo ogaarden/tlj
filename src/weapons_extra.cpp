@@ -224,7 +224,7 @@ void CardWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniqu
         volleyAngle += 360.0f / count * 0.5f + 7.0f;                // Neste salve skytes mellom de forrige
         for (int i = 0; i < count; i++) {
             float a = (volleyAngle + 360.0f / count * i) * DEG2RAD;
-            cards.push_back({ playerPos, { cosf(a), sinf(a) }, 1.4f, scaledDamage(), stats.pierce, (i % 2) == 0, {} });
+            cards.push_back({ playerPos, { cosf(a), sinf(a) }, 2.0f, scaledDamage(), stats.pierce, (i % 2) == 0, {} });
         }
         PlaySfxPitch(Sfx::UI_MOVE, 1.4f);
         fireTimer = 0.0f;

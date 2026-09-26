@@ -66,8 +66,8 @@ void Enemy::makeElite() {
     maxHp = hp;
     damage = (int)(damage * 1.5f);
     xpValue *= 4;
-    goldChance = fminf(1.0f, goldChance * 3.0f + 0.1f);
-    goldValue += 2;
+    goldChance = fminf(1.0f, goldChance * 3.0f + 0.03f);
+    goldValue += 1;
     hitRadius *= 1.4f;
     orbRadius *= 1.4f;
     knockbackScale *= 0.4f;
@@ -84,6 +84,10 @@ void Enemy::knockBack(Vector2 direction, float strength) {
 }
 
 void Enemy::applyStatusMovement(Vector2 before, float dt) {
+    if (hasteTimer > 0.0f) {
+        hasteTimer -= dt;
+        position = Vector2Add(before, Vector2Scale(Vector2Subtract(position, before), 1.4f));
+    }
     if (slowTimer > 0.0f) {
         slowTimer -= dt;
         position = Vector2Add(before, Vector2Scale(Vector2Subtract(position, before), 1.0f - slowAmount));
@@ -331,7 +335,7 @@ Footman::Footman(Vector2 spawnPos, Texture2D tex) {
     damage = 10;
     xpValue = 15;
     orbColor = BLUE;
-    goldChance = 0.05f;
+    goldChance = 0.018f;
     goldValue = 1;
     orbRadius = 5.0f;
     texture = tex;
@@ -354,7 +358,7 @@ Goon::Goon(Vector2 spawnPos, Texture2D tex) {
     xpValue = 40;
     hitRadius = 22.0f;
     orbColor = GREEN;
-    goldChance = 0.10f;
+    goldChance = 0.06f;
     goldValue = 2;
     orbRadius = 10.0f;
     texture = tex;
@@ -730,7 +734,7 @@ Exploder::Exploder(Vector2 spawnPos, Texture2D tex) {
     xpValue = 12;
     orbColor = ORANGE;
     orbRadius = 5.0f;
-    goldChance = 0.04f;
+    goldChance = 0.024f;
     goldValue = 1;
     texture = tex;
 }
@@ -886,7 +890,7 @@ Archer::Archer(Vector2 spawnPos, Texture2D tex) {
     damage = 14;         // Pilene gjør full skade, berøring halv
     xpValue = 22;
     orbColor = Color{ 60, 150, 70, 255 };
-    goldChance = 0.06f;
+    goldChance = 0.036f;
     goldValue = 1;
     orbRadius = 6.0f;
     texture = tex;

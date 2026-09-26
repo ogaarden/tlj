@@ -135,7 +135,8 @@ Weapon* Player::findAbility(AbilityId id) const {
 // Et fullt build (5 abilities på level 9 + 6 items på nivå 5) krever over 70 level-ups,
 // så man må velge hva man satser på.
 int Player::xpForLevel(int lvl) {
-    return 35 + 35 * lvl + 4 * lvl * lvl;
+    // Brattere sent: ca. level 24 ved 10 min med et vanlig build, ~35-40 i de lengste rundene
+    return (int)(40 + 45 * lvl + 6 * lvl * lvl + 0.12f * lvl * lvl * lvl);
 }
 
 void Player::addXP(int amount)
@@ -149,6 +150,6 @@ void Player::addXP(int amount)
 
         // Litt mer liv og en liten helbredelse (ikke full – det gjorde spillet for lett)
         maxHp += 5.0f;
-        hp = std::min(maxHp, hp + maxHp * 0.2f);
+        hp = std::min(maxHp, hp + maxHp * 0.12f);
     }
 }

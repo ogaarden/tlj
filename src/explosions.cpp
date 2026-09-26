@@ -17,6 +17,19 @@ namespace {
     };
 
     std::vector<Explosion> explosions;
+
+    struct Shell {
+        Vector2 from, to;
+        float t;          // 0 -> 1 i løpet av flyturen
+        float flightTime;
+        float radius, damage;
+    };
+    std::vector<Shell> shells;
+    constexpr float SHELL_ARC = 220.0f; // Hvor høyt granaten går
+}
+
+void SpawnMortarShell(Vector2 from, Vector2 to, float flightTime, float radius, float damage) {
+    shells.push_back({ from, to, 0.0f, flightTime, radius, damage });
 }
 
 void SpawnExplosion(Vector2 position, float radius, float damage) {
@@ -28,6 +41,19 @@ void SpawnExplosion(Vector2 position, float radius, float damage) {
 
 float UpdateExplosions(float deltaTime, Vector2 playerPos, float playerRadius) {
     float damageToPlayer = 0.0f;
+
+    // Granater som lander blir til vanlige eksplosjoner
+    for (size_t i = 0; i < shells.size(); ) {
+        Shell& s = shells[i];
+        s.t += deltaTime / s.flightTime;
+        if (s.t >= 1.0f) {
+            SpawnExplosion(s.to, s.radius, s.damage);
+            shells[i] = shells.back();
+            shells.pop_back();
+        } else {
+            i++;
+        }
+    }
 
     for (size_t i = 0; i < explosions.size(); ) {
         auto& e = explosions[i];
@@ -51,6 +77,12 @@ float UpdateExplosions(float deltaTime, Vector2 playerPos, float playerRadius) {
 }
 
 void DrawExplosions() {
+    // Varselsirkel der granaten lander: fylles opp mens den flyr
+    for (const Shell& s : shells) {
+        DrawCircleV(s.to, s.radius, Fade(RED, 0.10f + 0.15f * s.t));
+        DrawCircleV(s.to, s.radius * s.t, Fade(RED, 0.25f));
+        DrawRing(s.to, s.radius - 3.0f, s.radius, 0.0f, 360.0f, 40, Fade(RED, 0.85f));
+    }
     for (const auto& e : explosions) {
         float t = 1.0f - e.timer / EXPLOSION_ANIM_TIME; // 0 -> 1
         // Svidd merke på gulvet (selve ildkula er VFX, se VfxExplosion)
@@ -60,9 +92,16 @@ void DrawExplosions() {
 }
 
 void DrawExplosions3D() {
-    // Ildkula og glørne tegnes av VFX-systemet (vfx.cpp)
+    // Ildkula og glørne tegnes av VFX-systemet (vfx.cpp). Her: granatene i lufta.
+    for (const Shell& s : shells) {
+        Vector2 p = Vector2Lerp(s.from, s.to, s.t);
+        float h = 30.0f + 4.0f * SHELL_ARC * s.t * (1.0f - s.t);
+        ShadedSphere(ToWorld3D(p, h), 8.0f, Color{ 45, 42, 50, 255 }, 5, 8);
+        ShadedSphere(ToWorld3D(p, h + 6.0f), 2.5f, Color{ 255, 170, 60, 255 }, 3, 4); // Lunta
+    }
 }
 
 void ClearExplosions() {
     explosions.clear();
+    shells.clear();
 }
