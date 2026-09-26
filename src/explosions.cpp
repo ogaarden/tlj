@@ -1,4 +1,5 @@
 #include "explosions.hpp"
+#include "audio.hpp"
 #include <raymath.h>
 #include <vector>
 
@@ -18,6 +19,7 @@ namespace {
 
 void SpawnExplosion(Vector2 position, float radius, float damage) {
     explosions.push_back({ position, radius, damage, EXPLOSION_ANIM_TIME, false });
+    PlaySfx(Sfx::EXPLOSION);
 }
 
 float UpdateExplosions(float deltaTime, Vector2 playerPos, float playerRadius) {

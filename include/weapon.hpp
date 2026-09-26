@@ -158,16 +158,33 @@ public:
 };
 
 // --- Lyn som slår ned på tilfeldige fiender i nærheten (Lightning) ---
+// Visuell lynstrek: enten fra himmelen og ned (nedslag), eller en bue mellom to fiender (kjede)
 struct LightningBolt {
     Vector2 target;
-    float radius;
+    float radius;                // Treffområde på gulvet (0 for kjede-buer)
     float timer;
-    std::vector<Vector3> points; // Hakkete strek fra himmelen og ned til bakken (3D)
+    float maxTimer;
+    std::vector<Vector3> points; // Hakkete strek i 3D
+};
+
+// Et kjede-hopp som venter på å bli utført (litt forsinkelse per hopp ser kulere ut)
+struct ChainJump {
+    Vector2 from;             // Hvor buen starter
+    int targetId;             // Fienden den skal treffe
+    float damage;
+    int jumpsLeft;            // Hvor mange hopp som er igjen ETTER dette
+    float delay;              // Tid til hoppet utføres
+    std::vector<int> hitIds;  // Fiender som allerede er truffet av denne kjeden
 };
 
 class LightningWeapon : public Weapon {
 private:
     std::vector<LightningBolt> bolts;
+    std::vector<ChainJump> pendingJumps;
+
+    // Starter et kjede-hopp fra `from` til nærmeste fiende som ikke er truffet
+    void queueNextJump(Vector2 from, float damage, int jumpsLeft, const std::vector<int>& hitIds,
+                       const std::vector<std::unique_ptr<Enemy>>& enemies);
 
 public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;

@@ -20,6 +20,7 @@
 #include "explosions.hpp"
 #include "castle.hpp"
 #include "render3d.hpp"
+#include "audio.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -104,6 +105,7 @@ int main() {
     SetTargetFPS(Settings::FPS);
     SetExitKey(KEY_NULL); // ESC skal gå tilbake i menyer, ikke lukke hele spillet
     InitRenderer3D();
+    InitGameAudio();
 
     GameState currentState = MAIN_MENU;
     int mainOption = 0;
@@ -124,6 +126,7 @@ int main() {
     Shop shop;
     SaveData saveData;
     LoadGame(Rewards::SAVE_FILE, saveData, shop);
+    SetGameVolume(saveData.volume / 100.0f);
     int& totalGold = saveData.gold;
     auto saveProgress = [&]() { SaveGame(Rewards::SAVE_FILE, saveData, shop); };
 
@@ -206,6 +209,7 @@ int main() {
         float taken = player.takeDamage(rawDamage);
         if (taken > 0.0f) {
             SpawnDamageNumber(player.position, std::max(1, (int)(taken + 0.5f)), RED);
+            PlaySfx(Sfx::PLAYER_HURT);
             // Echelon 3+: fiender slower deg ved treff
             if (runModifiers.slowOnHit > 0.0f) {
                 player.slowTimer = runModifiers.slowDuration;
@@ -217,6 +221,16 @@ int main() {
 
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
+
+        // --- MENYLYDER: felles for alle menyskjermer ---
+        bool inMenu = currentState != GAMEPLAY;
+        if (inMenu) {
+            if (IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_RIGHT) ||
+                IsKeyPressed(KEY_W) || IsKeyPressed(KEY_S) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_D)) {
+                PlaySfx(Sfx::UI_MOVE);
+            }
+            if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) PlaySfx(Sfx::UI_SELECT);
+        }
 
         // -------------------------------------------------------------
         // INPUT & LOGIKK PER GAMESTATE
@@ -312,7 +326,13 @@ int main() {
             shop.handleInput(totalGold);
         }
         else if (currentState == SETTINGS) {
+            // Volum med venstre/høyre (A/D) i steg på 10%
+            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) saveData.volume = std::min(100, saveData.volume + 10);
+            if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) saveData.volume = std::max(0, saveData.volume - 10);
+            SetGameVolume(saveData.volume / 100.0f);
+
             if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_B) || IsKeyPressed(KEY_ESCAPE)) {
+                saveProgress();
                 currentState = MAIN_MENU;
             }
         }
@@ -321,6 +341,7 @@ int main() {
             if(player.level > lastPlayerLevel){
                 lastPlayerLevel = player.level;
                 currentState = LEVEL_UP;
+                PlaySfx(Sfx::LEVEL_UP);
                 selectedUpgradeOption = 0;
                 activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
             }
@@ -337,6 +358,7 @@ int main() {
             if (!inBossArena && spawner.gameTime >= GetBossTimer(selectedEchelon)) {
                 inBossArena = true;
                 arenaIntroTimer = Arena::INTRO_TIME;
+                PlaySfx(Sfx::BOSS_GONG);
 
                 // Alt som ligger igjen på bakken suges opp automatisk
                 for (const auto& p : pickups) {
@@ -416,8 +438,10 @@ int main() {
                     if (distance < 15.0f) {
                         if (it->type == PickupType::COIN) {
                             runCoins += it->value;
+                            PlaySfx(Sfx::COIN);
                         } else {
                             player.addXP(static_cast<int>(it->value * player.xpMultiplier));
+                            PlaySfx(Sfx::XP);
                         }
 
                         // Slett orben fra listen
@@ -471,6 +495,9 @@ int main() {
                     selectedEchelon = saveData.unlockedEchelon;
                     lastRun.unlockedNewEchelon = true;
                 }
+
+                if (bossDefeated) PlaySfx(Sfx::VICTORY);
+                else if (runEnded) PlaySfx(Sfx::DEATH);
 
                 saveProgress();
                 currentState = GAME_OVER;
@@ -621,7 +648,12 @@ int main() {
         }
         else if (currentState == SETTINGS) {
             DrawText("INNSTILLINGER", Settings::SCREEN_WIDTH / 2 - 120, 100, 32, WHITE);
-            DrawText("Lyd / Grafikk innstillinger her...", Settings::SCREEN_WIDTH / 2 - 160, 220, 20, GRAY);
+            DrawText("Volum", Settings::SCREEN_WIDTH / 2 - 200, 220, 24, WHITE);
+            DrawRectangle(Settings::SCREEN_WIDTH / 2 - 80, 222, 280, 22, DARKGRAY);
+            DrawRectangle(Settings::SCREEN_WIDTH / 2 - 80, 222, (int)(280 * saveData.volume / 100.0f), 22, GOLD);
+            DrawRectangleLines(Settings::SCREEN_WIDTH / 2 - 80, 222, 280, 22, WHITE);
+            DrawText(TextFormat("%d%%", saveData.volume), Settings::SCREEN_WIDTH / 2 + 215, 222, 22, WHITE);
+            DrawText("[A/D] eller [Venstre/Hoeyre] for aa justere", Settings::SCREEN_WIDTH / 2 - 200, 265, 18, GRAY);
             DrawText("Trykk [ESC] for a ga tilbake", Settings::SCREEN_WIDTH / 2 - 140, 450, 20, GRAY);
         }
         else if (currentState == GAMEPLAY || currentState == LEVEL_UP) {
@@ -829,6 +861,7 @@ int main() {
 
     saveProgress();
     UnloadRenderer3D();
+    UnloadGameAudio();
     CloseWindow();
     return 0;
 }

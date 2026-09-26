@@ -61,4 +61,10 @@ Notes:
 5) 2.5D: skrått 3D-kamera, gulvet tegnes som tekstur på et 3D-plan,
    figurer/prosjektiler/tronsal i ekte 3D med belysning (render3d.cpp)
 
+// 30 september
+1) Kjedelyn: Lightning hopper videre til nye fiender, svakere for hvert hopp
+2) Lydeffekter (syntetisert i audio.cpp): XP, gull, treff, kills, skade,
+   level up, lyn, eksplosjon, gong i tronsalen, Royal Charge, seier, død, menyer
+3) Volumkontroll under Settings (lagres i save.txt)
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

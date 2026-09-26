@@ -18,7 +18,6 @@ AbilityLevel addProjectiles(int n, const char* text) { return { text, [n](Abilit
 AbilityLevel addPierce(int n, const char* text) { return { text, [n](AbilityStats& s) { s.pierce += n; } }; }
 AbilityLevel addBounces(int n, const char* text) { return { text, [n](AbilityStats& s) { s.bounces += n; } }; }
 AbilityLevel addRadius(float r, const char* text) { return { text, [r](AbilityStats& s) { s.radius += r; } }; }
-AbilityLevel addArea(float a, const char* text) { return { text, [a](AbilityStats& s) { s.area += a; } }; }
 
 std::vector<AbilityDefinition> buildDefinitions() {
     std::vector<AbilityDefinition> defs;
@@ -135,17 +134,19 @@ std::vector<AbilityDefinition> buildDefinitions() {
     });
 
     defs.push_back({
-        AbilityId::LIGHTNING, "Lightning", "Lyn slaar ned paa tilfeldige fiender i naerheten.", YELLOW,
-        { .damage = 120.0f, .cooldown = 2.5f, .projectiles = 1, .radius = 450.0f /* rekkevidde */, .area = 50.0f },
+        AbilityId::LIGHTNING, "Lightning", "Lyn slaar ned og kjeder videre til fiender, svakere for hvert hopp.", YELLOW,
+        { .damage = 120.0f, .cooldown = 2.5f, .projectiles = 1,
+          .bounces = 3 /* kjede-hopp */, .bounceRange = 200.0f, .bounceFalloff = 0.7f,
+          .radius = 450.0f /* rekkevidde */, .area = 50.0f },
         {
-            addProjectiles(1, "+1 lyn"),
+            addBounces(1, "+1 kjede-hopp"),
             damageMult(1.4f, "+40% skade"),
-            addArea(25.0f, "+25 treffomraade"),
-            cooldownMult(0.8f, "-20% cooldown"),
             addProjectiles(1, "+1 lyn"),
+            { "Kjeden mister mindre skade (-20% per hopp)", [](AbilityStats& s) { s.bounceFalloff = 0.8f; } },
+            addBounces(2, "+2 kjede-hopp"),
             damageMult(2.0f, "2x skade"),
-            { "+1 lyn og +25 treffomraade", [](AbilityStats& s) { s.projectiles += 1; s.area += 25.0f; } },
-            { "-30% cooldown og +1 lyn", [](AbilityStats& s) { s.cooldown *= 0.7f; s.projectiles += 1; } },
+            { "-25% cooldown og +1 lyn", [](AbilityStats& s) { s.cooldown *= 0.75f; s.projectiles += 1; } },
+            { "+2 kjede-hopp og lengre hopp", [](AbilityStats& s) { s.bounces += 2; s.bounceRange += 60.0f; } },
         }
     });
 

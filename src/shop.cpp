@@ -1,5 +1,6 @@
 #include "shop.hpp"
 #include "settings.hpp"
+#include "audio.hpp"
 #include <cmath>
 #include <algorithm>
 
@@ -82,6 +83,7 @@ void Shop::handleInput(int& totalGold) {
         if (!item.isMaxed() && totalGold >= item.cost()) {
             totalGold -= item.cost();
             item.currentLevel++;
+            PlaySfx(Sfx::COIN);
         }
     }
 

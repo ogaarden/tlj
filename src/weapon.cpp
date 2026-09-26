@@ -4,6 +4,7 @@
 #include <cmath>
 #include "render3d.hpp"
 #include "castle.hpp"
+#include "audio.hpp"
 
 // --- Felles hjelpefunksjoner ---
 namespace {
@@ -13,16 +14,19 @@ void removeDeadEnemy(std::vector<std::unique_ptr<Enemy>>& enemies, size_t index,
     enemies[index]->dropLoot(pickups);
     enemies[index]->onDeath();
     Enemy::killCount++;
+    PlaySfx(Sfx::KILL);
     enemies.erase(enemies.begin() + index);
 }
 
 // Gjør skade på alle fiender innenfor radius. Returnerer antall fiender som ble truffet.
 int damageEnemiesInRadius(Vector2 center, float radius, int damage, Color color, bool isDamageOverTime,
-                          std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) {
+                          std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups,
+                          std::vector<int>* hitIds = nullptr) {
     int hits = 0;
     for (size_t j = 0; j < enemies.size(); ) {
         if (Vector2Distance(center, enemies[j]->position) <= radius) {
             enemies[j]->takeDamage(damage, color, isDamageOverTime);
+            if (hitIds) hitIds->push_back(enemies[j]->id);
             hits++;
             if (enemies[j]->isDead()) {
                 removeDeadEnemy(enemies, j, pickups);
@@ -452,6 +456,37 @@ void OrbitWeapon::draw3D() const {
 // LightningWeapon
 // =====================================================================
 
+namespace {
+    constexpr float BOLT_TIME = 0.25f;
+    constexpr float ARC_TIME = 0.22f;
+    constexpr float CHAIN_DELAY = 0.07f; // Tid mellom hvert hopp i kjeden
+    constexpr float ARC_HEIGHT = 26.0f;  // Høyden buene går i (ca. brysthøyde på fiendene)
+
+    // Hakkete bue mellom to punkter i 3D
+    std::vector<Vector3> jaggedLine(Vector3 from, Vector3 to, int segments, float jitter) {
+        std::vector<Vector3> points;
+        for (int s = 0; s <= segments; s++) {
+            float t = (float)s / segments;
+            Vector3 p = Vector3Lerp(from, to, t);
+            if (s != 0 && s != segments) {
+                p.x += (float)GetRandomValue((int)-jitter, (int)jitter);
+                p.y += (float)GetRandomValue((int)(-jitter * 0.5f), (int)(jitter * 0.5f));
+                p.z += (float)GetRandomValue((int)-jitter, (int)jitter);
+            }
+            points.push_back(p);
+        }
+        return points;
+    }
+}
+
+void LightningWeapon::queueNextJump(Vector2 from, float damage, int jumpsLeft, const std::vector<int>& hitIds,
+                                    const std::vector<std::unique_ptr<Enemy>>& enemies) {
+    if (jumpsLeft <= 0 || (int)damage <= 0) return;
+    Enemy* next = nearestUnhitEnemy(from, stats.bounceRange * mods.areaMult, hitIds, enemies);
+    if (!next) return;
+    pendingJumps.push_back({ from, next->id, damage, jumpsLeft - 1, CHAIN_DELAY, hitIds });
+}
+
 void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups)
 {
     fireTimer += deltaTime;
@@ -460,6 +495,42 @@ void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
         bolts[i].timer -= deltaTime;
         if (bolts[i].timer <= 0.0f) bolts.erase(bolts.begin() + i);
         else i++;
+    }
+
+    // --- Kjede-hopp som står i kø ---
+    std::vector<ChainJump> ready;
+    for (size_t i = 0; i < pendingJumps.size(); ) {
+        pendingJumps[i].delay -= deltaTime;
+        if (pendingJumps[i].delay <= 0.0f) {
+            ready.push_back(pendingJumps[i]);
+            pendingJumps.erase(pendingJumps.begin() + i);
+        } else {
+            i++;
+        }
+    }
+    for (ChainJump& jump : ready) {
+        // Målet kan ha dødd mens vi ventet – ta i så fall nærmeste andre
+        Enemy* target = findEnemyById(enemies, jump.targetId);
+        if (!target) target = nearestUnhitEnemy(jump.from, stats.bounceRange * mods.areaMult, jump.hitIds, enemies);
+        if (!target) continue;
+
+        Vector2 targetPos = target->position;
+        int targetId = target->id;
+        jump.hitIds.push_back(targetId);
+
+        bolts.push_back({ targetPos, 0.0f, ARC_TIME, ARC_TIME,
+                          jaggedLine(ToWorld3D(jump.from, ARC_HEIGHT), ToWorld3D(targetPos, ARC_HEIGHT), 6, 10.0f) });
+        PlaySfx(Sfx::ZAP);
+
+        target->takeDamage((int)jump.damage, Color{ 180, 220, 255, 255 });
+        for (size_t j = 0; j < enemies.size(); j++) {
+            if (enemies[j]->id == targetId && enemies[j]->isDead()) {
+                removeDeadEnemy(enemies, j, pickups);
+                break;
+            }
+        }
+
+        queueNextJump(targetPos, jump.damage * stats.bounceFalloff, jump.jumpsLeft, jump.hitIds, enemies);
     }
 
     if (fireTimer < cooldown()) return;
@@ -483,43 +554,47 @@ void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
 
     int dmg = scaledDamage();
     for (Vector2 pos : strikePositions) {
-        damageEnemiesInRadius(pos, area(), dmg, color, false, enemies, pickups);
+        // Nedslaget: AOE-skade der lynet treffer
+        std::vector<int> hitIds;
+        damageEnemiesInRadius(pos, area(), dmg, color, false, enemies, pickups, &hitIds);
 
-        // Lag en hakkete lynstrek fra himmelen rett ned til treffpunktet
-        LightningBolt bolt{ pos, area(), 0.25f, {} };
-        const int segments = 8;
-        const float skyHeight = 420.0f;
-        for (int seg = 0; seg <= segments; seg++) {
-            float t = (float)seg / segments;
-            Vector3 point = { pos.x, skyHeight * (1.0f - t), pos.y };
-            if (seg != segments) {
-                point.x += (float)GetRandomValue(-16, 16);
-                point.z += (float)GetRandomValue(-16, 16);
-            }
-            bolt.points.push_back(point);
-        }
-        bolts.push_back(bolt);
+        // Hakkete lynstrek fra himmelen rett ned til treffpunktet
+        Vector3 sky = { pos.x + (float)GetRandomValue(-20, 20), 420.0f, pos.y + (float)GetRandomValue(-20, 20) };
+        bolts.push_back({ pos, area(), BOLT_TIME, BOLT_TIME, jaggedLine(sky, ToWorld3D(pos, 0.0f), 8, 16.0f) });
+
+        // Kjeden: hopper videre til nye fiender, svakere for hvert hopp
+        queueNextJump(pos, dmg * stats.bounceFalloff, stats.bounces, hitIds, enemies);
     }
+    PlaySfx(Sfx::THUNDER);
 
     fireTimer = 0.0f;
 }
 
 void LightningWeapon::draw() const {
-    // Brent merke på gulvet der lynet slo ned
     for (const auto& bolt : bolts) {
-        float alpha = bolt.timer / 0.25f;
-        DrawCircleV(bolt.target, bolt.radius, Fade(color, 0.25f * alpha));
-        DrawCircleLines((int)bolt.target.x, (int)bolt.target.y, bolt.radius, Fade(WHITE, 0.6f * alpha));
+        float alpha = bolt.timer / bolt.maxTimer;
+        if (bolt.radius > 0.0f) {
+            // Brent merke på gulvet der lynet slo ned
+            DrawCircleV(bolt.target, bolt.radius, Fade(color, 0.25f * alpha));
+            DrawCircleLines((int)bolt.target.x, (int)bolt.target.y, bolt.radius, Fade(WHITE, 0.6f * alpha));
+        } else {
+            // Lite lysglimt under fienden kjeden traff
+            DrawCircleV(bolt.target, 16.0f, Fade(SKYBLUE, 0.35f * alpha));
+        }
     }
 }
 
 void LightningWeapon::draw3D() const {
-    // Selve lynet: hakkete strek fra himmelen og ned
     for (const auto& bolt : bolts) {
-        float alpha = bolt.timer / 0.25f;
+        float alpha = bolt.timer / bolt.maxTimer;
+        bool isArc = bolt.radius <= 0.0f;
+        Color glow = isArc ? Color{ 140, 200, 255, 255 } : color;
+        float thick = isArc ? 2.5f : 3.5f;
         for (size_t i = 1; i < bolt.points.size(); i++) {
-            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], 3.5f, 3.5f, 5, Fade(color, alpha));
-            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], 1.5f, 1.5f, 5, Fade(WHITE, alpha));
+            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], thick, thick, 5, Fade(glow, alpha));
+            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], 1.2f, 1.2f, 5, Fade(WHITE, alpha));
         }
+        // Lysende kule der buen treffer
+        if (isArc) DrawSphere(bolt.points.back(), 7.0f * alpha + 2.0f, Fade(WHITE, 0.7f * alpha));
     }
 }

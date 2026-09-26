@@ -3,6 +3,7 @@
 #include "explosions.hpp"
 #include "castle.hpp"
 #include "render3d.hpp"
+#include "audio.hpp"
 
 // --- Farger brukt av 3D-modellene ---
 namespace {
@@ -74,6 +75,7 @@ void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
 
     if (!isDamageOverTime) {
         SpawnDamageNumber(position, amount, numberColor);
+        PlaySfx(Sfx::HIT);
         return;
     }
 
@@ -209,6 +211,7 @@ void Boss::update(Vector2 playerPosition) {
             if (phaseTimer >= BOSS_CHASE_TIME) {
                 phase = Phase::WINDUP;
                 phaseTimer = 0.0f;
+                PlaySfx(Sfx::BOSS_CHARGE);
             }
             break;
         }
