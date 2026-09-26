@@ -92,11 +92,14 @@ void drawJester(const ClownPose& pose) {
     const Color POMPOM = { 255, 235, 90, 255 };
     const Color HAIR[] = { { 255, 90, 60, 255 }, { 255, 170, 40, 255 }, { 80, 190, 255, 255 }, { 120, 220, 90, 255 } };
 
-    // Store sko som går frem og tilbake
+    // Narredrakt: ett bein lilla, ett gult. Store sko med krøllete tupper og bjeller.
+    const Color MOTLEY = { 120, 50, 170, 255 };
     for (int side = -1; side <= 1; side += 2) {
         float step = g.step * 4.0f * side;
         r.ellipsoid(3.0f + step, side * 5.5f, 2.6f, { 7.5f, 2.8f, 3.6f }, SHOE);
-        r.limb(r.at(step * 0.5f, side * 4.5f, 3.0f), r.at(0.0f, side * 4.0f, 15.0f + g.bob), 4.8f, 4.2f, PANTS);
+        r.limb(r.at(9.0f + step, side * 5.5f, 2.6f), r.at(12.0f + step, side * 5.5f, 7.0f), 2.0f, 0.4f, SHOE); // Krøll
+        r.sphere(12.2f + step, side * 5.5f, 7.6f, 1.6f, POMPOM, 4, 6);                                         // Bjelle
+        r.limb(r.at(step * 0.5f, side * 4.5f, 3.0f), r.at(0.0f, side * 4.0f, 15.0f + g.bob), 4.8f, 4.2f, side < 0 ? MOTLEY : PANTS);
     }
 
     float up = g.bob;
@@ -104,13 +107,32 @@ void drawJester(const ClownPose& pose) {
     r.limb(r.at(0, 0, 14.0f + up), r.at(0, 0, 33.0f + up), 11.5f, 9.0f, SUIT);
     for (int i = 0; i < 3; i++) r.sphere(10.2f - i * 0.8f, 0.0f, 18.0f + i * 5.5f + up, 2.4f, POMPOM, 5, 7);
 
-    // Armer med hvite hansker (svinger litt når han går)
+    // Armer med hvite hansker (svinger litt når han går). Høyre hånd holder narrestaven.
+    float atk = pose.attack * pose.attack;
     for (int side = -1; side <= 1; side += 2) {
         float swing = -g.step * 3.0f * side;
         Vector3 shoulder = r.at(0.0f, side * 9.5f, 31.0f + up);
-        Vector3 hand = r.at(3.0f + swing, side * 13.5f, 19.0f + up);
-        r.limb(shoulder, hand, 3.2f, 2.8f, SUIT);
+        bool staffHand = side > 0;
+        Vector3 hand = staffHand ? r.at(6.0f + 8.0f * atk, 13.0f, 22.0f + up + 5.0f * atk) : r.at(3.0f + swing, side * 13.5f, 19.0f + up);
+        r.limb(shoulder, hand, 3.2f, 2.8f, side < 0 ? MOTLEY : SUIT);
         ShadedSphere(hand, 3.8f, r.c(GLOVE), 6, 8);
+
+        if (staffHand) {
+            // Narrestav (marotte): pinne med et lite narrehode på toppen. Stikkes frem ved angrep.
+            Vector3 top = r.at(10.0f + 20.0f * atk, 13.0f, 42.0f + up - 16.0f * atk);
+            Vector3 bottom = Vector3Add(hand, Vector3Scale(Vector3Subtract(hand, top), 0.35f));
+            r.limb(bottom, top, 1.1f, 1.1f, Color{ 150, 100, 50, 255 });
+            ShadedSphere(top, 3.2f, r.c(FACE_PAINT), 6, 8);
+            Vector3 nose = Vector3Add(top, Vector3Scale({ r.f.x, 0.0f, r.f.y }, 3.0f));
+            ShadedSphere(nose, 0.9f, r.c(NOSE_RED), 3, 4);
+            const Color MINI[3] = { { 214, 40, 52, 255 }, { 120, 50, 170, 255 }, { 30, 130, 70, 255 } };
+            for (int k = -1; k <= 1; k++) {
+                Vector3 base = Vector3Add(top, { r.s.x * k * 1.6f, 2.2f, r.s.y * k * 1.6f });
+                Vector3 tip = Vector3Add(top, { r.s.x * k * 5.0f, k == 0 ? 8.0f : 6.0f, r.s.y * k * 5.0f });
+                r.limb(base, tip, 1.8f, 0.3f, MINI[k + 1]);
+                ShadedSphere(tip, 0.9f, r.c(POMPOM), 3, 4);
+            }
+        }
     }
 
     // Krage (hvite rysjer)
@@ -183,11 +205,25 @@ void drawWester(const ClownPose& pose) {
         r.sphere(15.5f, sway + side * 6.0f, 27.0f + up, 2.2f, BUTTON, 4, 6);
     }
 
-    // Tykke gule armer og store hansker
+    // Stor hammer med begge hender: hevet over hodet når den er klar, slått i bakken ved Ground Slam
+    float slam = pose.attack;
+    float ready = 1.0f - slam;
+    Vector3 grip = r.at(4.0f + 14.0f * slam, sway, 50.0f * ready + 20.0f * slam + up);           // Hendene
+    Vector3 hammerHead = r.at(-8.0f * ready + 30.0f * slam, sway, 68.0f * ready + 7.0f * slam + up);
+    Vector3 handleEnd = Vector3Add(grip, Vector3Scale(Vector3Subtract(grip, hammerHead), 0.25f));
+    r.limb(handleEnd, hammerHead, 2.0f, 2.0f, Color{ 120, 80, 40, 255 });
+    {
+        // Hammerhodet ligger på tvers av skaftet
+        Vector3 across = { r.s.x * 9.0f, 0.0f, r.s.y * 9.0f };
+        const Color IRON = { 140, 145, 160, 255 };
+        r.limb(Vector3Subtract(hammerHead, across), Vector3Add(hammerHead, across), 7.5f, 7.5f, IRON);
+        r.limb(Vector3Subtract(hammerHead, Vector3Scale(across, 0.55f)), Vector3Subtract(hammerHead, Vector3Scale(across, 0.4f)), 8.0f, 8.0f, BUTTON);
+        r.limb(Vector3Add(hammerHead, Vector3Scale(across, 0.4f)), Vector3Add(hammerHead, Vector3Scale(across, 0.55f)), 8.0f, 8.0f, BUTTON);
+    }
     for (int side = -1; side <= 1; side += 2) {
-        float swing = -g.step * 2.5f * side;
         Vector3 shoulder = r.at(0.0f, sway + side * 14.0f, 34.0f + up);
-        Vector3 hand = r.at(4.0f + swing, sway + side * 19.0f, 20.0f + up);
+        Vector3 hand = Vector3Add(grip, Vector3Scale(Vector3Subtract(handleEnd, grip), side < 0 ? 0.0f : 0.8f));
+        hand = Vector3Add(hand, { r.s.x * side * 3.0f, 0.0f, r.s.y * side * 3.0f });
         r.limb(shoulder, hand, 5.0f, 4.2f, SHIRT);
         ShadedSphere(hand, 5.5f, r.c(GLOVE), 6, 8);
     }
@@ -250,13 +286,27 @@ void drawGeek(const ClownPose& pose) {
     }
     r.sphere(6.8f, 0.0f, 44.0f + up, 1.2f, BOWTIE, 4, 6);
 
-    // Lange tynne armer
+    // Lange tynne armer. Høyre arm kaster sprettballen (Ricochet) og holder en ny når den er klar.
+    float throwT = pose.attack;
     for (int side = -1; side <= 1; side += 2) {
         float swing = -g.step * 4.0f * side;
         Vector3 shoulder = r.at(0.0f, side * 7.0f, 43.0f + up);
-        Vector3 hand = r.at(2.5f + swing, side * 9.0f, 25.0f + up);
+        Vector3 hand = side > 0 ? r.at(4.0f + 12.0f * throwT, 9.5f, 27.0f + up + 16.0f * throwT)
+                                : r.at(2.5f + swing, side * 9.0f, 25.0f + up);
         r.limb(shoulder, hand, 2.0f, 1.8f, SHIRT);
         ShadedSphere(hand, 2.8f, r.c(GLOVE), 5, 7);
+        if (side > 0 && throwT < 0.2f) {
+            ShadedSphere(Vector3Add(hand, { r.f.x * 3.0f, 2.5f, r.f.y * 3.0f }), 3.2f, r.c(Color{ 90, 170, 255, 255 }), 6, 8);
+        }
+    }
+
+    // Ryggsekk med antenne
+    {
+        float yaw = atan2f(r.f.x, r.f.y) * RAD2DEG;
+        ShadedCube(r.at(-8.5f, 0.0f, 35.0f + up), { 11.0f, 13.0f, 5.5f }, yaw, r.c(Color{ 200, 120, 40, 255 }));
+        ShadedCube(r.at(-11.5f, 0.0f, 31.0f + up), { 8.0f, 5.0f, 1.5f }, yaw, r.c(Color{ 170, 95, 30, 255 }));
+        r.limb(r.at(-9.0f, 3.5f, 41.0f + up), r.at(-11.0f, 5.0f, 55.0f + up), 0.5f, 0.4f, FRAME);
+        r.sphere(-11.0f, 5.0f, 55.5f + up, 1.4f, Color{ 255, 60, 60, 255 }, 4, 6);
     }
 
     // Lang hals og avlangt hode

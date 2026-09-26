@@ -56,12 +56,22 @@ public:
     virtual void applyEchelonModifiers(float hpMult, float damageMult, float speedMult);
     Vector2 facing = { 0.0f, 1.0f }; // Retningen fienden går/ser (brukes av 3D-modellen)
 
+    // --- Utseende ---
+    float hitFlash = 0.0f;   // 1 -> 0 etter et treff (fienden blinker hvitt)
+    float age = 0.0f;        // Sekunder siden den spawnet (brukes til å stige opp av gulvet)
+    bool elite = false;      // Elite: større, mye mer HP og loot, gyllen aura
+    float modelScale = 1.0f; // Hele 3D-modellen skaleres rundt føttene
+
+    void makeElite();
+    float walkCycle() const; // Fase for gangeanimasjonen (forskjellig for hver fiende)
+
     // Tegning i to lag (se render3d.hpp):
     //  draw()   – på gulvet: skygge, varsel-linjer osv. (2D-koordinater)
     //  draw3D() – selve figuren i 3D
     virtual void draw() const;
     virtual void draw3D() const;
-    virtual float modelHeight() const { return 36.0f; } // Brukes for å plassere HP-bar over hodet
+    virtual void drawVfx() const;                       // Glød/aura i det additive VFX-passet
+    virtual float modelHeight() const { return 36.0f * modelScale; } // Brukes for å plassere HP-bar over hodet
 };
 
 class Footman : public Enemy {
@@ -103,6 +113,7 @@ public:
     void update(Vector2 playerPosition) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
     float modelHeight() const override { return 110.0f; }
 };
 
@@ -121,6 +132,7 @@ public:
     void update(Vector2 playerPosition) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
     void onDeath() override;
     int contactDamage() const override { return 0; } // Skader bare med eksplosjonen
     void applyEchelonModifiers(float hpMult, float damageMult, float speedMult) override;

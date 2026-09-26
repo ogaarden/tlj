@@ -13,6 +13,7 @@ struct ClownPose {
     float walkTime = 0.0f;  // Driver gangeanimasjonen
     bool moving = false;
     Color tint = WHITE;     // F.eks. rødt når man er truffet, blått når man er slowet
+    float attack = 0.0f;    // 1 rett etter at standardvåpenet ble brukt, faller til 0 (klar)
 };
 
 void DrawClown(ClownStyle style, const ClownPose& pose);

@@ -22,13 +22,17 @@ public:
     float gameTime = 0.0f;
     float spawnTimer = 0.0f;
     float spawnInterval = 1.0f;
+    float lastHordeTime = -100.0f; // Når siste horde kom (HUD-en viser et varsel)
 
 private:
     int currentWaveIndex = -1;
     EchelonModifiers modifiers;
     std::vector<EnemyType> spawnQueue;
 
+    int hordeSpawnedWave = -1;
+
     void spawnWave(int waveIndex);
+    void spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture);
 
 public:
     // Nullstill for en ny runde med echelon-effektene som gjelder

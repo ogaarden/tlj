@@ -21,7 +21,7 @@ namespace View3D {
     // (som et 2D-spill), mens figurene fortsatt har volum, lys og skygge.
     constexpr float CAMERA_PITCH = 72.0f;      // Vinkel ned mot bakken (90 = rett ovenfra)
     constexpr float CAMERA_DISTANCE = 1550.0f; // Avstand fra kameraet til spilleren
-    constexpr float FOVY = 20.0f;              // Smal linse = lite perspektiv-forvrengning (lavere = mer zoom)
+    constexpr float FOVY = 28.0f;              // Smal linse = lite perspektiv-forvrengning (lavere = mer zoom)
     constexpr int GROUND_SIZE = 2560;         // Hvor stort område av gulvet som tegnes rundt spilleren
 }
 
@@ -29,7 +29,22 @@ void InitRenderer3D();
 void UnloadRenderer3D();
 
 // Kameraet ser mot `focus` på bakken. yawDegrees er rotasjonen fra Q/E.
+// Setter også retningen til kantlyset (se SetShadeViewDir) og legger på skjermristing.
 Camera3D MakeGameCamera(Vector2 focus, float yawDegrees);
+
+// --- Skjermristing (slag, eksplosjoner, lyn) ---
+void AddCameraShake(float amount);   // amount ~ 0.2 (lite) til 1.0 (kraftig)
+void UpdateCameraShake(float deltaTime);
+
+// --- Belysning ---
+// Retningen mot kameraet brukes til kantlys (rim light), så figurene får en lys kontur
+void SetShadeViewDir(Vector3 towardCamera);
+// 0 = vanlige farger, 1 = helt hvit. Brukes til å blinke fiender hvite når de blir truffet.
+void SetShadeFlash(float amount);
+
+// Detaljnivå for kuler/sylindre (1 = fullt, 0.5 = halvparten så mange trekanter).
+// Senkes automatisk når det er mange fiender på skjermen, så spillet holder farten.
+void SetShapeDetail(float detail);
 
 inline Vector3 ToWorld3D(Vector2 ground, float height) { return { ground.x, height, ground.y }; }
 

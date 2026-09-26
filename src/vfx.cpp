@@ -168,6 +168,14 @@ struct Particle {
 std::vector<Particle> particles;
 constexpr size_t MAX_PARTICLES = 4000;
 
+// Korte elektriske buer (hakkete linje mellom to punkter)
+struct Zap {
+    std::vector<Vector3> points;
+    Color color;
+    float life, maxLife;
+};
+std::vector<Zap> zaps;
+
 void spawn(const Particle& p) {
     if (particles.size() >= MAX_PARTICLES) return;
     particles.push_back(p);
@@ -264,6 +272,11 @@ void VfxBeam(VfxTex tex, Vector3 from, Vector3 to, float width, Color tint) {
 // Partikler: oppdatering og tegning
 // ---------------------------------------------------------------------
 void UpdateVfx(float dt) {
+    for (size_t i = 0; i < zaps.size(); ) {
+        zaps[i].life -= dt;
+        if (zaps[i].life <= 0.0f) { zaps[i] = zaps.back(); zaps.pop_back(); }
+        else i++;
+    }
     for (size_t i = 0; i < particles.size(); ) {
         Particle& p = particles[i];
         p.life -= dt;
@@ -283,6 +296,15 @@ void UpdateVfx(float dt) {
 }
 
 void DrawVfxParticles() {
+    for (const Zap& z : zaps) {
+        float a = z.life / z.maxLife;
+        Color glow = { (unsigned char)(z.color.r * a), (unsigned char)(z.color.g * a), (unsigned char)(z.color.b * a), 255 };
+        Color core = { (unsigned char)(255 * a), (unsigned char)(255 * a), (unsigned char)(255 * a), 255 };
+        for (size_t i = 1; i < z.points.size(); i++) {
+            VfxBeam(VfxTex::GLOW, z.points[i - 1], z.points[i], 16.0f, glow);
+            VfxBeam(VfxTex::GLOW, z.points[i - 1], z.points[i], 5.0f, core);
+        }
+    }
     for (const Particle& p : particles) {
         float t = 1.0f - p.life / p.maxLife;       // 0 -> 1
         float size = p.size + (p.sizeEnd - p.size) * t;
@@ -293,7 +315,7 @@ void DrawVfxParticles() {
     }
 }
 
-void ClearVfx() { particles.clear(); }
+void ClearVfx() { particles.clear(); zaps.clear(); }
 
 // ---------------------------------------------------------------------
 // Ferdige effekter
@@ -364,4 +386,28 @@ void VfxExplosion(Vector2 g, float radius) {
 void VfxBubble(Vector2 g, float height, Color color) {
     Vector3 v = { frand(-8, 8), frand(20, 45), frand(-8, 8) };
     spawn({ VfxTex::GLOW, ToWorld3D(g, height), v, 0.0f, 0.5f, frand(0.6f, 1.1f), 1.1f, frand(4, 8), frand(8, 12), 0, 0, color, false });
+}
+
+void VfxZap(Vector2 from, Vector2 to, float height, Color color) {
+    Zap z;
+    z.color = color;
+    z.life = z.maxLife = 0.18f;
+    const int segments = 6;
+    for (int i = 0; i <= segments; i++) {
+        Vector2 p = Vector2Lerp(from, to, (float)i / segments);
+        float jitter = (i == 0 || i == segments) ? 0.0f : 7.0f;
+        z.points.push_back(ToWorld3D({ p.x + frand(-jitter, jitter), p.y + frand(-jitter, jitter) }, height + frand(-jitter, jitter) * 0.5f));
+    }
+    zaps.push_back(z);
+    spawn({ VfxTex::SPARK, z.points.back(), { 0, 0, 0 }, 0, 0, 0.15f, 0.15f, 30.0f, 8.0f, frand(0, 90), 0, color, false });
+}
+
+void VfxMuzzle(Vector2 g, Vector2 dir, Color color) {
+    Vector3 at = ToWorld3D({ g.x + dir.x * 16.0f, g.y + dir.y * 16.0f }, 24.0f);
+    spawn({ VfxTex::GLOW, at, { 0, 0, 0 }, 0, 0, 0.12f, 0.12f, 34.0f, 12.0f, 0, 0, color, false });
+    spawn({ VfxTex::SPARK, at, { 0, 0, 0 }, 0, 0, 0.12f, 0.12f, 30.0f, 10.0f, frand(0, 90), 0, WHITE, false });
+    for (int i = 0; i < 4; i++) {
+        Vector3 v = { dir.x * frand(150, 300) + frand(-60, 60), frand(20, 90), dir.y * frand(150, 300) + frand(-60, 60) };
+        spawn({ VfxTex::GLOW, at, v, 300.0f, 3.0f, 0.25f, 0.25f, 5.0f, 1.0f, 0, 0, color, false });
+    }
 }

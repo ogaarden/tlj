@@ -101,4 +101,21 @@ Notes:
    sjokkbølge med støv, roterende gifttåke med bobler, hugg-buer på orbit-bladene
 4) Gnister ved treff, lysglimt ved drap, ildkule ved kamikaze, glød rundt XP og gull
 
+// 4 oktober
+1) Kameraet er zoomet ut (FOVY 20 -> 28), fiender spawner lenger unna (950)
+2) Vanskelighetsgrad (spawner.cpp): rolig start (~13 fiender første halvminutt),
+   så kvadratisk vekst (~100 i wave 10, ~300 i wave 20). Fiendene får mer HP (x4 ved 10 min),
+   skade og fart jo lenger runden varer. Elite-fiender fra 2 min (større, x4 HP, gyllen aura).
+   Horde hvert 2. minutt som omringer deg. Maks 500 fiender samtidig.
+3) Nye fiendemodeller: soldat med skjold og fjærbusk, ogre med klubbe og støttenner,
+   ond mini-narr med kniv, bombe med sinte øyne. Gangeanimasjon, hvitt treffglimt,
+   stiger opp av gulvet når de spawner
+4) Klovnene: kantlys (rim light), Jester har narrestav og narredrakt, Wester har en
+   stor hammer han slår i bakken, tok geek har ryggsekk og sprettball
+5) Standardvåpen: treforken er en ekte 3D-trefork med munningsglimt, Ricochet lager
+   elektriske buer mellom sprettene, Ground Slam rister skjermen
+6) Skjermristing ved slag, eksplosjoner, lyn og når du tar skade
+7) Ytelse: 3D-formene bruker ferdig utregnede tabeller, og detaljnivået senkes
+   automatisk når det er mange fiender (SetShapeDetail)
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

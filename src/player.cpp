@@ -70,6 +70,11 @@ void Player::drawModel() const {
     pose.walkTime = walkTime;
     pose.moving = isMoving;
     pose.tint = tint;
+    // Angreps-animasjon: den første tredjedelen av cooldownen etter at standardvåpenet ble brukt
+    if (!weapons.empty()) {
+        float p = weapons[0]->cooldownProgress();
+        pose.attack = p < 0.3f ? 1.0f - p / 0.3f : 0.0f;
+    }
     DrawClown(clown, pose);
 }
 

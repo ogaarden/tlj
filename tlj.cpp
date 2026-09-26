@@ -1,4 +1,5 @@
 #include <raylib.h>
+#include <rlgl.h>
 #include <vector>
 #include <string>
 #include <memory>
@@ -236,6 +237,7 @@ int main() {
         if (taken > 0.0f) {
             SpawnDamageNumber(player.position, std::max(1, (int)(taken + 0.5f)), RED);
             PlaySfx(Sfx::PLAYER_HURT);
+            AddCameraShake(0.35f);
             // Echelon 3+: fiender slower deg ved treff
             if (runModifiers.slowOnHit > 0.0f) {
                 player.slowTimer = runModifiers.slowDuration;
@@ -421,6 +423,13 @@ int main() {
             }
             camera.target = player.position;
 
+            // Animasjon: alder (for å stige opp av gulvet) og hvitt treffglimt som dør ut
+            for (auto& enemy : enemies) {
+                enemy->age += deltaTime;
+                enemy->hitFlash = std::max(0.0f, enemy->hitFlash - deltaTime * 7.0f);
+            }
+            UpdateCameraShake(deltaTime);
+
             // Oppdater alle fiender (bossen står stille mens intro-teksten vises)
             if (arenaIntroTimer <= 0.0f) {
                 for (auto& enemy : enemies) {
@@ -563,11 +572,12 @@ int main() {
         if (currentState == CHARACTER_SELECT) {
             // Hver klovn i sin egen lille 3D-scene
             Camera3D previewCam{};
-            previewCam.position = { 0.0f, 52.0f, 125.0f };
-            previewCam.target = { 0.0f, 30.0f, 0.0f };
+            previewCam.position = { 0.0f, 60.0f, 140.0f };
+            previewCam.target = { 0.0f, 36.0f, 0.0f };
             previewCam.up = { 0.0f, 1.0f, 0.0f };
-            previewCam.fovy = 38.0f;
+            previewCam.fovy = 42.0f; // Plass til Westers hevede hammer
             previewCam.projection = CAMERA_PERSPECTIVE;
+            SetShadeViewDir(Vector3Subtract(previewCam.position, previewCam.target));
             for (size_t i = 0; i < characters.size(); i++) {
                 bool isSelected = (static_cast<int>(i) == selectedCharacter);
                 float spin = uiTime * (isSelected ? 1.6f : 0.5f) + i * 2.0f;
@@ -598,6 +608,7 @@ int main() {
             portraitCam.up = { 0.0f, 1.0f, 0.0f };
             portraitCam.fovy = 26.0f;
             portraitCam.projection = CAMERA_PERSPECTIVE;
+            SetShadeViewDir(Vector3Subtract(portraitCam.position, portraitCam.target));
             BeginTextureMode(portraitRT);
             ClearBackground(Color{ 58, 40, 70, 255 });
             BeginMode3D(portraitCam);
@@ -852,18 +863,42 @@ int main() {
                     }
                 }
 
-                for (auto& enemy : enemies) enemy->draw3D();
+                // Mange fiender -> færre trekanter per fiende (de er små på skjermen uansett)
+                SetShapeDetail(1.0f - Clamp(((float)enemies.size() - 80.0f) / 300.0f, 0.0f, 0.45f));
+                for (auto& enemy : enemies) {
+                    // Nye fiender stiger opp av gulvet; elite-fiender er større. Treff gir hvitt glimt.
+                    float rise = std::min(1.0f, enemy->age / 0.45f);
+                    rise = 1.0f - (1.0f - rise) * (1.0f - rise);
+                    float scale = enemy->modelScale * (0.5f + 0.5f * rise);
+                    SetShadeFlash(enemy->hitFlash * 0.85f);
+                    rlPushMatrix();
+                        rlTranslatef(enemy->position.x, -(1.0f - rise) * 25.0f, enemy->position.y);
+                        rlScalef(scale, scale, scale);
+                        rlTranslatef(-enemy->position.x, 0.0f, -enemy->position.y);
+                        enemy->draw3D();
+                    rlPopMatrix();
+                }
+                SetShadeFlash(0.0f);
+                SetShapeDetail(1.0f);
                 for (auto& w : player.weapons) w->draw3D();
                 player.drawModel();
                 DrawExplosions3D();
 
                 // --- VFX: glød, lyn, sjokkbølger og partikler (additivt, etter alt solid) ---
                 VfxBegin(view);
+                    // Lysende ring under spilleren, så man finner seg selv i mylderet
+                    {
+                        float pulse = 0.85f + 0.15f * sinf(uiTime * 3.0f);
+                        Color hero = { (unsigned char)(120 * pulse), (unsigned char)(100 * pulse), (unsigned char)(40 * pulse), 255 };
+                        VfxDecal(VfxTex::GLOW, player.position, 80.0f, hero, 0.0f, 0.9f);
+                        VfxDecal(VfxTex::SHOCKWAVE, player.position, 62.0f, Color{ 110, 90, 40, 255 }, uiTime * 30.0f, 1.0f);
+                    }
                     for (const auto& pickup : pickups) {
                         float h = 8.0f + 3.0f * sinf(bob + pickup.position.x * 0.05f);
                         Color glow = pickup.type == PickupType::COIN ? Color{ 255, 190, 60, 255 } : pickup.color;
                         VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, h), pickup.type == PickupType::COIN ? 26.0f : pickup.radius * 5.0f, Fade(glow, 0.55f));
                     }
+                    for (auto& enemy : enemies) enemy->drawVfx();
                     for (auto& w : player.weapons) w->drawVfx();
                     DrawVfxParticles();
                 VfxEnd();
@@ -903,6 +938,16 @@ int main() {
             hud.cameraYaw = camera.rotation;
             hud.showMinimap = showMinimap;
             DrawGameHud(hud);
+
+            // --- HORDE-VARSEL ---
+            float sinceHorde = spawner.gameTime - spawner.lastHordeTime;
+            if (!inBossArena && sinceHorde >= 0.0f && sinceHorde < 2.5f) {
+                float a = sinceHorde < 2.0f ? 1.0f : (2.5f - sinceHorde) / 0.5f;
+                float pulse = 0.7f + 0.3f * sinf(uiTime * 12.0f);
+                UI::BeginCanvas();
+                UI::DrawCenteredText("EN HORDE OMRINGER DEG!", CX, 190.0f, 40.0f, Fade(Color{ 255, (unsigned char)(80 * pulse), 60, 255 }, a), 3.0f);
+                UI::EndCanvas();
+            }
 
             // --- "KONGENS TRONSAL"-INTRO ETTER TELEPORT ---
             if (currentState == GAMEPLAY && inBossArena && arenaIntroTimer > 0.0f) {

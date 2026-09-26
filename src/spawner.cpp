@@ -3,27 +3,51 @@
 #include <algorithm>
 #include <random>
 
+// =====================================================================
+// VANSKELIGHETSGRAD
 // Hver wave varer 30 sekunder. Echelon 1 har boss etter 10 min (20 waves),
-// og hver echelon legger til 30 sek = én ekstra wave. Echelon 10 trenger 29 waves.
+// og hver echelon legger til 30 sek = én ekstra wave.
+//
+// Starten er rolig (ca. 13 fiender den første halve minuttet), men antallet
+// vokser kvadratisk: ~100 i wave 10 og ~300 i wave 20. I tillegg blir hver
+// fiende sterkere med tiden (se Difficulty under), elite-fiender dukker opp
+// etter 2 minutter, og hvert 2. minutt kommer en horde som omringer deg.
 // Exploder-grupper tas bare med når echelon 2+ er aktiv.
-std::vector<WaveDefinition> BuildWaves() {
-    std::vector<WaveDefinition> waves = {
-        // Wave 1: Bare footmen
-        { 1, { { EnemyType::FOOTMAN, 70 } } },
-        // Wave 2: Footmen og lackeys, første kamikaze
-        { 2, { { EnemyType::FOOTMAN, 35 }, { EnemyType::LACKEY, 35 }, { EnemyType::EXPLODER, 4 } } },
-        // Wave 3: Lackeys og goons
-        { 3, { { EnemyType::LACKEY, 40 }, { EnemyType::GOON, 25 }, { EnemyType::EXPLODER, 6 } } },
-    };
+// =====================================================================
+namespace Difficulty {
+    constexpr float SPAWN_DISTANCE = 950.0f;   // Utenfor skjermen, også med kameraet zoomet ut
+    constexpr int MAX_ALIVE = 500;             // Tak på fiender samtidig (ytelse)
 
-    // Wave 4-30: blanding som gradvis blir større
-    for (int n = 4; n <= 30; n++) {
-        waves.push_back({ n, {
-            { EnemyType::FOOTMAN,  30 + n },
-            { EnemyType::LACKEY,   25 + n },
-            { EnemyType::GOON,     10 + n / 2 },
-            { EnemyType::EXPLODER, 4 + n / 3 },
-        } });
+    int waveSize(int n) { return (int)(8 + 4 * n + 0.55f * n * n); }
+
+    // Fiender blir sterkere jo lenger runden varer (m = minutter)
+    float hpMult(float m)     { return 1.0f + 0.10f * m + 0.02f * m * m; }   // 10 min: x4
+    float damageMult(float m) { return 1.0f + 0.06f * m; }                   // 10 min: x1.6
+    float speedMult(float m)  { return fminf(1.3f, 1.0f + 0.015f * m); }     // Maks +30 %
+
+    // Sjanse for elite: 0 de første 2 minuttene, så 2 % + 0.6 % per minutt (maks 10 %)
+    float eliteChance(float m) { return m < 2.0f ? 0.0f : fminf(0.10f, 0.02f + 0.006f * (m - 2.0f)); }
+
+    // Horde hvert 2. minutt, midt i waven (1:30, 3:30, 5:30 ...)
+    bool isHordeWave(int waveIndex) { return waveIndex % 4 == 3; }
+    int hordeSize(int n) { return 10 + 3 * n; }
+}
+
+std::vector<WaveDefinition> BuildWaves() {
+    std::vector<WaveDefinition> waves;
+    for (int n = 1; n <= 30; n++) {
+        int total = Difficulty::waveSize(n);
+        auto part = [&](float fraction) { return std::max(0, (int)(total * fraction + 0.5f)); };
+        if (n == 1) {
+            // Wave 1: små lakeier og noen få soldater
+            waves.push_back({ n, { { EnemyType::LACKEY, part(0.7f) }, { EnemyType::FOOTMAN, part(0.3f) } } });
+        } else if (n == 2) {
+            waves.push_back({ n, { { EnemyType::LACKEY, part(0.55f) }, { EnemyType::FOOTMAN, part(0.4f) },
+                                   { EnemyType::GOON, part(0.05f) }, { EnemyType::EXPLODER, part(0.05f) } } });
+        } else {
+            waves.push_back({ n, { { EnemyType::FOOTMAN, part(0.38f) }, { EnemyType::LACKEY, part(0.34f) },
+                                   { EnemyType::GOON, part(0.18f) }, { EnemyType::EXPLODER, part(0.10f) } } });
+        }
     }
     return waves;
 }
@@ -35,6 +59,8 @@ void WaveSpawner::reset(const EchelonModifiers& echelonModifiers) {
     gameTime = 0.0f;
     spawnTimer = 0.0f;
     currentWaveIndex = -1;
+    hordeSpawnedWave = -1;
+    lastHordeTime = -100.0f;
     spawnQueue.clear();
 }
 
@@ -75,35 +101,57 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
         spawnWave(targetWaveIndex);
     }
 
-    if (spawnTimer >= spawnInterval && !spawnQueue.empty()) {
+    // Horde: midt i hver 4. wave kommer en ring av fiender fra alle kanter samtidig
+    bool hordeDue = Difficulty::isHordeWave(currentWaveIndex) && fmodf(gameTime, 30.0f) >= 15.0f;
+    if (hordeDue && hordeSpawnedWave != currentWaveIndex) {
+        hordeSpawnedWave = currentWaveIndex;
+        lastHordeTime = gameTime;
+        int n = currentWaveIndex + 1;
+        int count = Difficulty::hordeSize(n);
+        EnemyType type = n < 8 ? EnemyType::LACKEY : EnemyType::FOOTMAN;
+        for (int i = 0; i < count; i++) {
+            float angle = (float)i / count * 2.0f * PI;
+            Vector2 pos = { playerPos.x + cosf(angle) * Difficulty::SPAWN_DISTANCE, playerPos.y + sinf(angle) * Difficulty::SPAWN_DISTANCE };
+            spawnEnemy(type, pos, enemies, enemyTexture);
+        }
+    }
+
+    if (spawnTimer >= spawnInterval && !spawnQueue.empty() && (int)enemies.size() < Difficulty::MAX_ALIVE) {
         spawnTimer = 0.0f;
 
         EnemyType nextType = spawnQueue.back();
         spawnQueue.pop_back();
 
         float angle = (float)GetRandomValue(0, 360) * DEG2RAD;
-        float spawnDistance = 700.0f;
-
         Vector2 spawnPos = {
-            playerPos.x + cosf(angle) * spawnDistance,
-            playerPos.y + sinf(angle) * spawnDistance
+            playerPos.x + cosf(angle) * Difficulty::SPAWN_DISTANCE,
+            playerPos.y + sinf(angle) * Difficulty::SPAWN_DISTANCE
         };
-
-        // Polymorf instansiering basert på type
-        std::unique_ptr<Enemy> enemy;
-        if (nextType == EnemyType::FOOTMAN) {
-            enemy = std::make_unique<Footman>(spawnPos, enemyTexture);
-        } else if (nextType == EnemyType::GOON) {
-            enemy = std::make_unique<Goon>(spawnPos, enemyTexture);
-        } else if (nextType == EnemyType::LACKEY) {
-            enemy = std::make_unique<Lackey>(spawnPos, enemyTexture);
-        } else if (nextType == EnemyType::EXPLODER) {
-            enemy = std::make_unique<Exploder>(spawnPos, enemyTexture);
-        }
-
-        if (enemy) {
-            enemy->applyEchelonModifiers(modifiers.enemyHpMult, modifiers.enemyDamageMult, modifiers.enemySpeedMult);
-            enemies.push_back(std::move(enemy));
-        }
+        spawnEnemy(nextType, spawnPos, enemies, enemyTexture);
     }
+}
+
+void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture) {
+    // Polymorf instansiering basert på type
+    std::unique_ptr<Enemy> enemy;
+    if (type == EnemyType::FOOTMAN) {
+        enemy = std::make_unique<Footman>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::GOON) {
+        enemy = std::make_unique<Goon>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::LACKEY) {
+        enemy = std::make_unique<Lackey>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::EXPLODER) {
+        enemy = std::make_unique<Exploder>(spawnPos, enemyTexture);
+    }
+    if (!enemy) return;
+
+    // Echelon-effekter og tidsskalering stacker
+    float m = gameTime / 60.0f;
+    enemy->applyEchelonModifiers(modifiers.enemyHpMult * Difficulty::hpMult(m),
+                                 modifiers.enemyDamageMult * Difficulty::damageMult(m),
+                                 modifiers.enemySpeedMult * Difficulty::speedMult(m));
+    if (type != EnemyType::EXPLODER && GetRandomValue(1, 1000) <= (int)(Difficulty::eliteChance(m) * 1000.0f)) {
+        enemy->makeElite();
+    }
+    enemies.push_back(std::move(enemy));
 }

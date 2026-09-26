@@ -6,19 +6,42 @@
 #include "render3d.hpp"
 #include "audio.hpp"
 
-// --- Farger brukt av 3D-modellene ---
+// --- Farger og hjelpere for 3D-modellene ---
 namespace {
     const Color SKIN = { 236, 196, 160, 255 };
-    const Color STEEL = { 170, 175, 185, 255 };
+    const Color STEEL = { 175, 182, 195, 255 };
+    const Color STEEL_DARK = { 95, 100, 115, 255 };
     const Color LEATHER = { 90, 60, 40, 255 };
+    const Color WOOD = { 120, 80, 45, 255 };
+    const Color EYE_BLACK = { 20, 18, 24, 255 };
 
     Vector2 sideOf(Vector2 facing) { return { -facing.y, facing.x }; }
+
+    // Plasserer deler relativt til fienden: fwd = fremover, side = sidelengs, up = høyde
+    struct Rig {
+        Vector2 pos, f, s;
+        Rig(Vector2 p, Vector2 facing) : pos(p), f(facing), s(sideOf(facing)) {
+            if (Vector2Length(f) < 0.001f) { f = { 0, 1 }; s = sideOf(f); }
+        }
+        Vector3 at(float fwd, float side, float up) const {
+            return { pos.x + f.x * fwd + s.x * side, up, pos.y + f.y * fwd + s.y * side };
+        }
+        void ball(float fwd, float side, float up, float r, Color c, int rings = 4, int slices = 6) const {
+            ShadedSphere(at(fwd, side, up), r, c, rings, slices);
+        }
+        void blob(float fwd, float side, float up, Vector3 radii, Color c, int rings = 5, int slices = 7) const {
+            ShadedEllipsoid(at(fwd, side, up), f, radii, c, rings, slices);
+        }
+        void limb(Vector3 a, Vector3 b, float r0, float r1, Color c, int slices = 5) const {
+            ShadedCylinder(a, b, r0, r1, c, slices);
+        }
+    };
 }
 
 // --- Baseklasse ---
 void Enemy::draw() const {
     // På gulvet: bare skyggen. Selve figuren tegnes i draw3D().
-    DrawShadow({ position.x + 4.0f, position.y + 4.0f }, 15.0f, 8.0f);
+    DrawShadow({ position.x + 4.0f, position.y + 4.0f }, 15.0f * modelScale, 8.0f * modelScale);
 }
 
 void Enemy::draw3D() const {
@@ -27,52 +50,155 @@ void Enemy::draw3D() const {
     ShadedSphere(ToWorld3D(position, 31.0f), 7.0f, SKIN);
 }
 
+void Enemy::drawVfx() const {
+    if (!elite) return;
+    // Elite: gyllen aura på gulvet og glød rundt kroppen
+    float pulse = 0.75f + 0.25f * sinf((float)GetTime() * 5.0f + id);
+    VfxDecal(VfxTex::GLOW, position, 70.0f * modelScale, Color{ (unsigned char)(200 * pulse), (unsigned char)(150 * pulse), 40, 255 }, 0.0f, 1.0f);
+    VfxDecal(VfxTex::SHOCKWAVE, position, 55.0f * modelScale, Color{ 160, 120, 40, 255 }, (float)GetTime() * 90.0f, 1.2f);
+    VfxBillboard(VfxTex::GLOW, ToWorld3D(position, 22.0f * modelScale), 60.0f * modelScale, Color{ 90, 70, 20, 255 });
+}
+
+void Enemy::makeElite() {
+    elite = true;
+    modelScale = 1.45f;
+    hp *= 4;
+    maxHp = hp;
+    damage = (int)(damage * 1.5f);
+    xpValue *= 4;
+    goldChance = fminf(1.0f, goldChance * 3.0f + 0.1f);
+    goldValue += 2;
+    hitRadius *= 1.4f;
+    orbRadius *= 1.4f;
+}
+
+float Enemy::walkCycle() const {
+    return (float)GetTime() * (4.0f + speed * 0.04f) + id * 1.7f;
+}
+
 // --- 3D-modeller for vanlige fiender ---
 
-// Footman: blå soldat med hjelm og spyd
+// Footman: blå soldat med hjelm, fjærbusk, skjold og spyd
 void Footman::draw3D() const {
-    Vector2 side = sideOf(facing);
-    ShadedCylinder(ToWorld3D(position, 0.0f), ToWorld3D(position, 26.0f), 11.0f, 9.0f, orbColor);
-    ShadedCylinder(ToWorld3D(position, 11.0f), ToWorld3D(position, 14.0f), 11.5f, 11.0f, LEATHER);  // Belte
-    ShadedSphere(ToWorld3D(position, 32.0f), 7.0f, SKIN);
-    ShadedSphere(ToWorld3D(position, 34.0f), 7.6f, STEEL, 6, 10);                                   // Hjelm
-    ShadedCylinder(ToWorld3D(position, 30.5f), ToWorld3D(position, 31.5f), 10.0f, 10.0f, STEEL);    // Hjelmkant
+    Rig r(position, facing);
+    float w = walkCycle();
+    float step = sinf(w);
+    float bob = fabsf(cosf(w)) * 2.0f;
 
-    Vector2 hand = Vector2Add(position, Vector2Scale(side, 11.0f));
-    Vector2 tip = Vector2Add(hand, Vector2Scale(facing, 12.0f));
-    ShadedCylinder(ToWorld3D(hand, 4.0f), ToWorld3D(tip, 48.0f), 1.5f, 1.5f, LEATHER, 6);         // Spydskaft
-    ShadedCylinder(ToWorld3D(tip, 48.0f), ToWorld3D(Vector2Add(tip, Vector2Scale(facing, 1.5f)), 56.0f), 3.0f, 0.0f, STEEL, 6);
-    ShadedSphere(ToWorld3D(hand, 18.0f), 3.5f, SKIN, 4, 6);
-}
-
-// Goon: stor grønn brute med horn
-void Goon::draw3D() const {
-    const Color HEAD = { 120, 190, 110, 255 };
-    const Color HORN = { 230, 225, 200, 255 };
-    Vector2 side = sideOf(facing);
-    ShadedCylinder(ToWorld3D(position, 0.0f), ToWorld3D(position, 28.0f), 16.0f, 14.0f, orbColor);
-    ShadedSphere(ToWorld3D(Vector2Add(position, Vector2Scale(side, 15.0f)), 20.0f), 6.0f, HEAD, 5, 8);   // Armer
-    ShadedSphere(ToWorld3D(Vector2Subtract(position, Vector2Scale(side, 15.0f)), 20.0f), 6.0f, HEAD, 5, 8);
-    ShadedSphere(ToWorld3D(position, 37.0f), 10.0f, HEAD);
+    // Bein og støvler
     for (int s = -1; s <= 1; s += 2) {
-        Vector2 hornBase = Vector2Add(position, Vector2Scale(side, 7.0f * s));
-        Vector2 hornTip = Vector2Add(position, Vector2Scale(side, 11.0f * s));
-        ShadedCylinder(ToWorld3D(hornBase, 43.0f), ToWorld3D(hornTip, 54.0f), 3.0f, 0.0f, HORN, 6);
+        float st = step * 4.0f * s;
+        r.limb(r.at(st * 0.5f, s * 4.0f, 2.0f), r.at(0.0f, s * 4.0f, 13.0f + bob), 2.8f, 3.2f, STEEL_DARK);
+        r.blob(2.0f + st, s * 4.0f, 2.0f, { 4.5f, 2.2f, 2.8f }, LEATHER, 4, 6);
     }
+    // Våpenkjole og brystplate
+    r.limb(r.at(0, 0, 11.0f + bob), r.at(0, 0, 28.0f + bob), 10.0f, 8.0f, orbColor, 8);
+    r.blob(3.5f, 0.0f, 23.0f + bob, { 6.0f, 6.5f, 7.5f }, STEEL);
+    r.blob(8.2f, 0.0f, 17.0f + bob, { 1.2f, 4.5f, 1.6f }, Color{ 240, 220, 120, 255 }, 4, 5); // Gullstripe
+    r.limb(r.at(0, 0, 11.5f + bob), r.at(0, 0, 14.0f + bob), 10.4f, 10.2f, LEATHER, 8);          // Belte
+
+    // Hode, hjelm med visir og rød fjærbusk
+    r.ball(0.5f, 0, 33.0f + bob, 6.2f, SKIN);
+    r.ball(0.0f, 0, 34.5f + bob, 7.0f, STEEL, 5, 8);
+    r.blob(6.0f, 0.0f, 33.5f + bob, { 1.0f, 1.2f, 4.5f }, EYE_BLACK, 3, 5);                      // Visir-spalte
+    r.blob(-2.0f, 0.0f, 42.0f + bob, { 6.0f, 3.5f, 1.8f }, Color{ 210, 40, 45, 255 }, 4, 6);     // Fjærbusk
+
+    // Skjold på venstre arm (blått med gullkant og bule)
+    r.blob(5.0f, -11.0f, 21.0f + bob, { 1.6f, 9.5f, 7.5f }, Color{ 220, 180, 60, 255 });
+    r.blob(5.8f, -11.0f, 21.0f + bob, { 1.4f, 8.2f, 6.3f }, orbColor);
+    r.ball(7.2f, -11.0f, 21.0f + bob, 2.2f, Color{ 230, 190, 70, 255 }, 3, 5);
+
+    // Spyd i høyre hånd, svinger litt i takt med gangen
+    Vector3 hand = r.at(2.0f + step * 2.0f, 11.0f, 19.0f + bob);
+    Vector3 butt = r.at(-6.0f, 12.0f, 3.0f + bob);
+    Vector3 tip = r.at(14.0f + step * 2.0f, 11.0f, 50.0f + bob);
+    r.limb(butt, tip, 1.3f, 1.3f, WOOD, 5);
+    r.limb(tip, r.at(15.5f + step * 2.0f, 11.0f, 58.0f + bob), 2.8f, 0.0f, STEEL, 5);
+    ShadedSphere(hand, 3.0f, SKIN, 4, 5);
 }
 
-// Lackey: liten gul hoffnarr-lakei med spiss lue og bjelle
+// Goon: stor ogre med mage, støttenner, horn, lysende øyne og klubbe
+void Goon::draw3D() const {
+    const Color OGRE = { 110, 165, 95, 255 };
+    const Color OGRE_DARK = { 80, 125, 70, 255 };
+    const Color TUSK = { 240, 235, 210, 255 };
+    Rig r(position, facing);
+    float w = walkCycle() * 0.7f;
+    float step = sinf(w);
+    float sway = sinf(w) * 1.5f;
+    float bob = fabsf(cosf(w)) * 2.5f;
+
+    // Korte, tykke bein
+    for (int s = -1; s <= 1; s += 2) {
+        float st = step * 4.0f * s;
+        r.limb(r.at(st * 0.5f, s * 7.0f, 2.0f), r.at(0.0f, s * 7.0f, 13.0f + bob), 5.0f, 5.5f, OGRE_DARK);
+        r.blob(2.5f + st, s * 7.0f, 2.5f, { 6.0f, 3.0f, 4.5f }, OGRE_DARK, 4, 6);
+    }
+    // Lendeklede og stor mage
+    r.limb(r.at(0, sway, 10.0f + bob), r.at(0, sway, 16.0f + bob), 13.5f, 14.0f, LEATHER, 8);
+    r.blob(2.0f, sway, 26.0f + bob, { 15.0f, 14.0f, 16.0f }, OGRE);
+    r.blob(8.0f, sway, 23.0f + bob, { 7.0f, 9.0f, 10.0f }, Color{ 150, 195, 125, 255 });           // Lysere mage
+
+    // Hode med underbitt, støttenner, horn og røde øyne
+    float head = 43.0f + bob;
+    r.ball(3.0f, sway, head, 9.5f, OGRE, 6, 8);
+    r.blob(8.0f, sway, head - 5.0f, { 5.0f, 3.5f, 7.5f }, OGRE_DARK, 4, 6);                       // Kjeve
+    for (int s = -1; s <= 1; s += 2) {
+        r.limb(r.at(11.5f, sway + s * 4.0f, head - 6.0f), r.at(13.0f, sway + s * 4.5f, head + 1.0f), 1.6f, 0.0f, TUSK, 5);
+        r.ball(10.5f, sway + s * 3.5f, head + 2.5f, 1.8f, Color{ 255, 60, 40, 255 }, 3, 4);           // Øye
+        r.limb(r.at(2.0f, sway + s * 6.5f, head + 6.0f), r.at(0.0f, sway + s * 11.0f, head + 15.0f), 2.8f, 0.0f, TUSK, 5);
+    }
+
+    // Armer: venstre henger, høyre holder en pigget klubbe
+    float swing = -step * 3.0f;
+    r.limb(r.at(0, sway - 15.0f, 33.0f + bob), r.at(3.0f - swing, sway - 18.0f, 16.0f + bob), 4.5f, 4.0f, OGRE);
+    r.ball(3.0f - swing, sway - 18.0f, 15.0f + bob, 5.0f, OGRE_DARK, 4, 6);
+    Vector3 hand = r.at(6.0f + swing, sway + 18.0f, 18.0f + bob);
+    r.limb(r.at(0, sway + 15.0f, 33.0f + bob), hand, 4.5f, 4.0f, OGRE);
+    Vector3 clubTop = r.at(14.0f + swing, sway + 20.0f, 42.0f + bob);
+    r.limb(hand, clubTop, 2.2f, 5.0f, WOOD, 6);
+    ShadedSphere(clubTop, 5.5f, WOOD, 4, 6);
+    ShadedSphere(hand, 5.0f, OGRE_DARK, 4, 6);
+}
+
+// Lackey: liten, ond hoffnarr i to farger med to-tuppet lue, bjeller og kniv
 void Lackey::draw3D() const {
-    const Color HAT = { 120, 60, 170, 255 };
-    ShadedCylinder(ToWorld3D(position, 0.0f), ToWorld3D(position, 18.0f), 9.0f, 6.0f, orbColor);
-    ShadedSphere(ToWorld3D(position, 23.0f), 6.0f, SKIN, 6, 10);
-    ShadedCylinder(ToWorld3D(position, 26.0f), ToWorld3D(Vector2Subtract(position, Vector2Scale(facing, 5.0f)), 40.0f), 6.5f, 0.0f, HAT, 8);
-    ShadedSphere(ToWorld3D(Vector2Subtract(position, Vector2Scale(facing, 5.0f)), 40.0f), 2.5f, GOLD, 4, 6);
+    const Color PURPLE_C = { 120, 60, 170, 255 };
+    Rig r(position, facing);
+    float w = walkCycle() * 1.4f;
+    float hop = fabsf(sinf(w)) * 5.0f;                 // Hopper av gårde
+    float step = sinf(w);
+
+    // Tynne bein med spisse sko
+    for (int s = -1; s <= 1; s += 2) {
+        r.limb(r.at(step * 2.0f * s, s * 3.0f, 1.5f + hop), r.at(0.0f, s * 3.0f, 9.0f + hop), 1.6f, 2.0f, s < 0 ? PURPLE_C : orbColor, 5);
+        r.limb(r.at(1.0f + step * 2.0f * s, s * 3.0f, 1.5f + hop), r.at(6.0f + step * 2.0f * s, s * 3.0f, 3.5f + hop), 1.8f, 0.0f, s < 0 ? orbColor : PURPLE_C, 5);
+    }
+    // Kropp i to farger (narredrakt)
+    r.blob(0.0f, -2.3f, 14.0f + hop, { 5.5f, 6.5f, 3.6f }, PURPLE_C, 5, 7);
+    r.blob(0.0f, 2.3f, 14.0f + hop, { 5.5f, 6.5f, 3.6f }, orbColor, 5, 7);
+    // Hode med ondt glis
+    float head = 24.0f + hop;
+    r.ball(0.5f, 0, head, 5.8f, SKIN, 5, 7);
+    for (int s = -1; s <= 1; s += 2) r.ball(5.0f, s * 2.2f, head + 1.2f, 1.1f, EYE_BLACK, 3, 4);
+    r.blob(5.3f, 0.0f, head - 2.3f, { 0.8f, 0.9f, 3.2f }, Color{ 200, 30, 40, 255 }, 3, 5);
+    // To-tuppet lue med bjeller
+    for (int s = -1; s <= 1; s += 2) {
+        Vector3 base = r.at(0.0f, s * 2.5f, head + 3.5f);
+        Vector3 tip = r.at(-4.0f, s * 9.0f, head + 11.0f + sinf(w + s) * 1.5f);
+        r.limb(base, tip, 3.6f, 0.6f, s < 0 ? orbColor : PURPLE_C, 6);
+        ShadedSphere(tip, 1.8f, GOLD, 3, 5);
+    }
+    // Liten kniv
+    Vector3 hand = r.at(4.0f, 7.0f, 13.0f + hop);
+    r.limb(r.at(0, 5.0f, 17.0f + hop), hand, 1.4f, 1.2f, orbColor, 5);
+    r.limb(hand, r.at(10.0f, 7.5f, 16.0f + hop), 1.2f, 0.0f, STEEL, 4);
 }
 
 void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
     if (amount <= 0) return;
     hp -= amount;
+    hitFlash = isDamageOverTime ? fmaxf(hitFlash, 0.25f) : 1.0f;
 
     if (!isDamageOverTime) {
         SpawnDamageNumber(position, amount, numberColor);
@@ -303,9 +429,24 @@ void Boss::draw3D() const {
     ShadedSphere(ToWorld3D(tip, tipHeight + 5.0f), 7.0f, CROWN_GOLD, 6, 10);
     ShadedSphere(ToWorld3D(Vector2Add(tip, Vector2Scale(look, 5.0f)), tipHeight + 6.0f), 3.2f, RED, 4, 6);
     ShadedSphere(ToWorld3D(hand, 44.0f), 6.0f, SKIN, 5, 8);
-    if (windingUp) {
-        float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 20.0f);
-        DrawSphere(ToWorld3D(tip, tipHeight + 5.0f), 12.0f + 4.0f * pulse, Fade(YELLOW, 0.35f));
+}
+
+void Boss::drawVfx() const {
+    // Mørk-rød aura rundt kongen, og septeret gløder når han lader opp
+    float t = (float)GetTime();
+    VfxDecal(VfxTex::GLOW, position, 150.0f, Color{ 90, 10, 20, 255 }, 0.0f, 1.0f);
+    if (phase == Phase::WINDUP) {
+        Vector2 look = dashDirection;
+        Vector2 side = { -look.y, look.x };
+        Vector2 tip = Vector2Add(Vector2Add(position, Vector2Scale(side, 30.0f)), Vector2Scale(look, 4.0f));
+        float pulse = 0.5f + 0.5f * sinf(t * 20.0f);
+        float k = phaseTimer / BOSS_WINDUP_TIME;
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(tip, 115.0f), 60.0f + 30.0f * pulse, Color{ 255, 200, 80, 255 });
+        VfxBillboard(VfxTex::SPARK, ToWorld3D(tip, 115.0f), 70.0f + 40.0f * k, WHITE, t * 300.0f);
+        VfxDecal(VfxTex::SHOCKWAVE, position, 120.0f + 60.0f * k, Color{ 255, 80, 60, 255 }, t * 200.0f, 1.5f);
+    }
+    if (phase == Phase::DASH) {
+        VfxTrail(ToWorld3D(position, 40.0f), Color{ 255, 90, 60, 255 }, 90.0f, 0.3f);
     }
 }
 
@@ -345,6 +486,7 @@ void Exploder::update(Vector2 playerPosition) {
     }
 
     Vector2 dir = Vector2Normalize(Vector2Subtract(playerPosition, position));
+    facing = dir;
     position = Vector2Add(position, Vector2Scale(dir, speed * dt));
 }
 
@@ -359,18 +501,43 @@ void Exploder::draw() const {
 }
 
 void Exploder::draw3D() const {
-    // Bombe med lunte og gnist. Blinker hvitt/rødt mens lunta brenner.
+    // Bombe med sinte øyne og små føtter. Blinker hvitt/rødt mens lunta brenner.
+    Rig r(position, facing);
     bool flash = fuseLit && ((int)(fuseTimer * 20.0f) % 2 == 0);
-    Color body = flash ? WHITE : (fuseLit ? Color{ 170, 40, 30, 255 } : Color{ 45, 45, 55, 255 });
-    float wobble = fuseLit ? 1.0f + 0.08f * sinf(fuseTimer * 60.0f) : 1.0f;
+    Color body = flash ? WHITE : (fuseLit ? Color{ 170, 40, 30, 255 } : Color{ 45, 45, 58, 255 });
+    float wobble = fuseLit ? 1.0f + 0.1f * sinf(fuseTimer * 60.0f) : 1.0f;
+    float w = walkCycle() * 1.5f;
+    float run = fuseLit ? 0.0f : sinf(w);
+    float bob = fuseLit ? 0.0f : fabsf(cosf(w)) * 2.5f;
 
-    ShadedSphere(ToWorld3D(position, 14.0f), 13.0f * wobble, body, 8, 12);
-    ShadedCylinder(ToWorld3D(position, 25.0f), ToWorld3D(position, 30.0f), 4.5f, 4.5f, STEEL, 8);           // Tut
-    ShadedCylinder(ToWorld3D(position, 30.0f), ToWorld3D({ position.x + 3.0f, position.y }, 37.0f), 1.2f, 1.2f, LEATHER, 5);  // Lunte
+    // Små løpeføtter
+    for (int s = -1; s <= 1; s += 2) r.blob(3.0f + run * 4.0f * s, s * 5.0f, 2.0f, { 4.0f, 2.0f, 2.8f }, Color{ 230, 140, 40, 255 }, 3, 5);
 
-    // Gnisten flimrer
-    float flicker = 0.7f + 0.3f * sinf((float)GetTime() * 40.0f + position.x);
-    ShadedSphere(ToWorld3D({ position.x + 3.0f, position.y }, 38.0f), 3.0f * flicker, fuseLit ? YELLOW : ORANGE, 4, 6);
+    float c = 15.0f + bob;
+    r.ball(0, 0, c, 12.5f * wobble, body, 7, 10);
+    r.ball(-4.0f, 4.0f, c + 5.0f, 3.0f, Color{ 120, 120, 140, 255 }, 3, 4);           // Glans
+    // Sinte øyne: hvite med svarte pupiller og skrå øyenbryn
+    for (int s = -1; s <= 1; s += 2) {
+        r.ball(10.5f, s * 4.0f, c + 2.0f, 3.0f, WHITE, 4, 6);
+        r.ball(12.8f, s * 3.6f, c + 1.5f, 1.4f, EYE_BLACK, 3, 4);
+        r.limb(r.at(11.0f, s * 1.5f, c + 4.5f), r.at(10.0f, s * 7.0f, c + 7.5f), 1.0f, 1.0f, EYE_BLACK, 4);
+    }
+    r.limb(r.at(0, 0, c + 11.0f), r.at(0, 0, c + 16.0f), 4.5f, 4.5f, STEEL, 8);            // Tut
+    r.limb(r.at(0, 0, c + 16.0f), r.at(-2.0f, 2.0f, c + 23.0f), 1.2f, 1.2f, LEATHER, 5);   // Lunte
+}
+
+void Exploder::drawVfx() const {
+    // Gnisten på lunta, og en rød advarselsglød når den er tent
+    float t = (float)GetTime();
+    float flicker = 0.7f + 0.3f * sinf(t * 40.0f + position.x);
+    Rig r(position, facing);
+    Vector3 spark = r.at(-2.0f, 2.0f, 40.0f);
+    VfxBillboard(VfxTex::SPARK, spark, 22.0f * flicker, Color{ 255, 210, 120, 255 }, t * 500.0f);
+    VfxBillboard(VfxTex::GLOW, spark, 16.0f, Color{ 255, 150, 50, 255 });
+    if (fuseLit) {
+        float k = 1.0f - fuseTimer / EXPLODER_FUSE_TIME;
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(position, 15.0f), 50.0f + 50.0f * k, Color{ 255, 60, 30, 255 });
+    }
 }
 
 void Exploder::onDeath() {

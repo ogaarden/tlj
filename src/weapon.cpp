@@ -129,6 +129,7 @@ void ProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std:
                 float offset = (i - (count - 1) / 2.0f) * spreadStep;
                 fire(rotateDegrees(baseDir, offset));
             }
+            VfxMuzzle(playerPos, baseDir, color);
         } else {
             // Én kule mot hver av de N nærmeste fiendene
             std::vector<Enemy*> targets = nearestEnemies(playerPos, enemies, count);
@@ -191,10 +192,17 @@ void ProjectileWeapon::draw() const {
 void ProjectileWeapon::draw3D() const {
     for (const auto& p : projectiles) {
         if (spread) {
-            // Trefork-prong: gullkule med en liten spiss
-            ShadedSphere(ToWorld3D(p.position, PROJECTILE_HEIGHT), 4.5f, color, 5, 8);
-            Vector2 tip = Vector2Add(p.position, Vector2Scale(p.direction, 9.0f));
-            ShadedCylinder(ToWorld3D(p.position, PROJECTILE_HEIGHT), ToWorld3D(tip, PROJECTILE_HEIGHT), 3.0f, 0.0f, color, 6);
+            // En liten gyllen trefork: skaft, tverrstang og tre tinder
+            const float H = PROJECTILE_HEIGHT;
+            Vector2 d = p.direction;
+            Vector2 s = { -d.y, d.x };
+            auto at = [&](float along, float across) { return ToWorld3D(Vector2Add(p.position, Vector2Add(Vector2Scale(d, along), Vector2Scale(s, across))), H); };
+            ShadedCylinder(at(-16.0f, 0.0f), at(2.0f, 0.0f), 1.3f, 1.3f, Color{ 150, 100, 50, 255 }, 5);
+            ShadedCylinder(at(2.0f, -5.5f), at(2.0f, 5.5f), 1.4f, 1.4f, color, 5);
+            for (int k = -1; k <= 1; k++) {
+                float len = k == 0 ? 11.0f : 8.0f;
+                ShadedCylinder(at(2.0f, k * 5.0f), at(2.0f + len, k * 5.0f), 1.5f, 0.0f, color, 5);
+            }
         } else {
             // Dolk: skaft + blad i fartsretningen
             Vector2 hilt = Vector2Subtract(p.position, Vector2Scale(p.direction, 8.0f));
@@ -225,6 +233,7 @@ void MeleeWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
 
     damageEnemiesInRadius(playerPos, radius(), scaledDamage(), color, false, enemies, pickups);
     VfxShockwave(playerPos, radius(), color);
+    AddCameraShake(0.3f);
     effectTimer = 0.3f;
     fireTimer = 0.0f;
 }
@@ -321,6 +330,7 @@ void BouncingProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vec
                 // Sprett videre – bounceFalloff < 1 gjør hvert sprett svakere
                 p.bouncesLeft--;
                 p.damage *= stats.bounceFalloff;
+                if (!homing) VfxZap(hitPos, nextTarget->position, PROJECTILE_HEIGHT, Color{ 120, 190, 255, 255 });
                 p.position = hitPos;
                 p.direction = Vector2Normalize(Vector2Subtract(nextTarget->position, hitPos));
                 p.targetId = nextTarget->id;
@@ -627,6 +637,7 @@ void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
         Vector3 sky = { pos.x + (float)GetRandomValue(-20, 20), 420.0f, pos.y + (float)GetRandomValue(-20, 20) };
         bolts.push_back({ pos, area(), BOLT_TIME, BOLT_TIME, jaggedLine(sky, ToWorld3D(pos, 0.0f), 8, 16.0f) });
         VfxLightningStrike(pos, area());
+        AddCameraShake(0.12f);
 
         // Kjeden: hopper videre til nye fiender, svakere for hvert hopp
         queueNextJump(pos, dmg * stats.bounceFalloff, stats.bounces, hitIds, enemies);

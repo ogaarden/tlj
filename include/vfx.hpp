@@ -53,5 +53,7 @@ void VfxShockwave(Vector2 ground, float radius, Color color);       // Ground Sl
 void VfxLightningStrike(Vector2 ground, float radius);             // Nedslag: blink, gnister, glød
 void VfxExplosion(Vector2 ground, float radius);                   // Kamikaze-eksplosjon
 void VfxBubble(Vector2 ground, float height, Color color);         // Giftbobler som stiger opp
+void VfxZap(Vector2 from, Vector2 to, float height, Color color);  // Kort elektrisk bue (Ricochet-sprett)
+void VfxMuzzle(Vector2 ground, Vector2 dir, Color color);          // Glimt når et våpen skyter
 
 #endif // VFX_HPP

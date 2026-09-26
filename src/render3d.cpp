@@ -2,6 +2,8 @@
 #include <raymath.h>
 #include <rlgl.h>
 #include <cmath>
+#include <vector>
+#include <unordered_map>
 
 namespace {
 
@@ -10,13 +12,32 @@ Vector2 groundCenter = { 0, 0 };
 
 // Fast lys fra nordvest og ovenfra (samme retning som skyggene på gulvet)
 const Vector3 LIGHT_DIR = Vector3Normalize({ -0.4f, 0.85f, -0.35f });
-constexpr float AMBIENT = 0.48f;
-constexpr float DIFFUSE = 0.62f;
+constexpr float AMBIENT = 0.42f;
+constexpr float DIFFUSE = 0.70f;
+constexpr float RIM = 0.55f;      // Hvor sterkt kantlyset er
+
+Vector3 viewDir = Vector3Normalize({ 0.0f, 0.95f, 0.3f });
+float flashAmount = 0.0f;
+float shapeDetail = 1.0f;
+
+int detailed(int n, int minimum) {
+    int d = (int)(n * shapeDetail + 0.5f);
+    return d < minimum ? minimum : d;
+}
+float shakeTrauma = 0.0f;
 
 Color lit(Color base, Vector3 normal) {
     float d = Vector3DotProduct(normal, LIGHT_DIR);
     float k = AMBIENT + DIFFUSE * fmaxf(d, 0.0f);
-    auto ch = [k](unsigned char c) { float v = c * k; return (unsigned char)(v > 255.0f ? 255.0f : v); };
+    // Kantlys: flater som vender bort fra kameraet (konturen) blir lysere
+    float facing = fmaxf(Vector3DotProduct(normal, viewDir), 0.0f);
+    float edge = 1.0f - facing;
+    float rim = edge * edge * edge * RIM;
+    auto ch = [&](unsigned char c) {
+        float v = c * k + (70.0f + c * 0.6f) * rim;
+        v = v + (255.0f - v) * flashAmount;
+        return (unsigned char)(v > 255.0f ? 255.0f : v);
+    };
     return { ch(base.r), ch(base.g), ch(base.b), base.a };
 }
 
@@ -66,6 +87,12 @@ Camera3D MakeGameCamera(Vector2 focus, float yawDegrees) {
     float height = sinf(pitch) * View3D::CAMERA_DISTANCE;
     float back = cosf(pitch) * View3D::CAMERA_DISTANCE;
 
+    // Skjermristing: liten forskyvning som følger to sinusbølger (jevnere enn ren støy)
+    float t = (float)GetTime();
+    float shake = shakeTrauma * shakeTrauma * 14.0f;
+    Vector2 jolt = { sinf(t * 57.0f) * shake, cosf(t * 43.0f + 1.3f) * shake };
+    focus = Vector2Add(focus, jolt);
+
     Camera3D cam{};
     cam.target = ToWorld3D(focus, 0.0f);
     cam.position = {
@@ -73,10 +100,31 @@ Camera3D MakeGameCamera(Vector2 focus, float yawDegrees) {
         height,
         focus.y + cosf(yaw) * back
     };
+    viewDir = Vector3Normalize(Vector3Subtract(cam.position, cam.target));
     cam.up = { 0.0f, 1.0f, 0.0f };
     cam.fovy = View3D::FOVY;
     cam.projection = CAMERA_PERSPECTIVE;
     return cam;
+}
+
+void AddCameraShake(float amount) {
+    shakeTrauma = fminf(1.0f, shakeTrauma + amount);
+}
+
+void UpdateCameraShake(float deltaTime) {
+    shakeTrauma = fmaxf(0.0f, shakeTrauma - deltaTime * 2.2f);
+}
+
+void SetShadeViewDir(Vector3 towardCamera) {
+    viewDir = Vector3Normalize(towardCamera);
+}
+
+void SetShapeDetail(float detail) {
+    shapeDetail = detail < 0.3f ? 0.3f : (detail > 1.0f ? 1.0f : detail);
+}
+
+void SetShadeFlash(float amount) {
+    flashAmount = amount < 0.0f ? 0.0f : (amount > 1.0f ? 1.0f : amount);
 }
 
 void BeginGroundLayer(Vector2 center) {
@@ -118,32 +166,87 @@ Vector2 GroundToScreen(const Camera3D& camera, Vector2 ground, float height) {
     return GetWorldToScreen(ToWorld3D(ground, height), camera);
 }
 
-void ShadedSphere(Vector3 center, float radius, Color color, int rings, int slices) {
+// ---------------------------------------------------------------------
+// Skyggelagte former. Dette er det som bygger ALLE figurene hver frame, så det
+// må gå fort: enhetskuler og sirkeltabeller regnes ut én gang og caches, og
+// lyset regnes én gang per hjørnepunkt (ikke per trekant-hjørne).
+// ---------------------------------------------------------------------
+namespace {
+
+// Normaler på en enhetskule: (rings+1) x (slices+1) punkter, fra sørpolen til nordpolen
+const std::vector<Vector3>& unitSphere(int rings, int slices) {
+    static std::unordered_map<int, std::vector<Vector3>> cache;
+    int key = rings * 1000 + slices;
+    auto it = cache.find(key);
+    if (it != cache.end()) return it->second;
+    std::vector<Vector3> grid;
+    grid.reserve((rings + 1) * (slices + 1));
+    for (int i = 0; i <= rings; i++) {
+        float lat = -PI / 2.0f + PI * i / rings;
+        for (int j = 0; j <= slices; j++) {
+            float lon = 2.0f * PI * j / slices;
+            grid.push_back({ cosf(lat) * cosf(lon), sinf(lat), cosf(lat) * sinf(lon) });
+        }
+    }
+    return cache.emplace(key, std::move(grid)).first->second;
+}
+
+// cos/sin for hver slice rundt en sirkel
+const std::vector<Vector2>& unitCircle(int slices) {
+    static std::unordered_map<int, std::vector<Vector2>> cache;
+    auto it = cache.find(slices);
+    if (it != cache.end()) return it->second;
+    std::vector<Vector2> ring;
+    for (int i = 0; i <= slices; i++) {
+        float a = 2.0f * PI * i / slices;
+        ring.push_back({ cosf(a), sinf(a) });
+    }
+    return cache.emplace(slices, std::move(ring)).first->second;
+}
+
+// Felles for kule og ellipsoide: et rutenett av punkter og farger -> trekanter
+std::vector<Vector3> gridPos;
+std::vector<Color> gridCol;
+
+void emitGrid(int rings, int slices, Vector3 center) {
+    int w = slices + 1;
+    // Finn vindingen én gang (fra en rute midt på kula) i stedet for per trekant
+    int mi = rings / 2, mj = 0;
+    Vector3 a = gridPos[mi * w + mj], b = gridPos[(mi + 1) * w + mj], c = gridPos[(mi + 1) * w + mj + 1];
+    Vector3 n = Vector3CrossProduct(Vector3Subtract(b, a), Vector3Subtract(c, a));
+    bool flip = Vector3DotProduct(n, Vector3Subtract(a, center)) < 0.0f;
+
     rlCheckRenderBatchLimit(rings * slices * 6);
     rlBegin(RL_TRIANGLES);
     for (int i = 0; i < rings; i++) {
-        float lat0 = -PI / 2.0f + PI * i / rings;
-        float lat1 = -PI / 2.0f + PI * (i + 1) / rings;
         for (int j = 0; j < slices; j++) {
-            float lon0 = 2.0f * PI * j / slices;
-            float lon1 = 2.0f * PI * (j + 1) / slices;
-
-            Vector3 n00 = { cosf(lat0) * cosf(lon0), sinf(lat0), cosf(lat0) * sinf(lon0) };
-            Vector3 n01 = { cosf(lat0) * cosf(lon1), sinf(lat0), cosf(lat0) * sinf(lon1) };
-            Vector3 n10 = { cosf(lat1) * cosf(lon0), sinf(lat1), cosf(lat1) * sinf(lon0) };
-            Vector3 n11 = { cosf(lat1) * cosf(lon1), sinf(lat1), cosf(lat1) * sinf(lon1) };
-
-            Vector3 p00 = Vector3Add(center, Vector3Scale(n00, radius));
-            Vector3 p01 = Vector3Add(center, Vector3Scale(n01, radius));
-            Vector3 p10 = Vector3Add(center, Vector3Scale(n10, radius));
-            Vector3 p11 = Vector3Add(center, Vector3Scale(n11, radius));
-
-            Vector3 out = Vector3Add(Vector3Add(n00, n01), Vector3Add(n10, n11));
-            triangle(p00, p10, p11, lit(color, n00), lit(color, n10), lit(color, n11), out);
-            triangle(p00, p11, p01, lit(color, n00), lit(color, n11), lit(color, n01), out);
+            int i00 = i * w + j, i01 = i00 + 1, i10 = i00 + w, i11 = i10 + 1;
+            if (!flip) {
+                vertex(gridPos[i00], gridCol[i00]); vertex(gridPos[i10], gridCol[i10]); vertex(gridPos[i11], gridCol[i11]);
+                vertex(gridPos[i00], gridCol[i00]); vertex(gridPos[i11], gridCol[i11]); vertex(gridPos[i01], gridCol[i01]);
+            } else {
+                vertex(gridPos[i00], gridCol[i00]); vertex(gridPos[i11], gridCol[i11]); vertex(gridPos[i10], gridCol[i10]);
+                vertex(gridPos[i00], gridCol[i00]); vertex(gridPos[i01], gridCol[i01]); vertex(gridPos[i11], gridCol[i11]);
+            }
         }
     }
     rlEnd();
+}
+
+} // namespace
+
+void ShadedSphere(Vector3 center, float radius, Color color, int rings, int slices) {
+    rings = detailed(rings, 3);
+    slices = detailed(slices, 4);
+    const std::vector<Vector3>& unit = unitSphere(rings, slices);
+    size_t count = unit.size();
+    gridPos.resize(count);
+    gridCol.resize(count);
+    for (size_t k = 0; k < count; k++) {
+        gridPos[k] = { center.x + unit[k].x * radius, center.y + unit[k].y * radius, center.z + unit[k].z * radius };
+        gridCol[k] = lit(color, unit[k]);
+    }
+    emitGrid(rings, slices, center);
 }
 
 void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadius, Color color, int slices) {
@@ -156,29 +259,53 @@ void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadi
     Vector3 u = Vector3Normalize(Vector3CrossProduct(dir, helper));
     Vector3 v = Vector3CrossProduct(dir, u);
 
-    rlCheckRenderBatchLimit(slices * 12);
-    rlBegin(RL_TRIANGLES);
+    // Normal, farge og punkter for hver kant rundt sylinderen (regnes én gang)
+    slices = detailed(slices, 4);
+    const std::vector<Vector2>& circle = unitCircle(slices);
+    Vector3 normals[65];
+    Color colors[65];
+    if (slices > 64) slices = 64;
+    for (int i = 0; i <= slices; i++) {
+        normals[i] = Vector3Add(Vector3Scale(u, circle[i].x), Vector3Scale(v, circle[i].y));
+        colors[i] = lit(color, normals[i]);
+    }
+    // Vindingen: sjekk én gang om (b0, t0, t1) vender utover
+    Vector3 b0 = Vector3Add(start, Vector3Scale(normals[0], startRadius));
+    Vector3 t0 = Vector3Add(end, Vector3Scale(normals[0], endRadius));
+    Vector3 t1 = Vector3Add(end, Vector3Scale(normals[1], endRadius));
+    Vector3 b1 = Vector3Add(start, Vector3Scale(normals[1], startRadius));
+    Vector3 faceN = Vector3CrossProduct(Vector3Subtract(t0, b0), Vector3Subtract(t1, b0));
+    if (Vector3Length(faceN) < 1e-6f) faceN = Vector3CrossProduct(Vector3Subtract(t1, b0), Vector3Subtract(b1, b0)); // Kjegle-spiss
+    bool flip = Vector3DotProduct(faceN, Vector3Add(normals[0], normals[1])) < 0.0f;
     Color capStart = lit(color, Vector3Negate(dir));
     Color capEnd = lit(color, dir);
-    for (int i = 0; i < slices; i++) {
-        float a0 = 2.0f * PI * i / slices;
-        float a1 = 2.0f * PI * (i + 1) / slices;
-        Vector3 n0 = Vector3Add(Vector3Scale(u, cosf(a0)), Vector3Scale(v, sinf(a0)));
-        Vector3 n1 = Vector3Add(Vector3Scale(u, cosf(a1)), Vector3Scale(v, sinf(a1)));
 
-        Vector3 b0 = Vector3Add(start, Vector3Scale(n0, startRadius));
-        Vector3 b1 = Vector3Add(start, Vector3Scale(n1, startRadius));
-        Vector3 t0 = Vector3Add(end, Vector3Scale(n0, endRadius));
-        Vector3 t1 = Vector3Add(end, Vector3Scale(n1, endRadius));
+    rlCheckRenderBatchLimit(slices * 12);
+    rlBegin(RL_TRIANGLES);
+    for (int i = 0; i < slices; i++) {
+        b0 = Vector3Add(start, Vector3Scale(normals[i], startRadius));
+        b1 = Vector3Add(start, Vector3Scale(normals[i + 1], startRadius));
+        t0 = Vector3Add(end, Vector3Scale(normals[i], endRadius));
+        t1 = Vector3Add(end, Vector3Scale(normals[i + 1], endRadius));
+        Color c0 = colors[i], c1 = colors[i + 1];
 
         // Sidene
-        Vector3 out = Vector3Add(n0, n1);
-        triangle(b0, t0, t1, lit(color, n0), lit(color, n0), lit(color, n1), out);
-        triangle(b0, t1, b1, lit(color, n0), lit(color, n1), lit(color, n1), out);
-
-        // Lokk i begge ender
-        if (startRadius > 0.0f) triangle(start, b1, b0, capStart, capStart, capStart, Vector3Negate(dir));
-        if (endRadius > 0.0f) triangle(end, t0, t1, capEnd, capEnd, capEnd, dir);
+        if (!flip) {
+            vertex(b0, c0); vertex(t0, c0); vertex(t1, c1);
+            vertex(b0, c0); vertex(t1, c1); vertex(b1, c1);
+        } else {
+            vertex(b0, c0); vertex(t1, c1); vertex(t0, c0);
+            vertex(b0, c0); vertex(b1, c1); vertex(t1, c1);
+        }
+        // Lokk i begge ender (motsatt vinding av sidene sett utenfra)
+        if (startRadius > 0.0f) {
+            if (!flip) { vertex(start, capStart); vertex(b1, capStart); vertex(b0, capStart); }
+            else       { vertex(start, capStart); vertex(b0, capStart); vertex(b1, capStart); }
+        }
+        if (endRadius > 0.0f) {
+            if (!flip) { vertex(end, capEnd); vertex(t0, capEnd); vertex(t1, capEnd); }
+            else       { vertex(end, capEnd); vertex(t1, capEnd); vertex(t0, capEnd); }
+        }
     }
     rlEnd();
 }
@@ -220,31 +347,24 @@ void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color
     Vector3 u = { 0.0f, 1.0f, 0.0f };
     Vector3 sd = Vector3CrossProduct(u, f);
 
-    auto point = [&](float lat, float lon, Color& outColor) {
-        // Enhetskule-koordinater
-        float nf = cosf(lat) * cosf(lon), nu = sinf(lat), ns = cosf(lat) * sinf(lon);
-        Vector3 p = Vector3Add(center, Vector3Add(Vector3Scale(f, nf * radii.x), Vector3Add(Vector3Scale(u, nu * radii.y), Vector3Scale(sd, ns * radii.z))));
+    rings = detailed(rings, 3);
+    slices = detailed(slices, 4);
+    const std::vector<Vector3>& unit = unitSphere(rings, slices);
+    size_t count = unit.size();
+    gridPos.resize(count);
+    gridCol.resize(count);
+    float irx = 1.0f / radii.x, iry = 1.0f / radii.y, irz = 1.0f / radii.z;
+    for (size_t k = 0; k < count; k++) {
+        // Enhetskula (x = fremover, y = opp, z = sidelengs) strekkes til ellipsoiden
+        float nf = unit[k].x, nu = unit[k].y, ns = unit[k].z;
+        gridPos[k] = {
+            center.x + f.x * nf * radii.x + sd.x * ns * radii.z,
+            center.y + nu * radii.y,
+            center.z + f.z * nf * radii.x + sd.z * ns * radii.z
+        };
         // Normalen på en strukket kule: del på radiene
-        Vector3 n = Vector3Normalize(Vector3Add(Vector3Scale(f, nf / radii.x), Vector3Add(Vector3Scale(u, nu / radii.y), Vector3Scale(sd, ns / radii.z))));
-        outColor = lit(color, n);
-        return p;
-    };
-
-    rlCheckRenderBatchLimit(rings * slices * 6);
-    rlBegin(RL_TRIANGLES);
-    for (int i = 0; i < rings; i++) {
-        float lat0 = -PI / 2.0f + PI * i / rings;
-        float lat1 = -PI / 2.0f + PI * (i + 1) / rings;
-        for (int j = 0; j < slices; j++) {
-            float lon0 = 2.0f * PI * j / slices;
-            float lon1 = 2.0f * PI * (j + 1) / slices;
-            Color c00, c01, c10, c11;
-            Vector3 p00 = point(lat0, lon0, c00), p01 = point(lat0, lon1, c01);
-            Vector3 p10 = point(lat1, lon0, c10), p11 = point(lat1, lon1, c11);
-            Vector3 out = Vector3Subtract(Vector3Scale(Vector3Add(Vector3Add(p00, p01), Vector3Add(p10, p11)), 0.25f), center);
-            triangle(p00, p10, p11, c00, c10, c11, out);
-            triangle(p00, p11, p01, c00, c11, c01, out);
-        }
+        Vector3 n = Vector3Normalize({ f.x * nf * irx + sd.x * ns * irz, nu * iry, f.z * nf * irx + sd.z * ns * irz });
+        gridCol[k] = lit(color, n);
     }
-    rlEnd();
+    emitGrid(rings, slices, center);
 }
