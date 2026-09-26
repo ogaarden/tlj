@@ -91,4 +91,14 @@ Notes:
 4) Ny level-up: liggende kort som glir inn, fargebanner, ikon, NY!/LV-merke og nivåprikker
 5) Egne ikoner for alle abilities og shop-oppgraderinger (icons.cpp), også i HUD-en
 
+// 3 oktober
+1) VFX-system (vfx.cpp): additiv glød, lyn, sjokkbølger, gulv-decals og partikler
+2) VFX-teksturer generert med Higgsfield (assets/vfx/): lynstrek, elektrisk nedslag,
+   magisk kule, ildeksplosjon, gyllen sjokkbølge, gifttåke, sverdhugg og gnist.
+   Laget på svart bakgrunn og tegnet additivt, så svart blir usynlig.
+   Mangler en fil, lager spillet en enkel erstatning i kode.
+3) Alle våpen har nye effekter: glødende prosjektiler med spor, lyn fra himmelen,
+   sjokkbølge med støv, roterende gifttåke med bobler, hugg-buer på orbit-bladene
+4) Gnister ved treff, lysglimt ved drap, ildkule ved kamikaze, glød rundt XP og gull
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

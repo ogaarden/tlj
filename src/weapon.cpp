@@ -84,7 +84,7 @@ Vector2 rotateDegrees(Vector2 v, float degrees) {
 }
 
 constexpr float PROJECTILE_HIT_RADIUS = 5.0f;
-constexpr float SLASH_ROTATION_OFFSET = 0.0f; // Snur slash-teksturen så buen følger bladets retning
+constexpr float SLASH_ROTATION_OFFSET = 180.0f; // Snur slash-teksturen så buen følger bladets retning
 constexpr float PROJECTILE_HEIGHT = 18.0f; // Hvor høyt over bakken prosjektiler flyr (3D)
 
 // Liten skygge under noe som svever
@@ -422,10 +422,10 @@ void RotWeapon::draw() const {
 
 void RotWeapon::drawVfx() const {
     // To lag gifttåke som roterer hver sin vei og pulserer
-    float pulse = 0.75f + 0.25f * sinf(pulseTimer * 4.0f);
-    unsigned char b = (unsigned char)(255 * pulse);
-    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 2.3f, Color{ b, b, b, 255 }, pulseTimer * 25.0f, 1.2f);
-    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 1.6f, Color{ 120, 200, 120, 255 }, -pulseTimer * 40.0f, 1.4f);
+    // Dempet så klovnen og fiendene fortsatt synes gjennom tåka
+    float pulse = 0.8f + 0.2f * sinf(pulseTimer * 4.0f);
+    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 2.2f, Color{ (unsigned char)(70 * pulse), (unsigned char)(110 * pulse), (unsigned char)(60 * pulse), 255 }, pulseTimer * 25.0f, 1.2f);
+    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 1.5f, Color{ 30, 60, 30, 255 }, -pulseTimer * 40.0f, 1.4f);
 
     // Glødende sporer som svever rundt i auraen
     const int spores = 10;

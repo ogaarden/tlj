@@ -142,7 +142,7 @@ Image proceduralImage(VfxTex tex) {
 void cleanBlack(Image& img) {
     ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
     Color* px = (Color*)img.data;
-    const int cut = 14;
+    const int cut = 4; // Filene i assets/vfx er allerede renset, dette tar bare bort siste rest av støy
     for (int i = 0; i < img.width * img.height; i++) {
         auto f = [cut](unsigned char v) { int o = (v - cut) * 255 / (255 - cut); return (unsigned char)(o < 0 ? 0 : o); };
         px[i] = { f(px[i].r), f(px[i].g), f(px[i].b), 255 };
