@@ -688,3 +688,107 @@ void LightningWeapon::drawVfx() const {
         }
     }
 }
+
+// =====================================================================
+// PieWeapon (Pierrot): kremkaker som lobbes i en bue
+// =====================================================================
+namespace {
+    constexpr float PIE_FLIGHT_TIME = 0.55f;
+    constexpr float PIE_ARC_HEIGHT = 70.0f;
+    constexpr float SPLAT_TIME = 2.5f;      // Kremflekken ligger igjen og skader
+    constexpr float SPLAT_TICK = 0.25f;
+    const Color CREAM = { 250, 244, 235, 255 };
+    const Color CRUST = { 215, 160, 90, 255 };
+}
+
+void PieWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) {
+    fireTimer += deltaTime;
+    if (fireTimer >= cooldown() && !enemies.empty()) {
+        int count = stats.projectiles + mods.extraProjectiles;
+        std::vector<Enemy*> targets = nearestEnemies(playerPos, enemies, count);
+        for (int i = 0; i < count; i++) {
+            Enemy* target = targets[i % targets.size()];
+            // Sikt litt foran fienden, og spre ekstra kaker rundt samme mål
+            Vector2 aim = target->position;
+            if (i >= (int)targets.size()) aim = Vector2Add(aim, { (float)GetRandomValue(-40, 40), (float)GetRandomValue(-40, 40) });
+            pies.push_back({ playerPos, aim, 0.0f, PIE_FLIGHT_TIME + i * 0.05f, scaledDamage(), (float)GetRandomValue(0, 360) });
+        }
+        fireTimer = 0.0f;
+    }
+
+    // Kaker i lufta
+    for (size_t i = 0; i < pies.size(); ) {
+        Pie& p = pies[i];
+        p.t += deltaTime / p.flightTime;
+        p.spin += deltaTime * 540.0f;
+        if (p.t >= 1.0f) {
+            // SPLAT! Skade i et område og en kremflekk som ligger igjen
+            damageEnemiesInRadius(p.to, radius(), p.damage, CREAM, false, enemies, pickups);
+            splats.push_back({ p.to, radius() * 0.8f, SPLAT_TIME, 0.0f });
+            VfxShockwave(p.to, radius() * 0.6f, Color{ 255, 200, 220, 255 });
+            for (int k = 0; k < 3; k++) VfxHit(p.to, CREAM);
+            PlaySfx(Sfx::HIT);
+            pies[i] = pies.back();
+            pies.pop_back();
+            continue;
+        }
+        i++;
+    }
+
+    // Kremflekker: klissete skade over tid
+    int dotDamage = std::max(1, (int)(stats.damage * 0.15f * mods.damageMult));
+    for (size_t i = 0; i < splats.size(); ) {
+        CreamSplat& s = splats[i];
+        s.timer -= deltaTime;
+        s.tickTimer += deltaTime;
+        if (s.tickTimer >= SPLAT_TICK) {
+            s.tickTimer = 0.0f;
+            damageEnemiesInRadius(s.position, s.radius, dotDamage, Color{ 255, 190, 210, 255 }, true, enemies, pickups);
+        }
+        if (s.timer <= 0.0f) { splats[i] = splats.back(); splats.pop_back(); }
+        else i++;
+    }
+}
+
+void PieWeapon::draw() const {
+    // Kremflekker på gulvet (tones ut) og skygger under kakene i lufta
+    for (const CreamSplat& s : splats) {
+        float a = std::min(1.0f, s.timer / 0.6f);
+        DrawCircleV(s.position, s.radius, Fade(CREAM, 0.8f * a));
+        for (int k = 0; k < 6; k++) {
+            float ang = k * 1.05f + s.position.x * 0.01f;
+            DrawCircleV({ s.position.x + cosf(ang) * s.radius * 0.8f, s.position.y + sinf(ang) * s.radius * 0.8f }, s.radius * 0.3f, Fade(CREAM, 0.75f * a));
+        }
+        DrawCircleV(s.position, s.radius * 0.35f, Fade(Color{ 255, 170, 190, 255 }, 0.5f * a));
+    }
+    for (const Pie& p : pies) {
+        Vector2 ground = Vector2Lerp(p.from, p.to, p.t);
+        float h = 4.0f * p.t * (1.0f - p.t);
+        smallShadow(ground, 6.0f + 4.0f * (1.0f - h));
+        // Treffområdet vises mens kaka er på vei ned
+        DrawCircleLines((int)p.to.x, (int)p.to.y, radius(), Fade(CREAM, 0.25f + 0.4f * p.t));
+    }
+}
+
+void PieWeapon::draw3D() const {
+    for (const Pie& p : pies) {
+        Vector2 ground = Vector2Lerp(p.from, p.to, p.t);
+        float h = 20.0f + PIE_ARC_HEIGHT * 4.0f * p.t * (1.0f - p.t);
+        // Kaka: bunn, krem og et kirsebær, snurrer rundt seg selv
+        Vector2 wobble = { cosf(p.spin * DEG2RAD) * 1.5f, sinf(p.spin * DEG2RAD) * 1.5f };
+        Vector3 c = ToWorld3D(ground, h);
+        Vector3 top = ToWorld3D(Vector2Add(ground, wobble), h + 3.0f);
+        ShadedCylinder(ToWorld3D(ground, h - 3.0f), c, 7.0f, 8.5f, CRUST, 10);
+        ShadedCylinder(c, top, 8.0f, 6.0f, CREAM, 10);
+        ShadedSphere(Vector3Add(top, { 0, 1.5f, 0 }), 2.2f, Color{ 220, 30, 40, 255 }, 4, 6);
+    }
+}
+
+void PieWeapon::drawVfx() const {
+    for (const Pie& p : pies) {
+        Vector2 ground = Vector2Lerp(p.from, p.to, p.t);
+        float h = 20.0f + PIE_ARC_HEIGHT * 4.0f * p.t * (1.0f - p.t);
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(ground, h), 26.0f, Color{ 120, 100, 90, 255 });
+        VfxTrail(ToWorld3D(ground, h), Color{ 255, 210, 220, 255 }, 7.0f, 0.2f);
+    }
+}

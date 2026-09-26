@@ -344,6 +344,74 @@ void drawGeek(const ClownPose& pose) {
     r.sphere(0, 0, headUp + 14.5f, 1.1f, CAP_A, 4, 6);
 }
 
+// =====================================================================
+// PIERROT – hvit, trist mime-klovn: løs drakt, svarte pomponger, stor krage,
+// svart kalott og en tåre under øyet. Kaster kremkaker.
+// =====================================================================
+void drawPierrot(const ClownPose& pose) {
+    Rig r = makeRig(pose);
+    Gait g = gait(pose, 2.5f);
+    const Color SUIT = { 236, 238, 246, 255 };
+    const Color SUIT_SHADE = { 205, 208, 222, 255 };
+    const Color INK = { 25, 22, 30, 255 };
+    const Color LIPS = { 200, 30, 50, 255 };
+    const Color CRUST = { 215, 160, 90, 255 };
+    const Color CREAM = { 250, 244, 235, 255 };
+
+    // Vide bukser og svarte tøfler
+    for (int side = -1; side <= 1; side += 2) {
+        float step = g.step * 4.0f * side;
+        r.ellipsoid(2.5f + step, side * 4.5f, 2.0f, { 5.5f, 2.2f, 3.2f }, INK);
+        r.limb(r.at(step * 0.5f, side * 4.5f, 3.0f), r.at(0.0f, side * 4.0f, 16.0f + g.bob), 4.2f, 5.5f, SUIT_SHADE);
+    }
+    float up = g.bob;
+    // Løs, vid bluse (kjegle) med tre store svarte pomponger
+    r.limb(r.at(0, 0, 13.0f + up), r.at(0, 0, 35.0f + up), 12.5f, 8.5f, SUIT);
+    for (int i = 0; i < 3; i++) r.sphere(10.0f - i * 0.9f, 0.0f, 17.0f + i * 6.0f + up, 2.8f, INK, 5, 7);
+
+    // Armer i vide ermer. Høyre hånd holder en kremkake og kaster den ved angrep.
+    float throwT = pose.attack;
+    for (int side = -1; side <= 1; side += 2) {
+        float swing = -g.step * 3.0f * side;
+        Vector3 shoulder = r.at(0.0f, side * 9.0f, 32.0f + up);
+        bool pieHand = side > 0;
+        Vector3 hand = pieHand ? r.at(5.0f + 10.0f * throwT, 12.0f, 24.0f + up + 18.0f * throwT)
+                               : r.at(3.0f + swing, side * 12.5f, 19.0f + up);
+        r.limb(shoulder, hand, 3.8f, 4.4f, SUIT);
+        ShadedSphere(hand, 3.4f, r.c(Color{ 250, 250, 250, 255 }), 6, 8);
+        if (pieHand && throwT < 0.15f) {
+            // Kremkake på flat hånd
+            Vector3 pie = Vector3Add(hand, { 0.0f, 3.0f, 0.0f });
+            r.limb(pie, Vector3Add(pie, { 0.0f, 2.5f, 0.0f }), 6.0f, 6.5f, CRUST);
+            r.limb(Vector3Add(pie, { 0.0f, 2.5f, 0.0f }), Vector3Add(pie, { 0.0f, 4.5f, 0.0f }), 6.3f, 4.5f, CREAM);
+            ShadedSphere(Vector3Add(pie, { 0.0f, 5.5f, 0.0f }), 1.4f, r.c(LIPS), 4, 6);
+        }
+    }
+
+    // Stor rysjekrage i to lag
+    for (int layer = 0; layer < 2; layer++) {
+        int n = 14;
+        float rad = layer == 0 ? 11.5f : 9.0f;
+        for (int i = 0; i < n; i++) {
+            float a = i * (2.0f * PI / n) + layer * 0.2f;
+            r.sphere(cosf(a) * rad, sinf(a) * rad, 35.5f + layer * 1.5f + up, 3.2f, layer == 0 ? SUIT_SHADE : SUIT, 5, 7);
+        }
+    }
+
+    // Hode: hvitt ansikt, sorgmunn, svart tåre og kalott
+    float headUp = 46.0f + up;
+    r.sphere(0.0f, 0.0f, headUp, 9.5f, FACE_PAINT, 9, 12);
+    float front = 8.7f;
+    for (int side = -1; side <= 1; side += 2) {
+        r.sphere(front - 0.4f, side * 3.4f, headUp + 2.0f, 1.1f, INK, 4, 6);                                   // Øye
+        r.limb(r.at(front - 0.8f, side * 1.6f, headUp + 4.2f), r.at(front - 1.2f, side * 5.2f, headUp + 5.6f), 0.5f, 0.4f, INK); // Bryn
+    }
+    r.ellipsoid(front - 0.6f, 3.4f, headUp - 1.8f, { 0.5f, 1.6f, 0.9f }, INK);                                 // Tåre
+    r.ellipsoid(front - 0.5f, 0.0f, headUp - 4.5f, { 0.6f, 0.9f, 1.8f }, LIPS);                                 // Små lepper
+    r.ellipsoid(-0.8f, 0.0f, headUp + 3.5f, { 9.2f, 6.5f, 9.4f }, INK);                                         // Kalott
+    r.sphere(-0.5f, 0.0f, headUp + 10.0f, 2.0f, INK, 4, 6);                                                     // Liten dusk
+}
+
 } // namespace
 
 void DrawClown(ClownStyle style, const ClownPose& pose) {
@@ -351,6 +419,7 @@ void DrawClown(ClownStyle style, const ClownPose& pose) {
         case ClownStyle::JESTER: drawJester(pose); break;
         case ClownStyle::WESTER: drawWester(pose); break;
         case ClownStyle::GEEK:   drawGeek(pose); break;
+        case ClownStyle::PIERROT: drawPierrot(pose); break;
     }
 }
 
@@ -359,6 +428,7 @@ float ClownShadowWidth(ClownStyle style) {
         case ClownStyle::JESTER: return 16.0f;
         case ClownStyle::WESTER: return 23.0f;
         case ClownStyle::GEEK:   return 12.0f;
+        case ClownStyle::PIERROT: return 15.0f;
     }
     return 16.0f;
 }

@@ -189,6 +189,15 @@ void DrawAbilityIcon(AbilityId id, Vector2 c, float s) {
             tri(pts[5], pts[4], pts[3], bolt); tri(pts[5], pts[3], pts[2], bolt);
             DrawLineEx(pts[0], pts[1], 2.0f, Fade(WHITE, 0.7f));
         } break;
+        case AbilityId::PIE: { // Kremkake med kirsebær
+            DrawEllipse((int)c.x, (int)(c.y + s * 0.25f), s * 0.95f + 2.0f, s * 0.45f + 2.0f, INK);
+            DrawEllipse((int)c.x, (int)(c.y + s * 0.25f), s * 0.95f, s * 0.45f, Color{ 215, 160, 90, 255 });
+            DrawRectangleRec({ c.x - s * 0.95f, c.y - s * 0.05f, s * 1.9f, s * 0.3f }, Color{ 215, 160, 90, 255 });
+            DrawEllipse((int)c.x, (int)(c.y - s * 0.05f), s * 0.95f, s * 0.42f, Color{ 250, 244, 235, 255 });
+            for (int i = -2; i <= 2; i++) DrawCircleV(P(c, s, i * 0.36f, 0.2f), s * 0.16f, Color{ 250, 244, 235, 255 });
+            inkCircle(P(c, s, 0.0f, -0.35f), s * 0.2f, Color{ 220, 30, 40, 255 });
+            DrawLineEx(P(c, s, 0.0f, -0.5f), P(c, s, 0.25f, -0.9f), 2.0f, Color{ 60, 120, 40, 255 });
+        } break;
         default: { // Restituer: hjerte med pluss
             heart(c, s * 0.9f, HEART);
             plus(P(c, s, 0.45f, 0.45f), s * 0.5f, GREEN_L);

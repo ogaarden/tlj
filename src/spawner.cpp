@@ -44,9 +44,14 @@ std::vector<WaveDefinition> BuildWaves() {
         } else if (n == 2) {
             waves.push_back({ n, { { EnemyType::LACKEY, part(0.55f) }, { EnemyType::FOOTMAN, part(0.4f) },
                                    { EnemyType::GOON, part(0.05f) }, { EnemyType::EXPLODER, part(0.05f) } } });
-        } else {
+        } else if (n < 5) {
             waves.push_back({ n, { { EnemyType::FOOTMAN, part(0.38f) }, { EnemyType::LACKEY, part(0.34f) },
                                    { EnemyType::GOON, part(0.18f) }, { EnemyType::EXPLODER, part(0.10f) } } });
+        } else {
+            // Fra 2 minutter: armbrøstskyttere som tvinger deg til å bevege deg
+            waves.push_back({ n, { { EnemyType::FOOTMAN, part(0.33f) }, { EnemyType::LACKEY, part(0.31f) },
+                                   { EnemyType::GOON, part(0.16f) }, { EnemyType::EXPLODER, part(0.10f) },
+                                   { EnemyType::ARCHER, part(0.10f) } } });
         }
     }
     return waves;
@@ -142,6 +147,8 @@ void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::
         enemy = std::make_unique<Lackey>(spawnPos, enemyTexture);
     } else if (type == EnemyType::EXPLODER) {
         enemy = std::make_unique<Exploder>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::ARCHER) {
+        enemy = std::make_unique<Archer>(spawnPos, enemyTexture);
     }
     if (!enemy) return;
 

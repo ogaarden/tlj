@@ -14,6 +14,7 @@ void SaveGame(const std::string& path, const SaveData& data, const Shop& shop) {
     file << "gold " << data.gold << "\n";
     file << "echelon " << data.unlockedEchelon << "\n";
     file << "volume " << data.volume << "\n";
+    file << "music " << data.musicVolume << "\n";
     shop.writeLevels(file);
 }
 
@@ -31,6 +32,7 @@ void LoadGame(const std::string& path, SaveData& data, Shop& shop) {
         if (key == "gold") data.gold = std::max(0, value);
         else if (key == "echelon") data.unlockedEchelon = std::clamp(value, 1, MAX_ECHELON);
         else if (key == "volume") data.volume = std::clamp(value, 0, 100);
+        else if (key == "music") data.musicVolume = std::clamp(value, 0, 100);
         else shop.readLevel(key, value);
     }
 }

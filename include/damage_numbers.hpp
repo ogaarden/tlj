@@ -7,7 +7,8 @@
 // Tallene lagres i verdens-koordinater (posisjon på gulvet + høyde), men tegnes
 // i skjerm-koordinater slik at teksten alltid er rett vei.
 
-void SpawnDamageNumber(Vector2 worldPos, int amount, Color color);
+// crit = kritisk treff: større, gult tall med utropstegn
+void SpawnDamageNumber(Vector2 worldPos, int amount, Color color, bool crit = false);
 void UpdateDamageNumbers(float deltaTime);
 void DrawDamageNumbers(const Camera3D& camera); // Kalles ETTER EndMode3D()
 void ClearDamageNumbers();

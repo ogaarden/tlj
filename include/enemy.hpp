@@ -10,10 +10,19 @@ enum class EnemyType {
     FOOTMAN,
     GOON,
     LACKEY,
-    EXPLODER
+    EXPLODER,
+    ARCHER   // Armbrøstskytter: holder avstand og skyter piler
 };
 
 struct Pickup;
+
+// --- Fiende-prosjektiler (armbrøstpiler) ---
+// Samles globalt, så de lever videre selv om skytteren dør.
+void SpawnEnemyShot(Vector2 from, Vector2 dir, float speed, float damage);
+float UpdateEnemyShots(float deltaTime, Vector2 playerPos, float playerRadius); // Returnerer skade på spilleren
+void DrawEnemyShots3D();
+void DrawEnemyShotsVfx();
+void ClearEnemyShots();
 
 class Enemy {
 private:
@@ -27,6 +36,9 @@ private:
 
 public:
     static inline int killCount = 0; // Antall drepte fiender denne runden
+    // Kritiske treff: settes fra spilleren hver frame. Gjelder alle direkte treff (ikke DoT).
+    static inline float critChance = 0.05f;
+    static inline float critMultiplier = 2.0f;
 
     const int id = nextId++; // Unik ID, brukes f.eks. av ricochet for å huske hvem som er truffet
     Vector2 position;
@@ -142,6 +154,22 @@ public:
     void onDeath() override;
     int contactDamage() const override { return 0; } // Skader bare med eksplosjonen
     void applyEchelonModifiers(float hpMult, float damageMult, float speedMult) override;
+};
+
+// Armbrøstskytter: løper til passe avstand, sikter (rød linje på gulvet) og skyter
+class Archer : public Enemy {
+private:
+    float shootTimer = 1.0f;
+    float aimTimer = 0.0f;   // > 0 mens den sikter
+    Vector2 aimDir = { 0, 1 };
+
+public:
+    Archer(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+    int contactDamage() const override { return damage / 2; }
 };
 
 enum class PickupType {

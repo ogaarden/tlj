@@ -131,4 +131,15 @@ Notes:
 7) Tronsalen: fyrfat langs muren og emblem i midten. Kongen blir RASENDE under 50 % HP:
    raskere, kortere pauser mellom dashene og kaller inn lakeier
 
+// 6 oktober
+1) Ny karakter: Pierrot (hvit mime-klovn). Standardvåpen Kakekast: kremkaker lobbes i en
+   bue, spruter i et område og lar klissete krem ligge igjen (skade over tid)
+2) Ny fiende: armbrøstskytter (fra 2 min). Holder avstand, sikter med rød linje på
+   gulvet i et halvt sekund og skyter en glødende pil – flytt deg!
+3) Kritiske treff: 5 % sjanse for 2x skade, store gule tall med "!".
+   Ny stat-oppgradering: Presisjon (+5 % per nivå)
+4) Musikk (music.cpp), laget i kode: hoffnarr-vals i menyen, drivende spor i spillet og
+   mørk bossmusikk i tronsalen. Krysstoner mellom sporene. Eget musikkvolum i innstillinger
+5) Fyrverkeri over slottet i menyen
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

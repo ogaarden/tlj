@@ -164,6 +164,33 @@ public:
     float cooldownProgress() const override { return 1.0f; }
 };
 
+// --- Kremkaker som lobbes i en bue og spruter (Pierrot) ---
+struct Pie {
+    Vector2 from, to;   // Fra spilleren til landingsstedet
+    float t;            // 0 -> 1 underveis i lufta
+    float flightTime;
+    int damage;
+    float spin;
+};
+struct CreamSplat {
+    Vector2 position;
+    float radius;
+    float timer;        // Hvor lenge kremflekken ligger igjen
+    float tickTimer;
+};
+
+class PieWeapon : public Weapon {
+private:
+    std::vector<Pie> pies;
+    std::vector<CreamSplat> splats;
+
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+};
+
 // --- Lyn som slår ned på tilfeldige fiender i nærheten (Lightning) ---
 // Visuell lynstrek: enten fra himmelen og ned (nedslag), eller en bue mellom to fiender (kjede)
 struct LightningBolt {

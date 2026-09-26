@@ -74,6 +74,21 @@ std::vector<AbilityDefinition> buildDefinitions() {
         }
     });
 
+    defs.push_back({
+        AbilityId::PIE, "Kakekast", "Lobber kremkaker som spruter og lar krem ligge igjen.", Color{ 255, 180, 200, 255 },
+        { .damage = 70.0f, .cooldown = 1.3f, .projectiles = 2, .radius = 55.0f },
+        {
+            addProjectiles(1, "+1 kake"),
+            damageMult(1.3f, "+30% skade"),
+            addRadius(15.0f, "+15 sprut-radius"),
+            cooldownMult(0.85f, "-15% cooldown"),
+            addProjectiles(1, "+1 kake"),
+            damageMult(2.0f, "2x skade"),
+            addRadius(20.0f, "+20 sprut-radius"),
+            { "+2 kaker og -20% cooldown", [](AbilityStats& s) { s.projectiles += 2; s.cooldown *= 0.8f; } },
+        }
+    });
+
     // ---------------- FELLES POOL ----------------
 
     defs.push_back({
@@ -182,6 +197,7 @@ std::unique_ptr<Weapon> CreateAbility(AbilityId id) {
         case AbilityId::ROT:           ability = std::make_unique<RotWeapon>(); break;
         case AbilityId::ORBIT_BLADES:  ability = std::make_unique<OrbitWeapon>(); break;
         case AbilityId::LIGHTNING:     ability = std::make_unique<LightningWeapon>(); break;
+        case AbilityId::PIE:           ability = std::make_unique<PieWeapon>(); break;
         case AbilityId::COUNT:         return nullptr;
     }
 
@@ -232,14 +248,29 @@ const StatBoostInfo& GetStatBoostInfo(StatBoost stat) {
         { "Magnet",     "+35 radius for aa plukke opp XP og gull", Color{ 230, 60, 60, 255 } },
         { "Rustning",   "+4 armor (mindre skade fra alt)",         Color{ 170, 180, 200, 255 } },
         { "Visdom",     "+10% XP",                                 Color{ 90, 170, 255, 255 } },
+        { "Presisjon",  "+5% sjanse for kritisk treff (2x skade)", Color{ 255, 200, 40, 255 } },
     };
     return infos[(int)stat];
 }
 
 void DrawStatBoostIcon(StatBoost stat, Vector2 center, float size) {
+    if (stat == StatBoost::CRIT) {
+        // Blink: sikte med rødt senter og gul "!"-glimt
+        const Color INK = { 12, 10, 16, 255 };
+        DrawRing(center, size * 0.62f, size * 0.9f, 0.0f, 360.0f, 32, INK);
+        DrawRing(center, size * 0.66f, size * 0.84f, 0.0f, 360.0f, 32, Color{ 240, 232, 214, 255 });
+        DrawRing(center, size * 0.3f, size * 0.5f, 0.0f, 360.0f, 32, Color{ 220, 50, 50, 255 });
+        DrawCircleV(center, size * 0.18f, Color{ 255, 210, 60, 255 });
+        for (int i = 0; i < 4; i++) {
+            float a = i * PI / 2.0f;
+            Vector2 d = { cosf(a), sinf(a) };
+            DrawLineEx({ center.x + d.x * size * 0.55f, center.y + d.y * size * 0.55f }, { center.x + d.x * size * 1.05f, center.y + d.y * size * 1.05f }, size * 0.14f, INK);
+        }
+        return;
+    }
     static const ShopUpgrade icons[(int)StatBoost::COUNT] = {
         ShopUpgrade::VITALITY, ShopUpgrade::SPEED, ShopUpgrade::MIGHT, ShopUpgrade::HASTE,
-        ShopUpgrade::AREA, ShopUpgrade::MAGNET, ShopUpgrade::ARMOR, ShopUpgrade::GROWTH,
+        ShopUpgrade::AREA, ShopUpgrade::MAGNET, ShopUpgrade::ARMOR, ShopUpgrade::GROWTH, ShopUpgrade::MIGHT,
     };
     DrawUpgradeIcon(icons[(int)stat], center, size);
 }
@@ -322,6 +353,7 @@ void ApplyAbilityChoice(Player& player, const AbilityChoice& choice) {
                 case StatBoost::MAGNET: player.lootRadius += 35.0f; break;
                 case StatBoost::ARMOR:  player.armor += 4.0f; break;
                 case StatBoost::GROWTH: player.xpMultiplier *= 1.10f; break;
+                case StatBoost::CRIT:   player.critChance += 0.05f; break;
                 default: break;
             }
         } break;

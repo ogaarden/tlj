@@ -42,6 +42,7 @@ struct Player {
 
     int projectileCount = 1;
     int aegis = 0;
+    float critChance = 0.05f; // Sjanse for kritisk treff (dobbel skade)
 
     // Stat-oppgraderinger tatt i level-up denne runden (se StatBoost)
     int statBoosts[(int)StatBoost::COUNT] = {};

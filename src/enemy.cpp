@@ -197,12 +197,15 @@ void Lackey::draw3D() const {
 
 void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
     if (amount <= 0) return;
+    bool crit = !isDamageOverTime && GetRandomValue(1, 1000) <= (int)(critChance * 1000.0f);
+    if (crit) amount = (int)(amount * critMultiplier);
     hp -= amount;
     hitFlash = isDamageOverTime ? fmaxf(hitFlash, 0.25f) : 1.0f;
 
     if (!isDamageOverTime) {
-        SpawnDamageNumber(position, amount, numberColor);
-        VfxHit(position, numberColor);
+        SpawnDamageNumber(position, amount, numberColor, crit);
+        VfxHit(position, crit ? Color{ 255, 220, 80, 255 } : numberColor);
+        if (crit) VfxHit(position, WHITE);
         PlaySfx(Sfx::HIT);
         return;
     }
@@ -574,4 +577,152 @@ void Exploder::onDeath() {
 void Exploder::applyEchelonModifiers(float hpMult, float damageMult, float speedMult) {
     Enemy::applyEchelonModifiers(hpMult, damageMult, speedMult);
     explosionDamage *= damageMult;
+}
+
+// =====================================================================
+// ARMBRØSTSKYTTER og fiende-prosjektiler
+// =====================================================================
+namespace {
+    constexpr float ARCHER_RANGE = 340.0f;      // Avstanden den prøver å holde
+    constexpr float ARCHER_AIM_TIME = 0.55f;    // Tid spilleren har til å flytte seg
+    constexpr float ARCHER_COOLDOWN = 2.4f;
+    constexpr float SHOT_SPEED = 330.0f;
+
+    struct EnemyShot {
+        Vector2 position;
+        Vector2 direction;
+        float speed;
+        float damage;
+        float life;
+    };
+    std::vector<EnemyShot> enemyShots;
+}
+
+void SpawnEnemyShot(Vector2 from, Vector2 dir, float speed, float damage) {
+    enemyShots.push_back({ from, dir, speed, damage, 3.0f });
+}
+
+float UpdateEnemyShots(float deltaTime, Vector2 playerPos, float playerRadius) {
+    float damageToPlayer = 0.0f;
+    for (size_t i = 0; i < enemyShots.size(); ) {
+        EnemyShot& s = enemyShots[i];
+        s.position = Vector2Add(s.position, Vector2Scale(s.direction, s.speed * deltaTime));
+        s.life -= deltaTime;
+        bool hit = Vector2Distance(s.position, playerPos) < playerRadius + 5.0f;
+        if (hit) {
+            damageToPlayer += s.damage;
+            VfxHit(s.position, Color{ 255, 90, 60, 255 });
+        }
+        if (hit || s.life <= 0.0f) { enemyShots[i] = enemyShots.back(); enemyShots.pop_back(); }
+        else i++;
+    }
+    return damageToPlayer;
+}
+
+void DrawEnemyShots3D() {
+    for (const EnemyShot& s : enemyShots) {
+        Vector2 tail = Vector2Subtract(s.position, Vector2Scale(s.direction, 16.0f));
+        Vector2 tip = Vector2Add(s.position, Vector2Scale(s.direction, 6.0f));
+        ShadedCylinder(ToWorld3D(tail, 22.0f), ToWorld3D(s.position, 22.0f), 1.0f, 1.0f, WOOD, 4);
+        ShadedCylinder(ToWorld3D(s.position, 22.0f), ToWorld3D(tip, 22.0f), 2.2f, 0.0f, STEEL, 4);
+    }
+}
+
+void DrawEnemyShotsVfx() {
+    for (const EnemyShot& s : enemyShots) {
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(s.position, 22.0f), 22.0f, Color{ 255, 70, 40, 255 });
+        VfxTrail(ToWorld3D(s.position, 22.0f), Color{ 200, 50, 30, 255 }, 9.0f, 0.12f);
+    }
+}
+
+void ClearEnemyShots() { enemyShots.clear(); }
+
+Archer::Archer(Vector2 spawnPos, Texture2D tex) {
+    position = spawnPos;
+    speed = 120.0f;
+    hp = 70;
+    maxHp = 70;
+    damage = 14;         // Pilene gjør full skade, berøring halv
+    xpValue = 22;
+    orbColor = Color{ 60, 150, 70, 255 };
+    goldChance = 0.06f;
+    goldValue = 1;
+    orbRadius = 6.0f;
+    texture = tex;
+    shootTimer = 1.0f + (id % 10) * 0.12f; // Så ikke alle skyter samtidig
+}
+
+void Archer::update(Vector2 playerPosition) {
+    float dt = GetFrameTime();
+    Vector2 toPlayer = Vector2Subtract(playerPosition, position);
+    float dist = Vector2Length(toPlayer);
+    Vector2 dir = dist > 0.01f ? Vector2Scale(toPlayer, 1.0f / dist) : Vector2{ 0, 1 };
+    facing = aimTimer > 0.0f ? aimDir : dir;
+
+    if (aimTimer > 0.0f) {
+        // Står stille og sikter – retningen er låst, så spilleren kan unngå pila
+        aimTimer -= dt;
+        if (aimTimer <= 0.0f) {
+            SpawnEnemyShot(Vector2Add(position, Vector2Scale(aimDir, 14.0f)), aimDir, SHOT_SPEED, (float)damage);
+            shootTimer = ARCHER_COOLDOWN;
+        }
+        return;
+    }
+
+    // Hold passe avstand: gå nærmere hvis for langt unna, rygg hvis for nær
+    if (dist > ARCHER_RANGE + 40.0f) position = Vector2Add(position, Vector2Scale(dir, speed * dt));
+    else if (dist < ARCHER_RANGE - 80.0f) position = Vector2Subtract(position, Vector2Scale(dir, speed * 0.7f * dt));
+
+    shootTimer -= dt;
+    if (shootTimer <= 0.0f && dist < ARCHER_RANGE + 120.0f) {
+        aimTimer = ARCHER_AIM_TIME;
+        aimDir = dir;
+    }
+}
+
+void Archer::draw() const {
+    // Varsel-linje på gulvet mens den sikter
+    if (aimTimer > 0.0f) {
+        float t = 1.0f - aimTimer / ARCHER_AIM_TIME;
+        Vector2 end = Vector2Add(position, Vector2Scale(aimDir, SHOT_SPEED * 1.6f));
+        DrawLineEx(position, end, 3.0f + 5.0f * t, Fade(RED, 0.25f + 0.45f * t));
+    }
+    Enemy::draw();
+}
+
+void Archer::draw3D() const {
+    const Color HOOD = { 45, 85, 50, 255 };
+    const Color CLOAK = { 60, 110, 65, 255 };
+    Rig r(position, facing);
+    bool aiming = aimTimer > 0.0f;
+    float w = walkCycle();
+    float step = aiming ? 0.0f : sinf(w);
+    float bob = aiming ? 0.0f : fabsf(cosf(w)) * 2.0f;
+
+    for (int s = -1; s <= 1; s += 2) {
+        r.limb(r.at(step * 3.0f * s, s * 3.5f, 2.0f), r.at(0.0f, s * 3.5f, 13.0f + bob), 2.4f, 2.8f, LEATHER);
+    }
+    // Kappe (kjegle) og hette
+    r.limb(r.at(-1.0f, 0, 3.0f + bob), r.at(0, 0, 30.0f + bob), 11.0f, 6.5f, CLOAK, 7);
+    r.ball(0.5f, 0, 33.0f + bob, 5.8f, SKIN);
+    r.limb(r.at(-1.5f, 0, 31.0f + bob), r.at(-4.0f, 0, 45.0f + bob), 7.5f, 0.0f, HOOD, 7);      // Spiss hette
+    r.blob(4.5f, 0.0f, 33.5f + bob, { 1.5f, 2.5f, 4.0f }, EYE_BLACK, 3, 4);                     // Skygge i hetta
+    r.blob(-6.5f, 5.0f, 26.0f + bob, { 2.5f, 7.0f, 2.5f }, LEATHER, 3, 5);                      // Kogger
+    // Armbrøst foran seg (løftes når den sikter)
+    float up = aiming ? 24.0f : 18.0f;
+    Vector3 stockBack = r.at(2.0f, 1.0f, up + bob);
+    Vector3 stockFront = r.at(15.0f, 1.0f, up + bob);
+    r.limb(stockBack, stockFront, 1.6f, 1.4f, WOOD, 5);
+    r.limb(r.at(13.0f, -7.0f, up + bob), r.at(13.0f, 9.0f, up + bob), 1.1f, 1.1f, Color{ 80, 55, 35, 255 }, 4);
+    r.ball(4.0f, 5.0f, up - 1.0f + bob, 2.5f, SKIN, 3, 4);
+}
+
+void Archer::drawVfx() const {
+    Enemy::drawVfx();
+    if (aimTimer > 0.0f) {
+        // Rødt glimt i armbrøsten rett før den skyter
+        float t = 1.0f - aimTimer / ARCHER_AIM_TIME;
+        Rig r(position, facing);
+        VfxBillboard(VfxTex::SPARK, r.at(15.0f, 1.0f, 24.0f), 10.0f + 26.0f * t, Color{ 255, 80, 60, 255 }, t * 180.0f);
+    }
 }

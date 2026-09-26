@@ -12,6 +12,7 @@ enum class AbilityId {
     TREFORK,
     GROUND_SLAM,
     RICOCHET,
+    PIE,        // Pierrot: kremkaker som lobbes og spruter
 
     // Felles pool
     MAGIC_MISSILE,
@@ -34,6 +35,7 @@ enum class StatBoost {
     MAGNET,  // +35 pickup-radius
     ARMOR,   // +4 armor
     GROWTH,  // +10 % XP
+    CRIT,    // +5 % sjanse for kritisk treff (dobbel skade)
     COUNT
 };
 constexpr int MAX_STAT_BOOST = 5;

@@ -462,6 +462,47 @@ void DrawCastleBackdrop(float time, float dim) {
         cloud(x, y, sc, mix(Color{ 60, 40, 96, 255 }, Color{ 150, 80, 110, 255 }, y / (ground * 0.8f)));
     }
 
+    // --- FYRVERKERI bak slottet (beregnes fra tiden, så det trengs ingen tilstand) ---
+    {
+        const Color FW[5] = { { 255, 210, 90, 255 }, { 255, 80, 90, 255 }, { 190, 110, 255, 255 }, { 110, 230, 140, 255 }, { 120, 190, 255, 255 } };
+        BeginBlendMode(BLEND_ADDITIVE);
+        for (int rocket = 0; rocket < 4; rocket++) {
+            const float period = 4.2f + rocket * 0.9f;
+            float local = fmodf(time + rocket * 1.37f, period);
+            int cycle = (int)((time + rocket * 1.37f) / period);
+            int seed = rocket * 97 + cycle * 13;
+            // Til venstre eller høyre for slottet, så det ikke gjemmer seg bak logoen
+            float side = (rocket % 2 == 0) ? -1.0f : 1.0f;
+            float x = cx + side * (420.0f + hash01(seed) * 200.0f) * u;
+            float burstY = ground - (260.0f + hash01(seed + 1) * 160.0f) * u;
+            Color col = FW[(int)(hash01(seed + 2) * 5) % 5];
+            const float rise = 1.1f;
+            if (local < rise) {
+                // Raketten stiger med en glødende hale
+                float k = local / rise;
+                float y = ground - (ground - burstY) * (1.0f - (1.0f - k) * (1.0f - k));
+                for (int t = 0; t < 6; t++) DrawCircleV({ x, y + t * 6.0f * u }, (3.0f - t * 0.4f) * u, Fade(Color{ 255, 200, 140, 255 }, 0.5f - t * 0.07f));
+            } else if (local < rise + 2.0f) {
+                // Smell: ring av gnister som faller og tones ut
+                float t = local - rise;
+                float fade = 1.0f - t / 2.0f;
+                DrawCircleV({ x, burstY }, 90.0f * u * fade, Fade(col, 0.15f * fade));
+                if (t < 0.12f) DrawCircleV({ x, burstY }, 40.0f * u, Fade(WHITE, 0.6f * (1.0f - t / 0.12f)));
+                const int sparks = 36;
+                for (int i = 0; i < sparks; i++) {
+                    float a = i * 2.0f * PI / sparks + hash01(seed + i) * 0.2f;
+                    float sp = (150.0f + hash01(seed + i * 3) * 60.0f) * u;
+                    float px = x + cosf(a) * sp * t;
+                    float py = burstY + sinf(a) * sp * t + 45.0f * u * t * t;
+                    DrawCircleV({ px, py }, 3.4f * u * fade + 0.8f, Fade(col, fade));
+                    DrawCircleV({ px - cosf(a) * 8.0f * u, py - sinf(a) * 8.0f * u }, 2.2f * u * fade, Fade(col, 0.55f * fade));
+                    DrawCircleV({ px - cosf(a) * 15.0f * u, py - sinf(a) * 15.0f * u }, 1.4f * u * fade, Fade(col, 0.3f * fade));
+                }
+            }
+        }
+        EndBlendMode();
+    }
+
     // --- ÅSER i to lag ---
     for (int i = -1; i < (int)(w / (260.0f * u)) + 2; i++) {
         float hx = i * 260.0f * u + hash01(i + 50) * 80.0f * u;

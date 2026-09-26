@@ -27,6 +27,7 @@
 #include "hud.hpp"
 #include "icons.hpp"
 #include "vfx.hpp"
+#include "music.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -115,6 +116,7 @@ int main() {
     InitRenderer3D();
     InitVfx();
     InitGameAudio();
+    InitGameMusic();
 
     GameState currentState = MAIN_MENU;
     int mainOption = 0;
@@ -150,6 +152,8 @@ int main() {
     SaveData saveData;
     LoadGame(Rewards::SAVE_FILE, saveData, shop);
     SetGameVolume(saveData.volume / 100.0f);
+    SetMusicVolume01(saveData.musicVolume / 100.0f);
+    int settingsRow = 0; // 0 = volum, 1 = musikk
     int& totalGold = saveData.gold;
     auto saveProgress = [&]() { SaveGame(Rewards::SAVE_FILE, saveData, shop); };
 
@@ -199,6 +203,7 @@ int main() {
         player.weapons.clear();
         player.invulnerableTimer = 0.0f;
         player.slowTimer = 0.0f;
+        player.critChance = 0.05f;
         for (int& b : player.statBoosts) b = 0;
         lastPlayerLevel = 1;
         runCoins = 0;
@@ -236,6 +241,7 @@ int main() {
         ClearDamageNumbers();
         ClearExplosions();
         ClearVfx();
+        ClearEnemyShots();
     };
 
     // Skade på spilleren fra fiender (kontakt og eksplosjoner)
@@ -257,6 +263,11 @@ int main() {
     while (!WindowShouldClose()) {
         float deltaTime = GetFrameTime();
         UI::HandleWindowShortcuts();
+
+        // Musikk: menyvals i menyene, drivende spor i spillet, bossmusikk i tronsalen
+        bool playing = currentState == GAMEPLAY || currentState == LEVEL_UP || currentState == PAUSED;
+        SetMusicTrack(playing ? (inBossArena ? MusicTrack::BOSS : MusicTrack::GAME) : MusicTrack::MENU);
+        UpdateGameMusic(deltaTime);
 
         // --- MENYLYDER: felles for alle menyskjermer ---
         bool inMenu = currentState != GAMEPLAY;
@@ -362,10 +373,13 @@ int main() {
             shop.handleInput(totalGold);
         }
         else if (currentState == SETTINGS) {
-            // Volum med venstre/høyre (A/D) i steg på 10%
-            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) saveData.volume = std::min(100, saveData.volume + 10);
-            if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) saveData.volume = std::max(0, saveData.volume - 10);
+            // W/S velger rad, A/D justerer i steg på 10 %
+            if (IsKeyPressed(KEY_DOWN) || IsKeyPressed(KEY_S) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) settingsRow = 1 - settingsRow;
+            int& value = settingsRow == 0 ? saveData.volume : saveData.musicVolume;
+            if (IsKeyPressed(KEY_RIGHT) || IsKeyPressed(KEY_D)) value = std::min(100, value + 10);
+            if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A)) value = std::max(0, value - 10);
             SetGameVolume(saveData.volume / 100.0f);
+            SetMusicVolume01(saveData.musicVolume / 100.0f);
 
             if (IsKeyPressed(KEY_P) || IsKeyPressed(KEY_B) || IsKeyPressed(KEY_ESCAPE)) {
                 saveProgress();
@@ -420,6 +434,7 @@ int main() {
                 enemies.clear();
                 ClearExplosions();
                 ClearVfx();
+                ClearEnemyShots();
 
                 // Spilleren nederst i arenaen, bossen øverst
                 player.position = { Arena::CENTER.x, Arena::CENTER.y + Arena::RADIUS * 0.6f };
@@ -531,6 +546,7 @@ int main() {
             }
 
             // Oppdater alle abilities
+            Enemy::critChance = player.critChance;
             CombatModifiers mods = player.combatModifiers();
             for (auto& w : player.weapons) {
                 w->update(deltaTime, player.position, enemies, pickups, mods);
@@ -548,6 +564,10 @@ int main() {
                     [](const std::unique_ptr<Enemy>& e) { return e->isDead(); }),
                 enemies.end()
             );
+
+            // Piler fra armbrøstskyttere
+            float shotDamage = UpdateEnemyShots(deltaTime, player.position, playerHitRadius);
+            if (shotDamage > 0.0f && player.invulnerableTimer <= 0.0f) hurtPlayer(shotDamage);
 
             // Eksplosjoner som treffer spilleren
             float explosionDamage = UpdateExplosions(deltaTime, player.position, playerHitRadius);
@@ -863,13 +883,20 @@ int main() {
             UI::DrawCastleBackdrop(uiTime, 0.7f);
             UI::BeginCanvas();
             heading("INNSTILLINGER", 100.0f, UI::GOLD_LIGHT);
-            UI::DrawPanel({ CX - 290.0f, 180.0f, 580.0f, 200.0f });
-            DrawText("Volum", (int)CX - 250, 220, 24, WHITE);
-            UI::DrawBar({ CX - 120.0f, 222.0f, 280.0f, 22.0f }, saveData.volume / 100.0f, GOLD, Color{ 40, 34, 30, 255 });
-            DrawText(TextFormat("%d%%", saveData.volume), (int)CX + 180, 222, 22, WHITE);
-            DrawText("[A/D] eller [Venstre/Hoeyre] for aa justere", (int)CX - 250, 265, 18, GRAY);
-            DrawText("Fullskjerm", (int)CX - 250, 315, 24, WHITE);
-            DrawText(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE) ? "PAA  [F11]" : "AV  [F11]", (int)CX - 50, 318, 20, UI::GOLD_LIGHT);
+            UI::DrawPanel({ CX - 290.0f, 180.0f, 580.0f, 250.0f });
+            const char* rowNames[2] = { "Volum", "Musikk" };
+            int rowValues[2] = { saveData.volume, saveData.musicVolume };
+            for (int i = 0; i < 2; i++) {
+                int y = 215 + i * 50;
+                bool sel = i == settingsRow;
+                if (sel) DrawRectangleLinesEx({ CX - 270.0f, (float)y - 10, 540.0f, 44.0f }, 2.0f, UI::GOLD_LIGHT);
+                DrawText(rowNames[i], (int)CX - 250, y, 24, sel ? UI::GOLD_LIGHT : WHITE);
+                UI::DrawBar({ CX - 120.0f, (float)y + 2, 280.0f, 22.0f }, rowValues[i] / 100.0f, i == 0 ? GOLD : Color{ 150, 110, 230, 255 }, Color{ 40, 34, 30, 255 });
+                DrawText(TextFormat("%d%%", rowValues[i]), (int)CX + 180, y + 2, 22, WHITE);
+            }
+            DrawText("[W/S] velg   [A/D] juster", (int)CX - 250, 320, 18, GRAY);
+            DrawText("Fullskjerm", (int)CX - 250, 370, 24, WHITE);
+            DrawText(IsWindowState(FLAG_BORDERLESS_WINDOWED_MODE) ? "PAA  [F11]" : "AV  [F11]", (int)CX - 50, 373, 20, UI::GOLD_LIGHT);
             hint("Trykk [ESC] for aa gaa tilbake");
             UI::EndCanvas();
         }
@@ -941,6 +968,7 @@ int main() {
                 SetShapeDetail(1.0f);
                 for (auto& w : player.weapons) w->draw3D();
                 player.drawModel();
+                DrawEnemyShots3D();
                 DrawExplosions3D();
 
                 // --- VFX: glød, lyn, sjokkbølger og partikler (additivt, etter alt solid) ---
@@ -969,6 +997,7 @@ int main() {
                         VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, h), pickup.type == PickupType::COIN ? 26.0f : pickup.radius * 5.0f, Fade(glow, 0.55f));
                     }
                     for (auto& enemy : enemies) enemy->drawVfx();
+                    DrawEnemyShotsVfx();
                     for (auto& w : player.weapons) w->drawVfx();
                     DrawVfxParticles();
                 VfxEnd();
@@ -1079,32 +1108,33 @@ int main() {
                     { "Pickup-radius", TextFormat("%.0f", player.lootRadius) },
                     { "XP", TextFormat("x%.2f", player.xpMultiplier) },
                     { "Aegis", TextFormat("%d", player.aegis) },
+                    { "Kritisk treff", TextFormat("%.0f%%  (x2 skade)", player.critChance * 100.0f) },
                 };
                 int rowCount = (int)(sizeof(rows) / sizeof(rows[0]));
                 for (int i = 0; i < rowCount; i++) {
-                    int col = i / 6, row = i % 6;
+                    int col = i / 7, row = i % 7;
                     float x = sp.x + 30.0f + col * 300.0f;
-                    float y = sp.y + 64.0f + row * 30.0f;
+                    float y = sp.y + 60.0f + row * 27.0f;
                     DrawText(rows[i].label, (int)x, (int)y, 18, Color{ 190, 180, 165, 255 });
                     DrawText(rows[i].value.c_str(), (int)(x + 270.0f) - MeasureText(rows[i].value.c_str(), 18), (int)y, 18, WHITE);
                 }
 
                 // Stat-oppgraderinger tatt denne runden (ikon + prikker)
                 DrawLineEx({ sp.x + 30.0f, sp.y + 256.0f }, { sp.x + sp.width - 30.0f, sp.y + 256.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
-                DrawText("Stat-oppgraderinger fra level up:", (int)sp.x + 30, (int)sp.y + 268, 16, Color{ 190, 180, 165, 255 });
+                DrawText("Stat-oppgraderinger fra level up:", (int)sp.x + 30, (int)sp.y + 266, 16, Color{ 190, 180, 165, 255 });
                 for (int i = 0; i < (int)StatBoost::COUNT; i++) {
-                    int col = i % 4, row = i / 4;
-                    float x = sp.x + 30.0f + col * 145.0f;
-                    float y = sp.y + 300.0f + row * 86.0f;
+                    int col = i % 5, row = i / 5;
+                    float x = sp.x + 22.0f + col * 116.0f;
+                    float y = sp.y + 296.0f + row * 80.0f;
                     Vector2 ic = { x + 22.0f, y + 22.0f };
                     bool has = player.statBoosts[i] > 0;
                     DrawCircleV(ic, 22.0f, UI::INK);
                     DrawCircleV(ic, 20.0f, has ? Color{ 70, 50, 70, 255 } : Color{ 40, 36, 48, 255 });
                     DrawStatBoostIcon((StatBoost)i, ic, 15.0f);
                     if (!has) DrawCircleV(ic, 20.0f, Fade(BLACK, 0.55f));
-                    DrawText(GetStatBoostInfo((StatBoost)i).name, (int)x + 50, (int)y + 6, 14, has ? WHITE : GRAY);
+                    DrawText(GetStatBoostInfo((StatBoost)i).name, (int)x, (int)y + 48, 12, has ? WHITE : GRAY);
                     for (int l = 0; l < MAX_STAT_BOOST; l++) {
-                        DrawRectangle((int)x + 50 + l * 14, (int)y + 28, 10, 10, l < player.statBoosts[i] ? UI::GOLD_LIGHT : Color{ 60, 54, 70, 255 });
+                        DrawRectangle((int)x + 50 + l * 11, (int)y + 16, 8, 8, l < player.statBoosts[i] ? UI::GOLD_LIGHT : Color{ 60, 54, 70, 255 });
                     }
                 }
 
@@ -1311,6 +1341,7 @@ int main() {
     UnloadRenderTexture(portraitRT);
     UnloadVfx();
     UnloadRenderer3D();
+    UnloadGameMusic();
     UnloadGameAudio();
     CloseWindow();
     return 0;

@@ -9,7 +9,8 @@
 enum class ClownStyle {
     JESTER, // Helt vanlig sirkusklovn
     WESTER, // Feit, Wario-aktig klovn
-    GEEK    // Lang og tynn nerde-klovn med briller
+    GEEK,   // Lang og tynn nerde-klovn med briller
+    PIERROT // Hvit, trist mime-klovn med pomponger og kremkaker
 };
 
 struct CharacterData {
@@ -82,6 +83,22 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .xpMultiplier = 1.5f,  // Høyere XP-rate som sin unike trait
             .innateAbility = AbilityId::RICOCHET,
             .clown = ClownStyle::GEEK,
+        },
+
+        // --- PIERROT ---
+        CharacterData{
+            .name         = "Pierrot",
+            .description  = "Kremkaker som spruter",
+            .texturePath  = "assets/jester_real.png",
+            .speed        = 195.0f,
+            .maxHp        = 95.0f,
+            .spellAmp     = 1.1f,
+            .armor        = 3.0f,
+            .lootRadius   = 130.0f,
+            .size         = 1.0f,
+            .xpMultiplier = 1.0f,
+            .innateAbility = AbilityId::PIE,
+            .clown = ClownStyle::PIERROT,
         }
     };
 }
