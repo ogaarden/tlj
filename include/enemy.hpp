@@ -83,6 +83,8 @@ public:
     Vector2 knockVelocity = { 0, 0 }; // Dytt (bjeller, bumerang), dør ut raskt
     float knockbackScale = 1.0f;      // Store fiender dyttes mindre (bossen nesten ikke)
     bool chestCarrier = false;        // Slipper alltid en skattekiste (horde-kaptein)
+    bool miniboss = false;            // Miniboss: slipper Kongens septer (se miniboss.hpp)
+    const char* title = "";           // Navn som vises over HP-baren (minibosser)
     void applySlow(float amount, float duration);
     void knockBack(Vector2 direction, float strength);
     // Kalles etter update(): demper bevegelsen fra frost og legger på dytt
@@ -191,7 +193,8 @@ public:
 enum class PickupType {
     XP,
     COIN,
-    CHEST,  // Skattekiste fra elite-fiender: gir et gratis oppgraderingsvalg
+    CHEST,  // Skattekiste: gir et item (eller en item-kombinasjon)
+    SCEPTER,// Kongens septer fra minibosser: gir en ability sin septer-oppgradering
     VACUUM, // Sjelden magnet: suger inn all XP på bakken
     FOOD    // Sjeldent kyllinglår: gir liv
 };

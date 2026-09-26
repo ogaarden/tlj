@@ -41,7 +41,7 @@ public:
     std::string name;
     Color color = WHITE;
     int level = 1;
-    bool evolved = false; // Evolusjon: ability på maks level + riktig item + en skattekiste
+    bool hasScepter = false; // Septer-oppgradering fra Kongens septer (miniboss-drop)
     AbilityStats stats;
 
     // Liv som våpen gir tilbake (f.eks. Blodsabel). Spillet henter og nullstiller den hver frame.

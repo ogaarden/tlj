@@ -195,7 +195,7 @@ void drawTimer(const HudState& hud, float s, float top, const Enemy* boss) {
         bw = std::max(bw, 260.0f * s);
         Rectangle bar = { cx - bw / 2.0f, plaque.y + plaque.height + 18.0f * s, bw, 18.0f * s };
         float pct = std::max(0.0f, (float)boss->hp / (float)boss->maxHp);
-        UI::DrawBar(bar, pct, Color{ 200, 30, 40, 255 }, Color{ 40, 8, 14, 230 }, s);
+        UI::DrawBar(bar, pct, boss->miniboss ? Color{ 160, 60, 220, 255 } : Color{ 200, 30, 40, 255 }, Color{ 40, 8, 14, 230 }, s);
         // Små delstreker for hver 10 %
         for (int i = 1; i < 10; i++) {
             float lx = bar.x + bar.width * i / 10.0f;
@@ -203,7 +203,7 @@ void drawTimer(const HudState& hud, float s, float top, const Enemy* boss) {
         }
         crownIcon({ bar.x - 2.0f * s, bar.y + 6.0f * s }, 13.0f * s, UI::INK);
         crownIcon({ bar.x - 2.0f * s, bar.y + 6.0f * s }, 11.0f * s, UI::GOLD_LIGHT);
-        const char* name = TextFormat("KONGEN  -  %s", hud.echelonName);
+        const char* name = boss->miniboss ? TextFormat("MINIBOSS  -  %s", boss->title) : TextFormat("KONGEN  -  %s", hud.echelonName);
         hudText(name, cx - hudTextWidth(name, 14.0f * s) / 2.0f, bar.y + bar.height + 6.0f * s, 14.0f * s, WHITE);
     }
 }
@@ -288,7 +288,10 @@ void drawMinimap(const HudState& hud, float s, float top, const Enemy* boss) {
         for (const Pickup& pk : *hud.pickups) {
             Vector2 m = toMap(pk.position);
             if (!inside(m, 4.0f)) continue;
-            if (pk.type == PickupType::CHEST) {
+            if (pk.type == PickupType::SCEPTER) {
+                DrawCircleV(m, 5.0f * s, UI::INK);
+                DrawCircleV(m, 3.8f * s, Color{ 110, 190, 255, 255 });
+            } else if (pk.type == PickupType::CHEST) {
                 DrawRectangleRec({ m.x - 4.0f * s, m.y - 3.5f * s, 8.0f * s, 7.0f * s }, UI::INK);
                 DrawRectangleRec({ m.x - 3.0f * s, m.y - 2.5f * s, 6.0f * s, 5.0f * s }, UI::GOLD_LIGHT);
             } else if (pk.type == PickupType::COIN) DrawCircleV(m, 2.4f * s, GOLD);
@@ -296,10 +299,26 @@ void drawMinimap(const HudState& hud, float s, float top, const Enemy* boss) {
         }
     }
 
-    // Fiender: røde prikker, kamikaze oransje
+    // Miniboss-sirkler: pulserende lilla ring
+    for (Vector2 c : hud.summonCircles) {
+        Vector2 m = toMap(c);
+        if (!inside(m, 6.0f)) continue;
+        float pulse = 0.6f + 0.4f * sinf((float)GetTime() * 5.0f);
+        DrawCircleV(m, 6.5f * s, UI::INK);
+        DrawCircleV(m, 5.0f * s, Fade(Color{ 200, 110, 255, 255 }, pulse));
+    }
+
+    // Fiender: røde prikker, kamikaze oransje, minibosser store og lilla
     if (hud.enemies) {
         for (const auto& e : *hud.enemies) {
             if (e->id == hud.bossId) continue;
+            if (e->miniboss) {
+                Vector2 m = toMap(e->position);
+                if (!inside(m, 6.0f)) continue;
+                DrawCircleV(m, 6.0f * s, UI::INK);
+                DrawCircleV(m, 4.5f * s, Color{ 200, 110, 255, 255 });
+                continue;
+            }
             Vector2 m = toMap(e->position);
             if (!inside(m, 4.0f)) continue;
             bool exploder = dynamic_cast<const Exploder*>(e.get()) != nullptr;
@@ -402,6 +421,8 @@ void DrawGameHud(const HudState& hud) {
     const Enemy* boss = nullptr;
     if (hud.inBossArena && hud.enemies) {
         for (const auto& e : *hud.enemies) if (e->id == hud.bossId) boss = e.get();
+    } else if (hud.enemies && hud.minibossId >= 0) {
+        for (const auto& e : *hud.enemies) if (e->id == hud.minibossId) boss = e.get();
     }
 
     float top = xpH + 10.0f * s;
@@ -417,12 +438,15 @@ void DrawGameHud(const HudState& hud) {
         const float r = 15.0f * s;
         const float gap = 8.0f * s;
         float totalW = MAX_ITEM_SLOTS * r * 2.0f + (MAX_ITEM_SLOTS - 1) * gap;
-        float y = h - 12.0f * s - 110.0f * s - r - 22.0f * s; // Plass til "KLAR!" over ability-slotsene
+        float y = h - 12.0f * s - 110.0f * s - r - 10.0f * s;
         for (int i = 0; i < MAX_ITEM_SLOTS; i++) {
             Vector2 c = { w / 2.0f - totalW / 2.0f + r + i * (r * 2.0f + gap), y };
-            bool has = i < (int)p.items.size();
-            DrawCircleV(c, r + 2.0f * s, UI::INK);
-            DrawCircleV(c, r, has ? Color{ 56, 42, 60, 235 } : Color{ 24, 20, 30, 200 });
+            int nItems = (int)p.items.size();
+            bool has = i < nItems;
+            bool isCombo = !has && i < nItems + (int)p.combos.size();
+            DrawCircleV(c, r + 2.0f * s, isCombo ? Color{ 255, 140, 255, 255 } : UI::INK);
+            DrawCircleV(c, r, (has || isCombo) ? Color{ 56, 42, 60, 235 } : Color{ 24, 20, 30, 200 });
+            if (isCombo) { DrawComboIcon(p.combos[i - nItems], c, r * 0.72f); continue; }
             if (!has) continue;
             ItemId id = p.items[i];
             DrawItemIcon(id, c, r * 0.72f);

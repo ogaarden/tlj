@@ -29,6 +29,7 @@
 #include "vfx.hpp"
 #include "music.hpp"
 #include "items.hpp"
+#include "miniboss.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -188,7 +189,26 @@ int main() {
     float vacuumTimer = 0.0f;  // > 0: magnet-pickup suger inn all XP
     int xpCombo = 0;           // XP plukket opp rett etter hverandre (tonen stiger)
     float xpComboTimer = 0.0f;
-    bool levelUpFromChest = false;
+    // Hvor valgskjermen kom fra (level-up, skattekiste eller Kongens septer)
+    enum class ChoiceSource { LEVEL, CHEST, SCEPTER };
+    ChoiceSource choiceSource = ChoiceSource::LEVEL;
+    int sceptersPending = 0;       // Kongens septer plukket opp, men ikke brukt ennå
+
+    // --- MINIBOSSER (3, 6 og 9 min) ---
+    // En innkallingssirkel dukker opp i slottet; går man inn i den, stiger minibossen opp
+    struct SummonCircle {
+        Vector2 position;
+        float countdown = -1.0f;   // < 0: venter på spilleren. >= 0: minibossen kommer om så lenge
+        float age = 0.0f;
+    };
+    std::vector<SummonCircle> summonCircles;
+    const float MINIBOSS_TIMES[3] = { 180.0f, 360.0f, 540.0f };
+    int minibossesAnnounced = 0;   // Hvor mange sirkler som har dukket opp
+    int minibossesSpawned = 0;
+    std::vector<MinibossKind> minibossOrder; // Tilfeldig rekkefølge, ingen gjentakelser
+    int minibossId = -1;           // Siste miniboss som lever (HP-bar øverst)
+    double minibossAnnounceTime = -100.0;
+    std::string minibossAnnounceText;
     float worldChestTimer = 0.0f; // Nedtelling til neste skattekiste som dukker opp i slottet
     int lastKillCount = 0;         // For Vampyrtann (liv per drap)
     float lifeStealBank = 0.0f;
@@ -221,6 +241,16 @@ int main() {
         for (int& l : player.itemLevels) l = 0;
         player.items.clear();
         worldChestTimer = 40.0f; // Første kiste dukker opp etter 40 sek
+        player.combos.clear();
+        player.critMultiplier = 2.0f;
+        sceptersPending = 0;
+        summonCircles.clear();
+        minibossesAnnounced = 0;
+        minibossesSpawned = 0;
+        minibossId = -1;
+        minibossAnnounceTime = -100.0;
+        minibossOrder = { MinibossKind::EXECUTIONER, MinibossKind::MAGUS, MinibossKind::IRON_KNIGHT };
+        for (int i = (int)minibossOrder.size() - 1; i > 0; i--) std::swap(minibossOrder[i], minibossOrder[GetRandomValue(0, i)]);
         lastKillCount = 0;
         lifeStealBank = 0.0f;
         Enemy::chestCooldown = 0.0f;
@@ -414,17 +444,27 @@ int main() {
             if(player.level > lastPlayerLevel){
                 lastPlayerLevel++; // Ett valg per level, også når man får flere level samtidig
                 currentState = LEVEL_UP;
-                levelUpFromChest = false;
+                choiceSource = ChoiceSource::LEVEL;
                 PlaySfx(Sfx::LEVEL_UP);
                 VfxShockwave(player.position, 90.0f, GOLD);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
+            } else if (sceptersPending > 0) {
+                // Kongens septer: velg hvilken ability som får septer-oppgraderingen
+                sceptersPending--;
+                currentState = LEVEL_UP;
+                choiceSource = ChoiceSource::SCEPTER;
+                PlaySfx(Sfx::VICTORY);
+                VfxShockwave(player.position, 140.0f, SKYBLUE);
+                selectedUpgradeOption = 0;
+                levelUpStart = GetTime();
+                activeUpgradeChoices = GenerateScepterChoices(player);
             } else if (chestsPending > 0) {
-                // Skattekiste: evolusjon hvis en ability er klar, ellers items
+                // Skattekiste: item-kombinasjon hvis mulig, ellers items
                 chestsPending--;
                 currentState = LEVEL_UP;
-                levelUpFromChest = true;
+                choiceSource = ChoiceSource::CHEST;
                 PlaySfx(Sfx::VICTORY);
                 VfxShockwave(player.position, 110.0f, GOLD);
                 selectedUpgradeOption = 0;
@@ -451,10 +491,12 @@ int main() {
                 for (const auto& p : pickups) {
                     if (p.type == PickupType::COIN) runCoins += p.value;
                     else if (p.type == PickupType::CHEST) chestsPending++;
+                    else if (p.type == PickupType::SCEPTER) sceptersPending++;
                     else player.addXP(static_cast<int>(p.value * player.xpMultiplier));
                 }
                 pickups.clear();
                 enemies.clear();
+                summonCircles.clear();
                 ClearExplosions();
                 ClearVfx();
                 ClearEnemyShots();
@@ -570,6 +612,9 @@ int main() {
                         case PickupType::CHEST:
                             chestsPending++;
                             break;
+                        case PickupType::SCEPTER:
+                            sceptersPending++;
+                            break;
                         case PickupType::VACUUM:
                             vacuumTimer = 2.5f;
                             PlaySfx(Sfx::LEVEL_UP);
@@ -598,6 +643,7 @@ int main() {
 
             // Oppdater alle abilities
             Enemy::critChance = player.critChance;
+            Enemy::critMultiplier = player.critMultiplier;
             Enemy::luck = player.luck;
             Enemy::chestCooldown -= deltaTime;
             CombatModifiers mods = player.combatModifiers();
@@ -631,6 +677,46 @@ int main() {
                     Vector2 pos = { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d };
                     pickups.push_back({ pos, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
                     VfxShockwave(pos, 80.0f, GOLD);
+                }
+
+                // Minibosser: ny innkallingssirkel ved 3, 6 og 9 minutter
+                if (minibossesAnnounced < 3 && spawner.gameTime >= MINIBOSS_TIMES[minibossesAnnounced]) {
+                    minibossesAnnounced++;
+                    float a = GetRandomValue(0, 628) / 100.0f;
+                    float d = (float)GetRandomValue(650, 850);
+                    summonCircles.push_back({ { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d } });
+                    minibossAnnounceTime = GetTime();
+                    minibossAnnounceText = "EN MINIBOSS VENTER  -  FINN SIRKELEN!";
+                    PlaySfx(Sfx::BOSS_GONG);
+                }
+                for (size_t i = 0; i < summonCircles.size(); ) {
+                    SummonCircle& c = summonCircles[i];
+                    c.age += deltaTime;
+                    if (c.countdown < 0.0f) {
+                        if (Vector2Distance(c.position, player.position) < 110.0f) {
+                            c.countdown = 1.6f; // Gulvet rister, så stiger minibossen opp
+                            PlaySfx(Sfx::BOSS_CHARGE);
+                        }
+                        i++;
+                        continue;
+                    }
+                    c.countdown -= deltaTime;
+                    AddCameraShake(0.05f);
+                    if (c.countdown > 0.0f) { i++; continue; }
+
+                    MinibossKind kind = minibossOrder[minibossesSpawned % minibossOrder.size()];
+                    auto boss = CreateMiniboss(kind, std::min(minibossesSpawned, 2), c.position, enemyTexture,
+                                               runModifiers.enemyHpMult, runModifiers.enemyDamageMult);
+                    minibossesSpawned++;
+                    minibossId = boss->id;
+                    minibossAnnounceTime = GetTime();
+                    minibossAnnounceText = boss->title;
+                    enemies.push_back(std::move(boss));
+                    VfxExplosion(c.position, 120.0f);
+                    VfxShockwave(c.position, 200.0f, Color{ 180, 80, 255, 255 });
+                    AddCameraShake(0.8f);
+                    PlaySfx(Sfx::BOSS_GONG);
+                    summonCircles.erase(summonCircles.begin() + i);
                 }
             }
 
@@ -709,11 +795,10 @@ int main() {
                 if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
                     selectedUpgradeOption = (selectedUpgradeOption - 1 + activeUpgradeChoices.size()) % activeUpgradeChoices.size();
             }
-            // Reroll: helt nye valg (ikke for evolusjoner)
-            bool isEvolution = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
-            if (IsKeyPressed(KEY_R) && rerollsLeft > 0 && !isEvolution) {
+            // Reroll: helt nye valg (ikke for septeret)
+            if (IsKeyPressed(KEY_R) && rerollsLeft > 0 && choiceSource != ChoiceSource::SCEPTER) {
                 rerollsLeft--;
-                activeUpgradeChoices = levelUpFromChest ? GenerateChestChoices(player, player.levelUpChoices)
+                activeUpgradeChoices = choiceSource == ChoiceSource::CHEST ? GenerateChestChoices(player, player.levelUpChoices)
                                                         : GenerateLevelUpChoices(player, player.levelUpChoices);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
@@ -1006,6 +1091,24 @@ int main() {
                 for (const auto& pickup : pickups) {
                     DrawEllipse((int)pickup.position.x + 2, (int)pickup.position.y + 2, pickup.radius, pickup.radius * 0.6f, Fade(BLACK, 0.3f));
                 }
+                // Innkallingssirkler for minibosser: lilla runer som roterer
+                for (const auto& c : summonCircles) {
+                    float spin = c.age * 30.0f;
+                    float charge = c.countdown >= 0.0f ? 1.0f - c.countdown / 1.6f : 0.0f;
+                    DrawCircleV(c.position, 110.0f, Fade(Color{ 40, 10, 60, 255 }, 0.55f));
+                    DrawRing(c.position, 104.0f, 110.0f, 0, 360, 64, Color{ 170, 70, 230, 255 });
+                    DrawRing(c.position, 76.0f, 80.0f, 0, 360, 64, Fade(Color{ 170, 70, 230, 255 }, 0.8f));
+                    for (int k = 0; k < 5; k++) { // Pentagram
+                        float a0 = (spin + k * 144.0f) * DEG2RAD, a1 = (spin + (k + 1) * 144.0f) * DEG2RAD;
+                        DrawLineEx({ c.position.x + cosf(a0) * 78.0f, c.position.y + sinf(a0) * 78.0f },
+                                   { c.position.x + cosf(a1) * 78.0f, c.position.y + sinf(a1) * 78.0f }, 3.0f, Color{ 200, 110, 255, 255 });
+                    }
+                    for (int k = 0; k < 12; k++) {
+                        float a = (-spin * 1.5f + k * 30.0f) * DEG2RAD;
+                        DrawRectangleV({ c.position.x + cosf(a) * 92.0f - 3.0f, c.position.y + sinf(a) * 92.0f - 3.0f }, { 6.0f, 6.0f }, Color{ 220, 150, 255, 255 });
+                    }
+                    if (charge > 0.0f) DrawCircleV(c.position, 110.0f * charge, Fade(Color{ 220, 120, 255, 255 }, 0.4f));
+                }
                 player.drawShadow();
                 for (auto& w : player.weapons) w->draw();
                 for (auto& enemy : enemies) enemy->draw();
@@ -1030,6 +1133,16 @@ int main() {
                         ShadedCube(ToWorld3D(pickup.position, 16.0f), { 25.0f, 5.0f, 17.0f }, yaw, Color{ 140, 85, 40, 255 });
                         ShadedCube(ToWorld3D(pickup.position, 10.0f), { 26.0f, 3.0f, 18.0f }, yaw, gold);
                         ShadedCube(ToWorld3D(pickup.position, 12.0f), { 5.0f, 6.0f, 18.5f }, yaw, gold);
+                    } else if (pickup.type == PickupType::SCEPTER) {
+                        // Kongens septer: gullstav med blå krystall og krone, snurrer og svever høyt
+                        float yaw = (float)GetTime() * 90.0f * DEG2RAD;
+                        Vector2 tilt = { cosf(yaw) * 5.0f, sinf(yaw) * 5.0f };
+                        Vector3 bottom = ToWorld3D(Vector2Subtract(pickup.position, tilt), h + 6.0f);
+                        Vector3 top = ToWorld3D(Vector2Add(pickup.position, tilt), h + 40.0f);
+                        ShadedCylinder(bottom, top, 2.2f, 2.8f, Color{ 235, 190, 60, 255 }, 8);
+                        ShadedSphere(bottom, 3.2f, Color{ 235, 190, 60, 255 }, 4, 6);
+                        ShadedCylinder(top, Vector3Add(top, { 0, 4.0f, 0 }), 6.0f, 6.5f, Color{ 235, 190, 60, 255 }, 10);
+                        ShadedCrystal(Vector3Add(top, { 0, 12.0f, 0 }), 5.5f, 12.0f, (float)GetTime() * 120.0f, Color{ 90, 190, 255, 255 });
                     } else if (pickup.type == PickupType::COIN) {
                         // Mynt som snurrer rundt seg selv
                         float spin = bob * 0.8f + pickup.position.y * 0.05f;
@@ -1095,7 +1208,27 @@ int main() {
                         VfxDecal(VfxTex::GLOW, player.position, 80.0f, hero, 0.0f, 0.9f);
                         VfxDecal(VfxTex::SHOCKWAVE, player.position, 62.0f, Color{ 110, 90, 40, 255 }, uiTime * 30.0f, 1.0f);
                     }
+                    for (const auto& c : summonCircles) {
+                        float pulse = 0.7f + 0.3f * sinf(uiTime * 3.0f);
+                        float charge = c.countdown >= 0.0f ? 1.0f - c.countdown / 1.6f : 0.0f;
+                        Color beam = { (unsigned char)(120 * pulse + 100 * charge), (unsigned char)(40 * pulse), (unsigned char)(200 * pulse), 255 };
+                        VfxBeam(VfxTex::GLOW, ToWorld3D(c.position, 0.0f), ToWorld3D(c.position, 320.0f), 90.0f + 80.0f * charge, beam);
+                        VfxDecal(VfxTex::SHOCKWAVE, c.position, 240.0f, Color{ 150, 60, 210, 255 }, uiTime * 40.0f, 1.5f);
+                        VfxDecal(VfxTex::GLOW, c.position, 260.0f, Color{ 90, 30, 130, 255 }, 0.0f, 1.2f);
+                        if (GetRandomValue(0, 3) == 0) {
+                            float a = GetRandomValue(0, 628) / 100.0f;
+                            VfxBubble({ c.position.x + cosf(a) * 90.0f, c.position.y + sinf(a) * 90.0f }, 4.0f, Color{ 200, 110, 255, 255 });
+                        }
+                    }
                     for (const auto& pickup : pickups) {
+                        if (pickup.type == PickupType::SCEPTER) {
+                            float pulse = 0.7f + 0.3f * sinf(uiTime * 5.0f);
+                            Color beam = { (unsigned char)(60 * pulse), (unsigned char)(150 * pulse), (unsigned char)(255 * pulse), 255 };
+                            VfxBeam(VfxTex::GLOW, ToWorld3D(pickup.position, 0.0f), ToWorld3D(pickup.position, 360.0f), 60.0f, beam);
+                            VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, 60.0f), 90.0f, Color{ 80, 170, 255, 255 });
+                            VfxBillboard(VfxTex::SPARK, ToWorld3D(pickup.position, 60.0f), 60.0f, WHITE, uiTime * 120.0f);
+                            continue;
+                        }
                         if (pickup.type == PickupType::CHEST) {
                             // Lyssøyle så kista synes på avstand
                             float pulse = 0.7f + 0.3f * sinf(uiTime * 4.0f);
@@ -1157,7 +1290,7 @@ int main() {
             // --- SKADETALL (projiseres fra 3D-posisjonen, så teksten alltid er rett vei) ---
             DrawDamageNumbers(view);
 
-            // --- PILER MOT SKATTEKISTER utenfor skjermen (items kommer bare fra kister!) ---
+            // --- PILER I SKJERMKANTEN mot kister (gull), septre (blå) og miniboss-sirkler (lilla) ---
             {
                 float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
                 Vector2 mid = { sw / 2.0f, sh / 2.0f };
@@ -1166,9 +1299,16 @@ int main() {
                     float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
                     if (cross < 0.0f) DrawTriangle(a, b, c, col); else DrawTriangle(a, c, b, col);
                 };
+                struct Target { Vector2 pos; int kind; }; // 0 = kiste, 1 = septer, 2 = miniboss-sirkel
+                std::vector<Target> targets;
                 for (const auto& pk : pickups) {
-                    if (pk.type != PickupType::CHEST) continue;
-                    Vector2 sp = GroundToScreen(view, pk.position, 12.0f);
+                    if (pk.type == PickupType::CHEST) targets.push_back({ pk.position, 0 });
+                    else if (pk.type == PickupType::SCEPTER) targets.push_back({ pk.position, 1 });
+                }
+                for (const auto& c : summonCircles) targets.push_back({ c.position, 2 });
+
+                for (const Target& tg : targets) {
+                    Vector2 sp = GroundToScreen(view, tg.pos, 12.0f);
                     if (sp.x > 0 && sp.x < sw && sp.y > 0 && sp.y < sh) continue;
                     Vector2 d = Vector2Normalize(Vector2Subtract(sp, mid));
                     // Skalér retningen så pila havner langs kanten av et rektangel inne på skjermen
@@ -1176,19 +1316,35 @@ int main() {
                     float ty = d.y != 0.0f ? (mid.y - margin) / fabsf(d.y) : 1e9f;
                     Vector2 at = Vector2Add(mid, Vector2Scale(d, std::min(tx, ty)));
                     float pulse = 0.75f + 0.25f * sinf(uiTime * 6.0f);
-                    float r = 16.0f * barScale;
+                    float r = (tg.kind == 2 ? 20.0f : 16.0f) * barScale;
+                    Color col = tg.kind == 0 ? UI::GOLD_LIGHT : tg.kind == 1 ? Color{ 110, 190, 255, 255 } : Color{ 200, 110, 255, 255 };
                     Vector2 n = { -d.y, d.x };
                     Vector2 tip = Vector2Add(at, Vector2Scale(d, r * 1.4f));
                     Vector2 b0 = Vector2Add(at, Vector2Scale(n, r * 0.8f)), b1 = Vector2Subtract(at, Vector2Scale(n, r * 0.8f));
-                    UI::DrawGlow(at, r * 2.4f, Fade(GOLD, 0.35f * pulse), Fade(GOLD, 0.0f));
+                    UI::DrawGlow(at, r * 2.4f, Fade(col, 0.35f * pulse), Fade(col, 0.0f));
                     tri(tip, b1, b0, UI::INK);
-                    tri(Vector2Add(tip, Vector2Scale(d, -3.0f)), Vector2Add(b1, Vector2Scale(n, 2.5f)), Vector2Subtract(b0, Vector2Scale(n, 2.5f)), Fade(UI::GOLD_LIGHT, pulse));
-                    // Liten kiste bak pila
+                    tri(Vector2Add(tip, Vector2Scale(d, -3.0f)), Vector2Add(b1, Vector2Scale(n, 2.5f)), Vector2Subtract(b0, Vector2Scale(n, 2.5f)), Fade(col, pulse));
                     Vector2 c = Vector2Subtract(at, Vector2Scale(d, r * 1.1f));
-                    DrawRectangleRec({ c.x - r * 0.7f - 2, c.y - r * 0.45f - 2, r * 1.4f + 4, r * 0.95f + 4 }, UI::INK);
-                    DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.45f, r * 1.4f, r * 0.95f }, Color{ 150, 90, 40, 255 });
-                    DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.12f, r * 1.4f, r * 0.14f }, UI::GOLD_LIGHT);
-                    DrawRectangleRec({ c.x - r * 0.12f, c.y - r * 0.2f, r * 0.24f, r * 0.3f }, UI::GOLD_LIGHT);
+                    if (tg.kind == 0) {
+                        // Liten kiste bak pila
+                        DrawRectangleRec({ c.x - r * 0.7f - 2, c.y - r * 0.45f - 2, r * 1.4f + 4, r * 0.95f + 4 }, UI::INK);
+                        DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.45f, r * 1.4f, r * 0.95f }, Color{ 150, 90, 40, 255 });
+                        DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.12f, r * 1.4f, r * 0.14f }, UI::GOLD_LIGHT);
+                        DrawRectangleRec({ c.x - r * 0.12f, c.y - r * 0.2f, r * 0.24f, r * 0.3f }, UI::GOLD_LIGHT);
+                    } else if (tg.kind == 1) {
+                        // Septer: stav med blå krystall
+                        DrawLineEx({ c.x - r * 0.5f, c.y + r * 0.6f }, { c.x + r * 0.3f, c.y - r * 0.3f }, r * 0.28f, UI::INK);
+                        DrawLineEx({ c.x - r * 0.5f, c.y + r * 0.6f }, { c.x + r * 0.3f, c.y - r * 0.3f }, r * 0.16f, UI::GOLD_LIGHT);
+                        DrawCircleV({ c.x + r * 0.4f, c.y - r * 0.4f }, r * 0.34f, UI::INK);
+                        DrawCircleV({ c.x + r * 0.4f, c.y - r * 0.4f }, r * 0.26f, col);
+                    } else {
+                        // Hodeskalle for minibossen
+                        DrawCircleV(c, r * 0.62f, UI::INK);
+                        DrawCircleV(c, r * 0.52f, Color{ 235, 225, 245, 255 });
+                        DrawRectangleRec({ c.x - r * 0.3f, c.y + r * 0.2f, r * 0.6f, r * 0.42f }, Color{ 235, 225, 245, 255 });
+                        DrawCircleV({ c.x - r * 0.2f, c.y }, r * 0.14f, UI::INK);
+                        DrawCircleV({ c.x + r * 0.2f, c.y }, r * 0.14f, UI::INK);
+                    }
                 }
             }
 
@@ -1205,6 +1361,8 @@ int main() {
             hud.bossTime = GetBossTimer(selectedEchelon);
             hud.inBossArena = inBossArena;
             hud.bossId = bossId;
+            hud.minibossId = minibossId;
+            for (const auto& c : summonCircles) hud.summonCircles.push_back(c.position);
             hud.arenaCenter = Arena::CENTER;
             hud.arenaRadius = Arena::RADIUS;
             hud.runCoins = runCoins;
@@ -1212,6 +1370,17 @@ int main() {
             hud.cameraYaw = camera.rotation;
             hud.showMinimap = showMinimap;
             DrawGameHud(hud);
+
+            // --- MINIBOSS-VARSEL ---
+            {
+                float since = (float)(GetTime() - minibossAnnounceTime);
+                if (currentState == GAMEPLAY && since >= 0.0f && since < 3.0f) {
+                    float a = since < 2.4f ? 1.0f : (3.0f - since) / 0.6f;
+                    UI::BeginCanvas();
+                    UI::DrawCenteredText(minibossAnnounceText.c_str(), CX, 230.0f, 36.0f, Fade(Color{ 210, 120, 255, 255 }, a), 3.0f);
+                    UI::EndCanvas();
+                }
+            }
 
             // --- HORDE-VARSEL ---
             float sinceHorde = spawner.gameTime - spawner.lastHordeTime;
@@ -1283,7 +1452,7 @@ int main() {
                     { "Pickup-radius", TextFormat("%.0f", player.lootRadius) },
                     { "XP", TextFormat("x%.2f", player.xpMultiplier) },
                     { "Aegis", TextFormat("%d", player.aegis) },
-                    { "Kritisk treff", TextFormat("%.0f%%  (x2 skade)", player.critChance * 100.0f) },
+                    { "Kritisk treff", TextFormat("%.0f%%  (x%.0f skade)", player.critChance * 100.0f, player.critMultiplier) },
                     { "Prosjektilfart", TextFormat("x%.2f", cm.speedMult) },
                     { "Varighet", TextFormat("x%.2f", cm.durationMult) },
                     { "Liv per drap", TextFormat("%.2f HP", player.lifePerKill) },
@@ -1299,16 +1468,19 @@ int main() {
                     DrawText(rows[i].value.c_str(), (int)(x + 270.0f) - MeasureText(rows[i].value.c_str(), 18), (int)y, 18, WHITE);
                 }
 
-                // Items (maks 6) med nivå-prikker
+                // Items (maks 6 plasser) med nivå-prikker. Kombinerte items tar én plass.
                 DrawLineEx({ sp.x + 30.0f, sp.y + 262.0f }, { sp.x + sp.width - 30.0f, sp.y + 262.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
-                DrawText(TextFormat("Items (%d/%d):", (int)player.items.size(), MAX_ITEM_SLOTS), (int)sp.x + 30, (int)sp.y + 270, 16, Color{ 190, 180, 165, 255 });
+                DrawText(TextFormat("Items (%d/%d):", UsedItemSlots(player), MAX_ITEM_SLOTS), (int)sp.x + 30, (int)sp.y + 270, 16, Color{ 190, 180, 165, 255 });
                 for (int i = 0; i < MAX_ITEM_SLOTS; i++) {
                     float x = sp.x + 30.0f + i * 95.0f;
                     float y = sp.y + 294.0f;
                     Vector2 ic = { x + 22.0f, y + 22.0f };
-                    DrawCircleV(ic, 22.0f, UI::INK);
-                    DrawCircleV(ic, 20.0f, i < (int)player.items.size() ? Color{ 70, 50, 70, 255 } : Color{ 30, 26, 36, 255 });
-                    if (i >= (int)player.items.size()) continue;
+                    int nItems = (int)player.items.size();
+                    bool isCombo = i >= nItems && i < UsedItemSlots(player);
+                    DrawCircleV(ic, 22.0f, isCombo ? Color{ 255, 140, 255, 255 } : UI::INK);
+                    DrawCircleV(ic, 20.0f, i < UsedItemSlots(player) ? Color{ 70, 50, 70, 255 } : Color{ 30, 26, 36, 255 });
+                    if (isCombo) { DrawComboIcon(player.combos[i - nItems], ic, 15.0f); continue; }
+                    if (i >= nItems) continue;
                     ItemId id = player.items[i];
                     DrawItemIcon(id, ic, 15.0f);
                     for (int l = 0; l < MAX_ITEM_LEVEL; l++) {
@@ -1316,19 +1488,30 @@ int main() {
                     }
                 }
 
-                // Oppskrifter: hvor langt hver ability er fra evolusjonen sin
-                DrawText("Evolusjoner (ability paa lv 9 + item, aapnes med en skattekiste):", (int)sp.x + 30, (int)sp.y + 378, 14, Color{ 190, 180, 165, 255 });
+                // Venstre: item-kombinasjoner for items man har. Høyre: septer-status for abilities.
+                DrawText("Kombinasjoner (begge paa nivaa 5):", (int)sp.x + 30, (int)sp.y + 378, 14, Color{ 190, 180, 165, 255 });
+                DrawText("Kongens septer (fra minibosser):", (int)sp.x + 330, (int)sp.y + 378, 14, Color{ 190, 180, 165, 255 });
                 int line = 0;
+                for (int c = 0; c < (int)ComboId::COUNT && line < 6; c++) {
+                    const ItemCombo& combo = GetCombo((ComboId)c);
+                    bool done = std::find(player.combos.begin(), player.combos.end(), (ComboId)c) != player.combos.end();
+                    int la = player.itemLevels[(int)combo.a], lb = player.itemLevels[(int)combo.b];
+                    if (!done && la == 0 && lb == 0) continue;
+                    std::string text;
+                    Color col = Color{ 200, 195, 185, 255 };
+                    if (done) { text = std::string(combo.name) + "  - FERDIG!"; col = Color{ 255, 140, 255, 255 }; }
+                    else if (CanCombine(player, (ComboId)c)) { text = std::string(combo.name) + "  - KLAR! Finn en kiste"; col = UI::GOLD_LIGHT; }
+                    else text = TextFormat("%s %d/5 + %s %d/5", GetItemDef(combo.a).name, la, GetItemDef(combo.b).name, lb);
+                    DrawText(text.c_str(), (int)sp.x + 30, (int)sp.y + 400 + line * 17, 13, col);
+                    line++;
+                }
+                line = 0;
                 for (const auto& w : player.weapons) {
-                    const Evolution* evo = GetEvolution(w->id);
-                    if (!evo) continue;
-                    bool hasItem = player.itemLevels[(int)evo->item] > 0;
-                    const char* status;
-                    Color c;
-                    if (w->evolved) { status = TextFormat("%s  - FERDIG!", evo->name); c = Color{ 255, 140, 255, 255 }; }
-                    else if (CanEvolve(player, *w)) { status = TextFormat("%s  - KLAR! Finn en kiste", evo->name); c = UI::GOLD_LIGHT; }
-                    else { status = TextFormat("%s lv %d/9 + %s%s  ->  %s", GetAbilityDefinition(w->id).name.c_str(), w->level, GetItemDef(evo->item).name, hasItem ? " (har)" : "", evo->name); c = Color{ 200, 195, 185, 255 }; }
-                    DrawText(status, (int)sp.x + 30, (int)sp.y + 400 + line * 17, 14, c);
+                    const ScepterUpgrade* up = GetScepterUpgrade(w->id);
+                    if (!up) continue;
+                    std::string text = w->hasScepter ? std::string(up->name) + "  - HAR SEPTER"
+                                                     : GetAbilityDefinition(w->id).name + "  ->  " + up->name;
+                    DrawText(text.c_str(), (int)sp.x + 330, (int)sp.y + 400 + line * 17, 13, w->hasScepter ? Color{ 120, 200, 255, 255 } : Color{ 200, 195, 185, 255 });
                     line++;
                 }
 
@@ -1347,17 +1530,21 @@ int main() {
                 UI::DrawSunburst({ CX, 88.0f }, 260.0f, 18, uiTime * 0.25f, Fade(UI::GOLD_LIGHT, 0.16f));
                 float popT = std::min(1.0f, since / 0.35f);
                 float titleSize = std::round(64.0f * (0.6f + 0.4f * popT + 0.12f * sinf(popT * PI)));
-                bool evolving = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
-                UI::DrawCenteredText(evolving ? "EVOLUSJON!" : (levelUpFromChest ? "SKATTEKISTE!" : "LEVEL UP!"), CX, 88.0f - titleSize * 0.45f, titleSize, evolving ? Color{ 255, 140, 255, 255 } : UI::GOLD_LIGHT, 4.0f);
-                const char* sub = evolving ? "Abilityen og itemet ditt smelter sammen til noe mye sterkere"
-                                : levelUpFromChest ? (activeUpgradeChoices[0].type == ChoiceType::ITEM ? "Du fant en skattekiste  -  velg et item"
-                                                                                                        : "Alle items er fulle  -  velg en gratis oppgradering")
+                bool scepterScreen = choiceSource == ChoiceSource::SCEPTER;
+                bool chestScreen = choiceSource == ChoiceSource::CHEST;
+                ChoiceType firstType = activeUpgradeChoices.empty() ? ChoiceType::HEAL : activeUpgradeChoices[0].type;
+                UI::DrawCenteredText(scepterScreen ? "KONGENS SEPTER!" : (chestScreen ? "SKATTEKISTE!" : "LEVEL UP!"), CX, 88.0f - titleSize * 0.45f, titleSize,
+                                     scepterScreen ? Color{ 120, 200, 255, 255 } : UI::GOLD_LIGHT, 4.0f);
+                const char* sub = scepterScreen ? "Velg hvilken ability som faar septer-oppgraderingen"
+                                : chestScreen ? (firstType == ChoiceType::COMBINE ? "To items kan smeltes sammen!  -  eller velg et nytt item"
+                                                 : firstType == ChoiceType::ITEM ? "Du fant en skattekiste  -  velg et item"
+                                                                                 : "Alle items er fulle  -  velg en gratis oppgradering")
                                                    : TextFormat("Du er naa level %d  -  velg en belonning", lastPlayerLevel);
                 UI::DrawCenteredText(sub, CX, 134.0f, 20.0f, Color{ 230, 220, 200, 255 });
 
                 // --- Kortene ---
                 const int count = (int)activeUpgradeChoices.size();
-                const float cardW = count > 3 ? 240.0f : 260.0f;
+                const float cardW = std::min(260.0f, (1220.0f - (count - 1) * 26.0f) / std::max(1, count)); // Opptil 6 kort (septeret)
                 const float cardH = 360.0f;
                 const float gap = 26.0f;
                 const float totalW = count * cardW + (count - 1) * gap;
@@ -1413,9 +1600,13 @@ int main() {
                             int lvl = player.itemLevels[(int)choice.item];
                             badge = lvl == 0 ? "NYTT ITEM" : TextFormat("ITEM %d > %d", lvl, lvl + 1);
                             badgeColor = Color{ 150, 200, 255, 255 };
-                        } else if (choice.type == ChoiceType::EVOLUTION) {
+                        } else if (choice.type == ChoiceType::SCEPTER) {
                             title = choice.title;
-                            badge = "EVOLUSJON";
+                            badge = "SEPTER";
+                            badgeColor = Color{ 120, 200, 255, 255 };
+                        } else if (choice.type == ChoiceType::COMBINE) {
+                            title = choice.title;
+                            badge = "KOMBINASJON";
                             badgeColor = Color{ 255, 120, 255, 255 };
                         } else if (choice.type == ChoiceType::UPGRADE_ABILITY && existing) {
                             title = GetAbilityDefinition(choice.ability).name;
@@ -1439,18 +1630,22 @@ int main() {
                         DrawCircleV(ic, 42.0f, Color{ 40, 30, 46, 255 });
                         UI::DrawGlow(ic, 42.0f, Fade(accent, 0.45f), Fade(accent, 0.0f));
                         float iconSize = isSelected ? 30.0f + sinf(uiTime * 5.0f) : 29.0f;
-                        if (choice.type == ChoiceType::ITEM) DrawItemIcon(choice.item, ic, iconSize);
-                        else DrawAbilityIcon(choice.ability, ic, iconSize);
-                        if (choice.type == ChoiceType::EVOLUTION) {
+                        if (choice.type == ChoiceType::SCEPTER || choice.type == ChoiceType::COMBINE)
                             UI::DrawSunburst(ic, 70.0f, 10, uiTime * 1.5f, Fade(choice.color, 0.5f));
-                            DrawAbilityIcon(choice.ability, ic, iconSize);
-                        }
+                        if (choice.type == ChoiceType::ITEM) DrawItemIcon(choice.item, ic, iconSize);
+                        else if (choice.type == ChoiceType::COMBINE) DrawComboIcon(choice.combo, ic, iconSize);
+                        else DrawAbilityIcon(choice.ability, ic, iconSize);
 
                         // Navn
-                        UI::DrawCenteredText(title.c_str(), cardX + cardW / 2.0f, cardY + 166.0f, title.size() > 12 ? 22.0f : 26.0f, isSelected ? UI::GOLD_LIGHT : WHITE);
+                        {
+                            // Navnet krymper til det passer på kortet
+                            float ts = title.size() > 12 ? 22.0f : 26.0f;
+                            while (ts > 12.0f && MeasureTextEx(GetFontDefault(), title.c_str(), ts, ts / 10.0f).x > cardW - 20.0f) ts -= 1.0f;
+                            UI::DrawCenteredText(title.c_str(), cardX + cardW / 2.0f, cardY + 166.0f + (26.0f - ts) * 0.5f, ts, isSelected ? UI::GOLD_LIGHT : WHITE);
+                        }
 
                         // Nivå-prikker: fylte = nåværende, blinkende grønn = den du får
-                        if (choice.type != ChoiceType::HEAL && choice.type != ChoiceType::EVOLUTION) {
+                        if (choice.type != ChoiceType::HEAL && choice.type != ChoiceType::SCEPTER && choice.type != ChoiceType::COMBINE) {
                             bool isItem = choice.type == ChoiceType::ITEM;
                             int current = isItem ? player.itemLevels[(int)choice.item] : (existing ? existing->level : 0);
                             int maxPips = isItem ? MAX_ITEM_LEVEL : MAX_ABILITY_LEVEL;
@@ -1469,26 +1664,29 @@ int main() {
 
                         // Beskrivelse
                         DrawLineEx({ cardX + 24.0f, cardY + 228.0f }, { cardX + cardW - 24.0f, cardY + 228.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
-                        UI::DrawWrappedText(choice.description.c_str(), cardX + 20.0f, cardY + 242.0f, cardW - 40.0f, 16.0f, Color{ 215, 205, 190, 255 }, true);
+                        UI::DrawWrappedText(choice.description.c_str(), cardX + (cardW < 220.0f ? 12.0f : 20.0f), cardY + 242.0f, cardW - (cardW < 220.0f ? 24.0f : 40.0f), cardW < 220.0f ? 14.0f : 16.0f, Color{ 215, 205, 190, 255 }, true);
 
-                        // Kombo-hint: hvilket item/ability dette kan evolvere med
+                        // Hint nederst: items viser hvilket item de kombineres med,
+                        // abilities viser hva septeret gjør med dem
                         {
                             std::string combo;
                             bool ready = false;
                             if (choice.type == ChoiceType::ITEM) {
-                                if (const Evolution* evo = GetEvolutionForItem(choice.item)) {
-                                    ready = player.findAbility(evo->ability) != nullptr;
-                                    combo = TextFormat("Kombo: %s", GetAbilityDefinition(evo->ability).name.c_str());
+                                ItemId partner = GetComboPartner(choice.item);
+                                if (partner != ItemId::COUNT) {
+                                    ready = player.itemLevels[(int)partner] > 0;
+                                    combo = TextFormat("Kombo: %s", GetItemDef(partner).name);
                                 }
                             } else if (choice.type == ChoiceType::NEW_ABILITY || choice.type == ChoiceType::UPGRADE_ABILITY) {
-                                if (const Evolution* evo = GetEvolution(choice.ability)) {
-                                    ready = player.itemLevels[(int)evo->item] > 0;
-                                    combo = TextFormat("Kombo: %s", GetItemDef(evo->item).name);
+                                const Weapon* w = player.findAbility(choice.ability);
+                                if (const ScepterUpgrade* up = GetScepterUpgrade(choice.ability)) {
+                                    ready = w && w->hasScepter;
+                                    combo = TextFormat("Septer: %s", up->name);
                                 }
                             }
                             if (!combo.empty()) {
                                 Color cc = ready ? Color{ 255, 140, 255, 255 } : Color{ 150, 140, 160, 255 };
-                                UI::DrawCenteredText((ready ? combo + "  *" : combo).c_str(), cardX + cardW / 2.0f, cardY + cardH - (isSelected ? 78.0f : 40.0f), 14.0f, cc, 1.0f);
+                                UI::DrawCenteredText((ready && choice.type == ChoiceType::ITEM ? combo + "  *" : combo).c_str(), cardX + cardW / 2.0f, cardY + cardH - (isSelected ? 78.0f : 40.0f), 14.0f, cc, 1.0f);
                             }
                         }
 
@@ -1508,8 +1706,7 @@ int main() {
                     }
                 }
 
-                bool evoScreen = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
-                if (evoScreen) hint("[ENTER] Evolver!");
+                if (choiceSource == ChoiceSource::SCEPTER) hint("[A/D] Bla   |   [ENTER] Gi septeret til denne abilityen");
                 else hint(TextFormat("[A/D] Bla   |   [ENTER] Velg   |   [R] Nye valg (%d igjen)", rerollsLeft));
                 UI::EndCanvas();
             }

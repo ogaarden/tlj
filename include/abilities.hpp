@@ -8,6 +8,7 @@
 #include <memory>
 #include "ability_types.hpp"
 #include "weapon.hpp"
+#include "items.hpp"
 
 struct Player;
 
@@ -42,7 +43,8 @@ enum class ChoiceType {
     NEW_ABILITY,
     UPGRADE_ABILITY,
     ITEM,       // Nytt item eller neste nivå av et item (bare fra skattekister)
-    EVOLUTION,  // Fra skattekiste: ability på maks level + riktig item
+    COMBINE,    // Fra skattekiste: to items på maks nivå smeltes sammen til ett
+    SCEPTER,    // Fra Kongens septer (miniboss): gir en ability sin septer-oppgradering
     HEAL        // Reserve når alt er fullt og maks-level
 };
 
@@ -52,26 +54,26 @@ struct AbilityChoice {
     std::string title;
     std::string description;
     Color color;
-    ItemId item = ItemId::COUNT; // Bare for ChoiceType::ITEM
+    ItemId item = ItemId::COUNT;    // Bare for ChoiceType::ITEM
+    ComboId combo = ComboId::COUNT; // Bare for ChoiceType::COMBINE
 };
 
-// --- Evolusjoner: ability (maks level) + item = superversjon ---
-struct Evolution {
+// --- Septer-oppgraderinger (Kongens septer fra minibossene) ---
+struct ScepterUpgrade {
     AbilityId ability;
-    ItemId item;
     const char* name;
     const char* description;
     Color color;
 };
-const Evolution* GetEvolution(AbilityId ability);          // nullptr hvis abilityen ikke har en
-const Evolution* GetEvolutionForItem(ItemId item);         // Hvilken evolusjon itemet er nøkkel til
-bool CanEvolve(const Player& player, const Weapon& weapon); // Maks level + har itemet + ikke evolvert
-void EvolveAbility(Weapon& weapon);
+const ScepterUpgrade* GetScepterUpgrade(AbilityId ability); // nullptr hvis abilityen ikke har en
+void ApplyScepter(Weapon& weapon);
 
 // Level-up: bare abilities (nye og oppgraderinger)
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count = 3);
-// Skattekiste: evolusjon hvis en ability er klar, ellers items
+// Skattekiste: item-kombinasjon hvis mulig, ellers items
 std::vector<AbilityChoice> GenerateChestChoices(const Player& player, int count = 3);
+// Kongens septer: velg hvilken ability som får septer-oppgraderingen
+std::vector<AbilityChoice> GenerateScepterChoices(const Player& player);
 void ApplyAbilityChoice(Player& player, const AbilityChoice& choice);
 
 // --- HUD med de 5 ability-slotsene (i et panel, sentrert på centerX, med underkant på bottom) ---

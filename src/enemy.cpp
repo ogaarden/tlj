@@ -272,6 +272,17 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
     // XP-krystall med farge etter verdi, som spretter litt ut fra fienden
     Vector2 scatter = { position.x + (float)GetRandomValue(-10, 10), position.y + (float)GetRandomValue(-10, 10) };
     pickups.push_back({ scatter, xpValue, XpTierColor(xpValue), XpTierRadius(xpValue), 15.0f, PickupType::XP });
+    if (miniboss) {
+        // Miniboss: Kongens septer, en skattekiste og en haug med XP
+        pickups.push_back({ { position.x, position.y - 20.0f }, 1, SKYBLUE, 16.0f, 0.0f, PickupType::SCEPTER });
+        pickups.push_back({ { position.x + 30.0f, position.y + 10.0f }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+        for (int i = 0; i < 12; i++) {
+            float a = i * PI / 6.0f;
+            int v = xpValue / 12;
+            pickups.push_back({ { position.x + cosf(a) * 45.0f, position.y + sinf(a) * 45.0f }, v, XpTierColor(v), XpTierRadius(v), 30.0f, PickupType::XP });
+        }
+        return;
+    }
     if (elite || chestCarrier) {
         // Skattekiste, men elites deler en nedkjøling (Firkløver gjør den kortere).
         // Uten kiste slipper eliten en ekstra stor krystall i stedet.

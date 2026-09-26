@@ -179,8 +179,86 @@ void DrawItemIcon(ItemId id, Vector2 c, float s) {
     }
 }
 
+int UsedItemSlots(const Player& player) {
+    return (int)player.items.size() + (int)player.combos.size();
+}
+
 bool HasItemSlotFree(const Player& player) {
-    return (int)player.items.size() < MAX_ITEM_SLOTS;
+    return UsedItemSlots(player) < MAX_ITEM_SLOTS;
+}
+
+// =====================================================================
+// KOMBINASJONER
+// De to itemene beholder effekten sin, og kombinasjonen gir en ekstra bonus på toppen.
+// =====================================================================
+const ItemCombo& GetCombo(ComboId id) {
+    static const ItemCombo combos[(int)ComboId::COUNT] = {
+        { ItemId::WHETSTONE,     ItemId::LUCKY_DIE,    "Boedelens oeks",      "Kritiske treff gjoer 3x skade (i stedet for 2x) og +10% krit",  Color{ 220, 60, 50, 255 } },
+        { ItemId::JUGGLING_BALL, ItemId::SPYGLASS,     "Sjonglorens kikkert",  "+1 prosjektil og +20% prosjektilfart",                          Color{ 255, 170, 80, 255 } },
+        { ItemId::ROYAL_CAPE,    ItemId::CROWN_JEWEL,  "Kongens regalier",     "+20% omraade og +30% gull",                                     Color{ 230, 50, 90, 255 } },
+        { ItemId::JESTER_SHOES,  ItemId::SHADOW_CLOAK, "Skyggedanser",         "+15% fart og +8% unnvikelse",                                   Color{ 140, 90, 200, 255 } },
+        { ItemId::HOURGLASS,     ItemId::CANDLE,       "Evighetens timeglass", "-12% cooldown og +25% varighet",                                Color{ 255, 220, 140, 255 } },
+        { ItemId::HEART_AMULET,  ItemId::VAMPIRE_FANG, "Blodhjerte",           "+25% maks HP og +0.3 HP per drap",                              Color{ 200, 20, 50, 255 } },
+        { ItemId::CHAINMAIL,     ItemId::THORN_COLLAR, "Piggrustning",         "+10 armor og dobbel skade fra piggkragen",                      Color{ 170, 175, 190, 255 } },
+        { ItemId::LODESTONE,     ItemId::OWL_FEATHER,  "Visdommens magnet",    "+100 pickup-radius og +20% XP",                                 Color{ 120, 140, 255, 255 } },
+        { ItemId::MAGIC_MIRROR,  ItemId::CLOVER,       "Lykkespeilet",         "+2 rerolls, +30% flaks og +1 valg i level-up",                  Color{ 120, 230, 160, 255 } },
+    };
+    return combos[(int)id];
+}
+
+ItemId GetComboPartner(ItemId item) {
+    for (int c = 0; c < (int)ComboId::COUNT; c++) {
+        const ItemCombo& combo = GetCombo((ComboId)c);
+        if (combo.a == item) return combo.b;
+        if (combo.b == item) return combo.a;
+    }
+    return ItemId::COUNT;
+}
+
+bool CanCombine(const Player& player, ComboId id) {
+    const ItemCombo& combo = GetCombo(id);
+    auto owned = [&](ItemId i) { return std::find(player.items.begin(), player.items.end(), i) != player.items.end(); };
+    return owned(combo.a) && owned(combo.b) &&
+           player.itemLevels[(int)combo.a] >= MAX_ITEM_LEVEL && player.itemLevels[(int)combo.b] >= MAX_ITEM_LEVEL;
+}
+
+void ApplyCombo(Player& player, ComboId id) {
+    if (!CanCombine(player, id)) return;
+    const ItemCombo& combo = GetCombo(id);
+    // De to itemene forsvinner fra plassene (nivåene står igjen på 5, så de ikke tilbys igjen)
+    player.items.erase(std::remove_if(player.items.begin(), player.items.end(),
+                       [&](ItemId i) { return i == combo.a || i == combo.b; }), player.items.end());
+    player.combos.push_back(id);
+
+    switch (id) {
+        case ComboId::EXECUTIONER_AXE: player.critMultiplier = 3.0f; player.critChance += 0.10f; break;
+        case ComboId::JUGGLER_SCOPE:   player.projectileCount += 1; player.projectileSpeedMult *= 1.20f; break;
+        case ComboId::ROYAL_REGALIA:   player.areaMult *= 1.20f; player.goldMultiplier *= 1.30f; break;
+        case ComboId::SHADOW_DANCER:   player.speed *= 1.15f; player.evasion += 0.08f; break;
+        case ComboId::ETERNAL_GLASS:   player.cooldownMult *= 0.88f; player.durationMult *= 1.25f; break;
+        case ComboId::BLOOD_HEART: {
+            float gain = player.maxHp * 0.25f;
+            player.maxHp += gain;
+            player.hp += gain;
+            player.lifePerKill += 0.3f;
+        } break;
+        case ComboId::SPIKED_ARMOR:    player.armor += 10.0f; player.thorns *= 2.0f; break;
+        case ComboId::SAGE_MAGNET:     player.lootRadius += 100.0f; player.xpMultiplier *= 1.20f; break;
+        case ComboId::LUCKY_MIRROR:    player.bonusRerolls += 2; player.luck *= 1.30f; player.levelUpChoices += 1; break;
+        default: break;
+    }
+}
+
+void DrawComboIcon(ComboId id, Vector2 c, float s) {
+    // De to itemene litt forskjøvet, med en gyllen stjerne-krans rundt
+    const ItemCombo& combo = GetCombo(id);
+    float t = (float)GetTime();
+    for (int i = 0; i < 8; i++) {
+        float a = t * 1.5f + i * PI / 4.0f;
+        DrawCircleV({ c.x + cosf(a) * s * 1.05f, c.y + sinf(a) * s * 1.05f }, s * 0.1f, Color{ 255, 220, 120, 220 });
+    }
+    DrawItemIcon(combo.a, { c.x - s * 0.35f, c.y - s * 0.3f }, s * 0.62f);
+    DrawItemIcon(combo.b, { c.x + s * 0.35f, c.y + s * 0.3f }, s * 0.62f);
 }
 
 void ApplyItemLevel(Player& player, ItemId id) {

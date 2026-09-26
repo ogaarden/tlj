@@ -67,8 +67,8 @@ void FlameWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
         }
 
         // Flammer: mange små ildkuler som skytes ut i kjeglen
-        Color hot = evolved ? Color{ 110, 170, 255, 255 } : Color{ 255, 150, 50, 255 };
-        Color core = evolved ? Color{ 220, 240, 255, 255 } : Color{ 255, 230, 140, 255 };
+        Color hot = hasScepter ? Color{ 110, 170, 255, 255 } : Color{ 255, 150, 50, 255 };
+        Color core = hasScepter ? Color{ 220, 240, 255, 255 } : Color{ 255, 230, 140, 255 };
         for (Vector2 d : directions) {
             for (int k = 0; k < 3; k++) {
                 Vector2 dir = rotateDegrees(d, frandf(-area(), area()) * 0.8f);
@@ -123,7 +123,7 @@ void FlameWeapon::draw() const {
     // Oransje glød på gulvet i kjeglen
     for (Vector2 d : directions) {
         float h = headingDeg(d);
-        DrawCircleSector(lastPlayerPos, radius(), h - area(), h + area(), 16, Fade(evolved ? SKYBLUE : ORANGE, 0.16f));
+        DrawCircleSector(lastPlayerPos, radius(), h - area(), h + area(), 16, Fade(hasScepter ? SKYBLUE : ORANGE, 0.16f));
     }
 }
 
@@ -131,10 +131,10 @@ void FlameWeapon::drawVfx() const {
     if (breathTimer <= 0.0f) return;
     for (Vector2 d : directions) {
         Vector3 mouth = ToWorld3D(Vector2Add(lastPlayerPos, Vector2Scale(d, 16.0f)), 22.0f);
-        VfxBillboard(VfxTex::GLOW, mouth, 40.0f, evolved ? Color{ 120, 170, 255, 255 } : Color{ 255, 170, 70, 255 });
+        VfxBillboard(VfxTex::GLOW, mouth, 40.0f, hasScepter ? Color{ 120, 170, 255, 255 } : Color{ 255, 170, 70, 255 });
         for (int k = 1; k <= 3; k++) {
             Vector2 g = Vector2Add(lastPlayerPos, Vector2Scale(d, radius() * 0.28f * k));
-            VfxDecal(VfxTex::GLOW, g, radius() * 0.35f * k, evolved ? Color{ 40, 70, 140, 255 } : Color{ 140, 60, 20, 255 });
+            VfxDecal(VfxTex::GLOW, g, radius() * 0.35f * k, hasScepter ? Color{ 40, 70, 140, 255 } : Color{ 140, 60, 20, 255 });
         }
     }
 }
@@ -200,7 +200,7 @@ void BoomerangWeapon::draw3D() const {
         for (int k = 0; k < 2; k++) {
             float a = (b.spin + k * 110.0f) * DEG2RAD;
             Vector3 tip = { c.x + cosf(a) * 14.0f, c.y, c.z + sinf(a) * 14.0f };
-            ShadedCylinder(c, tip, 3.2f, 2.2f, evolved ? Color{ 120, 220, 255, 255 } : Color{ 175, 110, 55, 255 }, 5);
+            ShadedCylinder(c, tip, 3.2f, 2.2f, hasScepter ? Color{ 120, 220, 255, 255 } : Color{ 175, 110, 55, 255 }, 5);
         }
         ShadedSphere(c, 3.4f, Color{ 240, 200, 90, 255 }, 4, 6);
     }
@@ -258,7 +258,7 @@ void CardWeapon::draw3D() const {
         // Kortet ligger flatt og snurrer litt mens det flyr
         float yaw = -headingDeg(c.direction) + sinf(t * 14.0f + c.position.x * 0.05f) * 25.0f;
         Vector3 p = ToWorld3D(c.position, PROJECTILE_HEIGHT);
-        ShadedCube(p, { 9.0f, 1.0f, 13.0f }, yaw, evolved ? Color{ 255, 230, 150, 255 } : Color{ 248, 244, 232, 255 });
+        ShadedCube(p, { 9.0f, 1.0f, 13.0f }, yaw, hasScepter ? Color{ 255, 230, 150, 255 } : Color{ 248, 244, 232, 255 });
         ShadedCube({ p.x, p.y + 0.8f, p.z }, { 4.0f, 0.6f, 4.0f }, yaw + 45.0f, c.red ? Color{ 210, 30, 50, 255 } : Color{ 30, 25, 35, 255 });
     }
 }
@@ -321,7 +321,7 @@ void FrostNovaWeapon::draw3D() const {
         float life = s.timer / 0.8f;
         float grow = std::min(1.0f, (1.0f - life) * 6.0f) * std::min(1.0f, life * 3.0f);
         ShadedCrystal(ToWorld3D(s.position, s.size * 1.2f * grow), s.size * 0.5f * grow + 0.1f, s.size * 2.4f * grow + 0.1f, s.spin,
-                      evolved ? Color{ 230, 245, 255, 255 } : Color{ 150, 210, 250, 255 });
+                      hasScepter ? Color{ 230, 245, 255, 255 } : Color{ 150, 210, 250, 255 });
     }
 }
 
@@ -374,7 +374,7 @@ void CatapultWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::u
         }
         Vector3 p = ToWorld3D(b.target, BOULDER_HEIGHT * (1.0f - b.t * b.t));
         p.x -= (1.0f - b.t) * 120.0f;
-        VfxTrail(p, evolved ? Color{ 255, 210, 90, 255 } : Color{ 255, 120, 40, 255 }, 26.0f, 0.3f);
+        VfxTrail(p, hasScepter ? Color{ 255, 210, 90, 255 } : Color{ 255, 120, 40, 255 }, 26.0f, 0.3f);
         i++;
     }
 }
@@ -393,7 +393,7 @@ void CatapultWeapon::draw3D() const {
     for (const Boulder& b : boulders) {
         Vector3 p = ToWorld3D(b.target, BOULDER_HEIGHT * (1.0f - b.t * b.t));
         p.x -= (1.0f - b.t) * 120.0f;
-        Color rock = evolved ? Color{ 230, 190, 80, 255 } : Color{ 140, 128, 118, 255 };
+        Color rock = hasScepter ? Color{ 230, 190, 80, 255 } : Color{ 140, 128, 118, 255 };
         ShadedSphere(p, 14.0f, rock, 6, 8);
         float a = b.spin * DEG2RAD;
         ShadedSphere({ p.x + cosf(a) * 9.0f, p.y + 5.0f, p.z + sinf(a) * 9.0f }, 7.0f, rock, 4, 6);
@@ -462,7 +462,7 @@ void BellWeapon::draw3D() const {
         float sway = sinf(time * 14.0f + k) * 0.5f * jingle + sinf(time * 2.0f + k) * 0.1f;
         Vector3 top = ToWorld3D({ lastPlayerPos.x + k * 20.0f, lastPlayerPos.y - 6.0f }, 58.0f + sinf(time * 3.0f + k) * 2.0f);
         Vector3 mouth = { top.x + sway * 6.0f, top.y - 9.0f, top.z };
-        Color gold = evolved ? Color{ 255, 150, 220, 255 } : Color{ 245, 200, 70, 255 };
+        Color gold = hasScepter ? Color{ 255, 150, 220, 255 } : Color{ 245, 200, 70, 255 };
         ShadedCylinder(top, mouth, 2.0f, 6.0f, gold, 8);
         ShadedSphere(top, 2.4f, gold, 4, 6);
         ShadedSphere({ mouth.x, mouth.y - 1.5f, mouth.z }, 1.6f, Color{ 120, 80, 30, 255 }, 3, 5);
@@ -500,7 +500,7 @@ void SpotlightWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
     angle = fmodf(angle + stats.speed * deltaTime, 360.0f);
     beamCount = stats.projectiles + mods.extraProjectiles;
     int dmg = scaledDamage();
-    Color light = evolved ? Color{ 255, 160, 240, 255 } : Color{ 255, 240, 170, 255 };
+    Color light = hasScepter ? Color{ 255, 160, 240, 255 } : Color{ 255, 240, 170, 255 };
 
     for (size_t j = 0; j < enemies.size(); ) {
         Enemy* e = enemies[j].get();
@@ -537,7 +537,7 @@ void SpotlightWeapon::draw() const {
         Vector2 end = Vector2Add(lastPlayerPos, Vector2Scale(d, radius()));
         Vector2 far0 = Vector2Add(end, Vector2Scale(n, area()));
         Vector2 far1 = Vector2Subtract(end, Vector2Scale(n, area()));
-        Color c = Fade(evolved ? Color{ 255, 170, 240, 255 } : Color{ 255, 245, 190, 255 }, 0.35f);
+        Color c = Fade(hasScepter ? Color{ 255, 170, 240, 255 } : Color{ 255, 245, 190, 255 }, 0.35f);
         groundTri(near0, far0, far1, c);
         groundTri(near0, far1, near1, c);
         DrawCircleV(end, area(), c);
@@ -545,7 +545,7 @@ void SpotlightWeapon::draw() const {
 }
 
 void SpotlightWeapon::drawVfx() const {
-    Color tint = evolved ? Color{ 200, 110, 190, 255 } : Color{ 190, 170, 110, 255 };
+    Color tint = hasScepter ? Color{ 200, 110, 190, 255 } : Color{ 190, 170, 110, 255 };
     for (int b = 0; b < beamCount; b++) {
         Vector2 d = beamDirection(b);
         Vector2 end = Vector2Add(lastPlayerPos, Vector2Scale(d, radius()));
@@ -577,7 +577,7 @@ void SabreWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
         fireTimer = 0.0f;
     }
 
-    Color steel = evolved ? Color{ 255, 70, 90, 255 } : Color{ 255, 150, 150, 255 };
+    Color steel = hasScepter ? Color{ 255, 70, 90, 255 } : Color{ 255, 150, 150, 255 };
     for (size_t i = 0; i < queued.size(); ) {
         queued[i].delay -= deltaTime;
         if (queued[i].delay > 0.0f) { i++; continue; }
@@ -601,7 +601,7 @@ void SabreWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
         VfxParticle(VfxTex::SLASH, ToWorld3D(at, 12.0f), { 0, 0, 0 }, 0.22f, radius() * 1.7f, radius() * 1.95f,
                     steel, 0.0f, 0.0f, headingDeg(d) + SLASH_ROTATION_OFFSET + 90.0f, 0.0f, true);
         VfxParticle(VfxTex::GLOW, ToWorld3D(at, 10.0f), { 0, 0, 0 }, 0.15f, radius() * 1.2f, radius() * 0.6f,
-                    evolved ? Color{ 160, 20, 40, 255 } : Color{ 120, 90, 90, 255 }, 0.0f, 0.0f, 0.0f, 0.0f, true);
+                    hasScepter ? Color{ 160, 20, 40, 255 } : Color{ 120, 90, 90, 255 }, 0.0f, 0.0f, 0.0f, 0.0f, true);
         PlaySfxPitch(Sfx::HIT, 0.7f);
         queued[i] = queued.back();
         queued.pop_back();
@@ -631,7 +631,7 @@ void TornadoWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::un
         fireTimer = 0.0f;
     }
 
-    Color wind = evolved ? Color{ 170, 120, 255, 255 } : Color{ 190, 240, 220, 255 };
+    Color wind = hasScepter ? Color{ 170, 120, 255, 255 } : Color{ 190, 240, 220, 255 };
     for (size_t i = 0; i < twisters.size(); ) {
         Twister& t = twisters[i];
         t.life -= deltaTime;
@@ -674,7 +674,7 @@ void TornadoWeapon::draw() const {
     for (const Twister& t : twisters) {
         float fade = std::min(1.0f, t.life / 0.4f) * std::min(1.0f, (t.maxLife - t.life) / 0.3f);
         DrawCircleV(t.position, radius(), Fade(BLACK, 0.18f * fade));
-        DrawRing(t.position, radius() * 0.9f, radius(), t.spin, t.spin + 240.0f, 24, Fade(evolved ? VIOLET : Color{ 200, 240, 230, 255 }, 0.35f * fade));
+        DrawRing(t.position, radius() * 0.9f, radius(), t.spin, t.spin + 240.0f, 24, Fade(hasScepter ? VIOLET : Color{ 200, 240, 230, 255 }, 0.35f * fade));
     }
 }
 
@@ -689,9 +689,9 @@ void TornadoWeapon::drawVfx() const {
             Vector2 wob = { t.position.x + sinf(t.spin * 0.02f + k * 0.7f) * k * 3.0f, t.position.y + cosf(t.spin * 0.017f + k) * k * 2.0f };
             // Lagene overlapper additivt, så hvert lag må være svakt (ellers blir midten helt hvit)
             unsigned char v = (unsigned char)(80 * fade * (1.0f - k * 0.1f));
-            Color c = evolved ? Color{ (unsigned char)(v * 0.75f), (unsigned char)(v * 0.35f), v, 255 } : Color{ (unsigned char)(v * 0.95f), v, v, 255 };
+            Color c = hasScepter ? Color{ (unsigned char)(v * 0.75f), (unsigned char)(v * 0.35f), v, 255 } : Color{ (unsigned char)(v * 0.95f), v, v, 255 };
             // Tåke-teksturen er grønn, så vi tar ned grønt for at vinden skal bli hvit/grå
-            if (!evolved) c.g = (unsigned char)(c.g * 0.55f);
+            if (!hasScepter) c.g = (unsigned char)(c.g * 0.55f);
             VfxDecal(VfxTex::POISON_MIST, wob, size, c, t.spin * (1.0f + k * 0.1f), h);
             if (k == 2 || k == 5) VfxDecal(VfxTex::SLASH, wob, size * 0.8f, Color{ (unsigned char)(v * 0.6f), (unsigned char)(v * 0.6f), (unsigned char)(v * 0.6f), 255 }, -t.spin * 1.3f, h + 2.0f);
         }

@@ -55,6 +55,8 @@ struct Player {
     // Items denne runden: nivå per item (0 = har ikke) og rekkefølgen de ble plukket i
     int itemLevels[(int)ItemId::COUNT] = {};
     std::vector<ItemId> items;
+    std::vector<ComboId> combos;  // Kombinerte items (tar én plass hver)
+    float critMultiplier = 2.0f;  // Bøddelens øks gjør det til 3x
 
 
     int level = 1;

@@ -35,7 +35,7 @@ enum class AbilityId {
 
 // Items: passive gjenstander man finner i skattekister. Nullstilles hver runde.
 // Hver har 5 nivåer, og man kan bare bære MAX_ITEM_SLOTS forskjellige – så man må velge.
-// Flere items er nøkkelen til en evolusjon (se abilities.cpp).
+// To items på maks nivå kan kombineres til et sterkere item (se items.cpp).
 enum class ItemId {
     JUGGLING_BALL,  // Sjonglørball: +1 prosjektil
     ROYAL_CAPE,     // Kongens kappe: +område
@@ -57,6 +57,21 @@ enum class ItemId {
     CLOVER,         // Firkløver: +flaks (oftere kister og sjeldne drops)
     COUNT
 };
+// Item-kombinasjoner: to items på maks nivå smeltes sammen til ett sterkere item
+// (og frigjør en item-plass). Se items.cpp.
+enum class ComboId {
+    EXECUTIONER_AXE,   // Slipestein + Heldig terning
+    JUGGLER_SCOPE,     // Sjonglørball + Kikkert
+    ROYAL_REGALIA,     // Kongens kappe + Kronjuvel
+    SHADOW_DANCER,     // Narreskoene + Skyggekappe
+    ETERNAL_GLASS,     // Timeglass + Evighetslys
+    BLOOD_HEART,       // Hjerteamulett + Vampyrtann
+    SPIKED_ARMOR,      // Ringbrynje + Piggkrage
+    SAGE_MAGNET,       // Magnetstein + Uglefjær
+    LUCKY_MIRROR,      // Trollspeil + Firkløver
+    COUNT
+};
+
 constexpr int MAX_ITEM_LEVEL = 5;
 constexpr int MAX_ITEM_SLOTS = 6;
 

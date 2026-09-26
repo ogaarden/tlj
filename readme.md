@@ -182,4 +182,23 @@ Notes:
    Rampelys+Firkløver=Primadonna, Sabelhugg+Vampyrtann=Blodsabel, Virvelvind+Magnetstein=Malstrøm
 6) 6 ability-slots (1 innate + 5). Fiender kan nå bremses (frost) og dyttes (bjeller, bumerang, torner).
 
+// 9 oktober – minibosser, Kongens septer og item-kombinasjoner
+1) Minibosser ved 3, 6 og 9 min (miniboss.cpp). En lilla innkallingssirkel dukker opp et sted i slottet
+   (lilla prikk på kartet og pil i skjermkanten). Går du inn i sirkelen, stiger en tilfeldig miniboss opp:
+   - Bøddelen: treg, men løfter øksa og knuser bakken rundt seg (rød sirkel = kom deg unna!)
+   - Hoffmagikeren: holder avstand, skyter ringer av magiske kuler og teleporterer
+   - Jernridderen: sikter (rød linje) og stormer gjennom deg
+   De er svært sterke (12 000 / 28 000 / 50 000 HP) og har egen HP-bar øverst.
+2) Minibossene slipper Kongens septer (som Aghanim's Scepter i Dota) + en kiste og mye XP.
+   Septeret lar deg velge hvilken ability som får sin septer-oppgradering (Poseidons trefork,
+   Blodsabel, Malstrøm ...). Hver ability kan få septeret én gang. Dette erstatter evolusjonene:
+   abilities kombineres IKKE lenger med items.
+3) Items kombineres med hverandre: to items som hører sammen, begge på nivå 5, kan smeltes sammen
+   i en skattekiste. Kombinasjonen tar bare én plass (frigjør en plass!) og gir en ekstra bonus:
+   Slipestein+Terning=Bøddelens øks (krit 3x), Sjonglørball+Kikkert=Sjonglørens kikkert,
+   Kappe+Kronjuvel=Kongens regalier, Narresko+Skyggekappe=Skyggedanser,
+   Timeglass+Evighetslys=Evighetens timeglass, Hjerteamulett+Vampyrtann=Blodhjerte,
+   Ringbrynje+Piggkrage=Piggrustning, Magnetstein+Uglefjær=Visdommens magnet,
+   Trollspeil+Firkløver=Lykkespeilet. Item-kortene viser hvilket item de kombineres med.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

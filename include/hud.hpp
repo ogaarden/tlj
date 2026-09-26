@@ -38,6 +38,8 @@ struct HudState {
     float bossTime = 0.0f;     // Når bossen kommer
     bool inBossArena = false;
     int bossId = -1;
+    int minibossId = -1;                 // HP-bar øverst mens minibossen lever
+    std::vector<Vector2> summonCircles;  // Miniboss-sirkler som vises på minimapet
     Vector2 arenaCenter = { 0, 0 };
     float arenaRadius = 0.0f;
 

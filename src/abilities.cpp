@@ -384,80 +384,70 @@ std::vector<AbilityId> GetSharedAbilityPool() {
 // =====================================================================
 
 // ---------------------------------------------------------------------
-// EVOLUSJONER: hver ability har ett item som er nøkkelen.
-// Ability på level 9 + itemet (hvilket som helst nivå) -> neste skattekiste
-// gjør den om til en superversjon.
+// SEPTER-OPPGRADERINGER (som Aghanim's Scepter i Dota):
+// Minibossene (3, 6 og 9 min) slipper Kongens septer. Da velger du én ability
+// som får sin septer-versjon – en kraftig modifikator med nytt navn og ny farge.
+// Hver ability kan bare få septeret én gang.
 // ---------------------------------------------------------------------
 namespace {
-struct EvolutionData {
-    Evolution info;
+struct ScepterData {
+    ScepterUpgrade info;
     void (*apply)(AbilityStats&);
 };
 
-const std::vector<EvolutionData>& evolutions() {
-    static const std::vector<EvolutionData> list = {
-        { { AbilityId::TREFORK, ItemId::JUGGLING_BALL, "Poseidons trefork", "+4 prongs, +3 gjennomboring og +50% skade", Color{ 80, 220, 255, 255 } },
+const std::vector<ScepterData>& scepterUpgrades() {
+    static const std::vector<ScepterData> list = {
+        { { AbilityId::TREFORK, "Poseidons trefork", "+4 prongs, +3 gjennomboring og +50% skade", Color{ 80, 220, 255, 255 } },
           [](AbilityStats& s) { s.projectiles += 4; s.pierce += 3; s.damage *= 1.5f; } },
-        { { AbilityId::GROUND_SLAM, ItemId::CHAINMAIL, "Jordskjelv", "+80 radius, 2x skade og -20% cooldown", Color{ 255, 110, 40, 255 } },
+        { { AbilityId::GROUND_SLAM, "Jordskjelv", "+80 radius, 2x skade og -20% cooldown", Color{ 255, 110, 40, 255 } },
           [](AbilityStats& s) { s.radius += 80.0f; s.damage *= 2.0f; s.cooldown *= 0.8f; } },
-        { { AbilityId::RICOCHET, ItemId::LUCKY_DIE, "Kaoskule", "+2 kuler, +6 sprett og ingen svekkelse per sprett", Color{ 255, 80, 220, 255 } },
+        { { AbilityId::RICOCHET, "Kaoskule", "+2 kuler, +6 sprett og ingen svekkelse per sprett", Color{ 255, 80, 220, 255 } },
           [](AbilityStats& s) { s.projectiles += 2; s.bounces += 6; s.bounceFalloff = 1.0f; } },
-        { { AbilityId::PIE, ItemId::ROYAL_CAPE, "Bryllupskake", "+3 kaker, +45 sprut-radius og +50% skade", Color{ 255, 235, 245, 255 } },
+        { { AbilityId::PIE, "Bryllupskake", "+3 kaker, +45 sprut-radius og +50% skade", Color{ 255, 235, 245, 255 } },
           [](AbilityStats& s) { s.projectiles += 3; s.radius += 45.0f; s.damage *= 1.5f; } },
-        { { AbilityId::MAGIC_MISSILE, ItemId::OWL_FEATHER, "Stjerneregn", "+4 missiler, +3 sprett og +30% skade", Color{ 150, 120, 255, 255 } },
+        { { AbilityId::MAGIC_MISSILE, "Stjerneregn", "+4 missiler, +3 sprett og +30% skade", Color{ 150, 120, 255, 255 } },
           [](AbilityStats& s) { s.projectiles += 4; s.bounces += 3; s.damage *= 1.3f; } },
-        { { AbilityId::ROT, ItemId::HEART_AMULET, "Svartedauden", "+60 radius og 2.5x skade", Color{ 150, 60, 200, 255 } },
+        { { AbilityId::ROT, "Svartedauden", "+60 radius og 2.5x skade", Color{ 150, 60, 200, 255 } },
           [](AbilityStats& s) { s.radius += 60.0f; s.damage *= 2.5f; } },
-        { { AbilityId::DAGGER, ItemId::JESTER_SHOES, "Tusen kniver", "+5 dolker, +2 gjennomboring og -40% cooldown", Color{ 230, 235, 255, 255 } },
+        { { AbilityId::DAGGER, "Tusen kniver", "+5 dolker, +2 gjennomboring og -40% cooldown", Color{ 230, 235, 255, 255 } },
           [](AbilityStats& s) { s.projectiles += 5; s.pierce += 2; s.cooldown *= 0.6f; } },
-        { { AbilityId::ORBIT_BLADES, ItemId::WHETSTONE, "Staalvirvel", "+4 blader, 2x skade, raskere og videre", Color{ 200, 225, 255, 255 } },
+        { { AbilityId::ORBIT_BLADES, "Staalvirvel", "+4 blader, 2x skade, raskere og videre", Color{ 200, 225, 255, 255 } },
           [](AbilityStats& s) { s.projectiles += 4; s.damage *= 2.0f; s.speed *= 1.6f; s.radius += 30.0f; } },
-        { { AbilityId::LIGHTNING, ItemId::HOURGLASS, "Tordenguden", "+3 lyn, +4 kjede-hopp, -40% cooldown og +50% skade", Color{ 255, 250, 140, 255 } },
+        { { AbilityId::LIGHTNING, "Tordenguden", "+3 lyn, +4 kjede-hopp, -40% cooldown og +50% skade", Color{ 255, 250, 140, 255 } },
           [](AbilityStats& s) { s.projectiles += 3; s.bounces += 4; s.cooldown *= 0.6f; s.damage *= 1.5f; } },
-        { { AbilityId::FIRE_BREATH, ItemId::CANDLE, "Drakepust", "Blaa drakeild: +60 rekkevidde, bredere, 2x skade og lengre pust", Color{ 110, 170, 255, 255 } },
+        { { AbilityId::FIRE_BREATH, "Drakepust", "Blaa drakeild: +60 rekkevidde, bredere, 2x skade og lengre pust", Color{ 110, 170, 255, 255 } },
           [](AbilityStats& s) { s.radius += 60.0f; s.area += 12.0f; s.damage *= 2.0f; s.duration += 0.6f; } },
-        { { AbilityId::BOOMERANG, ItemId::SPYGLASS, "Stormbumerang", "+3 bumeranger, +50% skade, +100 rekkevidde og +30% fart", Color{ 120, 220, 255, 255 } },
+        { { AbilityId::BOOMERANG, "Stormbumerang", "+3 bumeranger, +50% skade, +100 rekkevidde og +30% fart", Color{ 120, 220, 255, 255 } },
           [](AbilityStats& s) { s.projectiles += 3; s.damage *= 1.5f; s.radius += 100.0f; s.speed *= 1.3f; } },
-        { { AbilityId::CARDS, ItemId::MAGIC_MIRROR, "Full kortstokk", "+10 kort, +2 gjennomboring og +40% skade", Color{ 255, 225, 140, 255 } },
+        { { AbilityId::CARDS, "Full kortstokk", "+10 kort, +2 gjennomboring og +40% skade", Color{ 255, 225, 140, 255 } },
           [](AbilityStats& s) { s.projectiles += 10; s.pierce += 2; s.damage *= 1.4f; } },
-        { { AbilityId::FROST_NOVA, ItemId::SHADOW_CLOAK, "Evig vinter", "Fiender nesten fryser fast, +60 radius, 2x skade og +2 sek frost", Color{ 220, 245, 255, 255 } },
+        { { AbilityId::FROST_NOVA, "Evig vinter", "Fiender nesten fryser fast, +60 radius, 2x skade og +2 sek frost", Color{ 220, 245, 255, 255 } },
           [](AbilityStats& s) { s.effect = 0.85f; s.radius += 60.0f; s.damage *= 2.0f; s.duration += 2.0f; } },
-        { { AbilityId::CATAPULT, ItemId::CROWN_JEWEL, "Kongelig bombardement", "+4 gullsteiner, +30 eksplosjonsradius, +50% skade, -30% cooldown", Color{ 255, 200, 80, 255 } },
+        { { AbilityId::CATAPULT, "Kongelig bombardement", "+4 gullsteiner, +30 eksplosjonsradius, +50% skade, -30% cooldown", Color{ 255, 200, 80, 255 } },
           [](AbilityStats& s) { s.projectiles += 4; s.area += 30.0f; s.damage *= 1.5f; s.cooldown *= 0.7f; } },
-        { { AbilityId::BELLS, ItemId::THORN_COLLAR, "Dommedagsklokker", "+2 ringer, 2x skade, +80 rekkevidde og kraftig dytt", Color{ 255, 140, 220, 255 } },
+        { { AbilityId::BELLS, "Dommedagsklokker", "+2 ringer, 2x skade, +80 rekkevidde og kraftig dytt", Color{ 255, 140, 220, 255 } },
           [](AbilityStats& s) { s.projectiles += 2; s.damage *= 2.0f; s.radius += 80.0f; s.effect += 200.0f; } },
-        { { AbilityId::SPOTLIGHT, ItemId::CLOVER, "Primadonna", "+2 straaler, 2x skade, +60 lengde og raskere treff", Color{ 255, 160, 240, 255 } },
+        { { AbilityId::SPOTLIGHT, "Primadonna", "+2 straaler, 2x skade, +60 lengde og raskere treff", Color{ 255, 160, 240, 255 } },
           [](AbilityStats& s) { s.projectiles += 2; s.damage *= 2.0f; s.radius += 60.0f; s.cooldown *= 0.7f; } },
-        { { AbilityId::SABRE, ItemId::VAMPIRE_FANG, "Blodsabel", "2x skade, +30 rekkevidde og hvert treff gir liv tilbake", Color{ 230, 40, 60, 255 } },
+        { { AbilityId::SABRE, "Blodsabel", "2x skade, +30 rekkevidde og hvert treff gir liv tilbake", Color{ 230, 40, 60, 255 } },
           [](AbilityStats& s) { s.damage *= 2.0f; s.radius += 30.0f; s.effect = 0.6f; } },
-        { { AbilityId::TORNADO, ItemId::LODESTONE, "Malstroem", "+2 virvler, stoerre, 2x skade, +2 sek og suger inn alt", Color{ 170, 120, 255, 255 } },
+        { { AbilityId::TORNADO, "Malstroem", "+2 virvler, stoerre, 2x skade, +2 sek og suger inn alt", Color{ 170, 120, 255, 255 } },
           [](AbilityStats& s) { s.projectiles += 2; s.radius += 25.0f; s.damage *= 2.0f; s.duration += 2.0f; s.effect += 200.0f; } },
     };
     return list;
 }
 } // namespace
 
-const Evolution* GetEvolution(AbilityId ability) {
-    for (const auto& e : evolutions()) if (e.info.ability == ability) return &e.info;
+const ScepterUpgrade* GetScepterUpgrade(AbilityId ability) {
+    for (const auto& e : scepterUpgrades()) if (e.info.ability == ability) return &e.info;
     return nullptr;
 }
 
-const Evolution* GetEvolutionForItem(ItemId item) {
-    for (const auto& e : evolutions()) if (e.info.item == item) return &e.info;
-    return nullptr;
-}
-
-bool CanEvolve(const Player& player, const Weapon& weapon) {
-    if (weapon.evolved || weapon.level < MAX_ABILITY_LEVEL) return false;
-    const Evolution* evo = GetEvolution(weapon.id);
-    return evo && player.itemLevels[(int)evo->item] > 0;
-}
-
-void EvolveAbility(Weapon& weapon) {
-    for (const auto& e : evolutions()) {
+void ApplyScepter(Weapon& weapon) {
+    for (const auto& e : scepterUpgrades()) {
         if (e.info.ability != weapon.id) continue;
         e.apply(weapon.stats);
-        weapon.evolved = true;
+        weapon.hasScepter = true;
         weapon.name = e.info.name;
         weapon.color = e.info.color;
         return;
@@ -521,16 +511,19 @@ std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int coun
 std::vector<AbilityChoice> GenerateChestChoices(const Player& player, int count) {
     std::vector<AbilityChoice> chosen;
 
-    // 1. Evolusjon trumfer alt: en ability på maks level + riktig item
-    for (const auto& w : player.weapons) {
-        if (!CanEvolve(player, *w)) continue;
-        const Evolution* evo = GetEvolution(w->id);
-        chosen.push_back({ ChoiceType::EVOLUTION, w->id, evo->name, evo->description, evo->color });
-        return chosen;
+    // 1. Kombinasjon: to items på maks nivå som hører sammen kan smeltes til ett.
+    //    Tilbys først (men man kan velge et vanlig item i stedet).
+    for (int c = 0; c < (int)ComboId::COUNT; c++) {
+        if (!CanCombine(player, (ComboId)c)) continue;
+        const ItemCombo& combo = GetCombo((ComboId)c);
+        AbilityChoice choice{ ChoiceType::COMBINE, AbilityId::COUNT, combo.name, combo.description, combo.color };
+        choice.combo = (ComboId)c;
+        chosen.push_back(choice);
+        break;
     }
 
     // 2. Items: neste nivå av de man har, og nye så lenge det er ledige item-plasser.
-    //    Items som er nøkkel til en evolusjon for en ability man HAR, dukker litt oftere opp.
+    //    Items som kan kombineres med et item man allerede har, dukker litt oftere opp.
     std::vector<AbilityChoice> items;
     for (int i = 0; i < (int)ItemId::COUNT; i++) {
         int level = player.itemLevels[i];
@@ -540,8 +533,8 @@ std::vector<AbilityChoice> GenerateChestChoices(const Player& player, int count)
         AbilityChoice c{ ChoiceType::ITEM, AbilityId::COUNT, def.name, def.description, def.color };
         c.item = (ItemId)i;
         items.push_back(c);
-        const Evolution* evo = GetEvolutionForItem((ItemId)i);
-        if (level == 0 && evo && player.findAbility(evo->ability)) items.push_back(c);
+        ItemId partner = GetComboPartner((ItemId)i);
+        if (level == 0 && partner != ItemId::COUNT && player.itemLevels[(int)partner] > 0) items.push_back(c);
     }
     while ((int)chosen.size() < count && !items.empty()) {
         int idx = GetRandomValue(0, (int)items.size() - 1);
@@ -556,6 +549,21 @@ std::vector<AbilityChoice> GenerateChestChoices(const Player& player, int count)
     return chosen;
 }
 
+std::vector<AbilityChoice> GenerateScepterChoices(const Player& player) {
+    // Alle abilities som ikke har septeret ennå – spilleren velger fritt
+    std::vector<AbilityChoice> chosen;
+    for (const auto& w : player.weapons) {
+        if (w->hasScepter) continue;
+        const ScepterUpgrade* up = GetScepterUpgrade(w->id);
+        if (!up) continue;
+        chosen.push_back({ ChoiceType::SCEPTER, w->id, up->name, up->description, up->color });
+    }
+    if (chosen.empty()) {
+        chosen.push_back({ ChoiceType::HEAL, AbilityId::COUNT, "Restituer", "Alle abilities har allerede septeret. Fyller opp all HP.", RED });
+    }
+    return chosen;
+}
+
 void ApplyAbilityChoice(Player& player, const AbilityChoice& choice) {
     switch (choice.type) {
         case ChoiceType::NEW_ABILITY:
@@ -567,8 +575,11 @@ void ApplyAbilityChoice(Player& player, const AbilityChoice& choice) {
         case ChoiceType::ITEM:
             ApplyItemLevel(player, choice.item);
             break;
-        case ChoiceType::EVOLUTION:
-            if (Weapon* w = player.findAbility(choice.ability)) EvolveAbility(*w);
+        case ChoiceType::COMBINE:
+            ApplyCombo(player, choice.combo);
+            break;
+        case ChoiceType::SCEPTER:
+            if (Weapon* w = player.findAbility(choice.ability)) ApplyScepter(*w);
             break;
         case ChoiceType::HEAL:
             player.hp = player.maxHp;
@@ -646,24 +657,19 @@ void DrawAbilityHud(const Player& player, float centerX, float bottom, float sca
 
         // Innate har tykk gullramme og en liten krone-prikk
         DrawRectangleLinesEx(slot, isInnate ? 3.0f * s : 2.0f * s, isInnate ? UI::GOLD_LIGHT : w.color);
-        if (w.evolved) {
-            // Evolvert: magenta ramme og stjerne i hjørnet
+        if (w.hasScepter) {
+            // Har septeret: magenta ramme og stjerne i hjørnet
             DrawRectangleLinesEx(slot, 3.0f * s, Color{ 255, 120, 255, 255 });
             Vector2 st = { x + slotSize - 8.0f * s, y + 8.0f * s };
             DrawPoly(st, 5, 7.0f * s, (float)GetTime() * 90.0f, UI::INK);
             DrawPoly(st, 5, 5.5f * s, (float)GetTime() * 90.0f, Color{ 255, 140, 255, 255 });
-        } else if (CanEvolve(player, w)) {
-            // Klar for evolusjon: pulserende gullglød – finn en skattekiste!
-            float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 7.0f);
-            DrawRectangleLinesEx({ x - 4.0f * s, y - 4.0f * s, slotSize + 8.0f * s, slotSize + 8.0f * s }, 2.5f * s, Fade(UI::GOLD_LIGHT, 0.4f + 0.6f * pulse));
-            text("KLAR!", x + slotSize / 2.0f, y - 16.0f * s, 11.0f * s, Fade(UI::GOLD_LIGHT, 0.6f + 0.4f * pulse));
         }
         if (isInnate) {
             DrawCircleV({ x + 7.0f * s, y + 7.0f * s }, 4.0f * s, UI::INK);
             DrawCircleV({ x + 7.0f * s, y + 7.0f * s }, 2.8f * s, UI::GOLD_LIGHT);
         }
 
-        // Navn under slotten – lange navn (evolusjoner) krympes og kuttes så de ikke går inn i naboen
+        // Navn under slotten – lange navn (septer-versjoner) krympes og kuttes så de ikke går inn i naboen
         {
             std::string label = w.name;
             float size = 10.0f * s, maxW = slotSize + gap * 0.6f;
