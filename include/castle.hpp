@@ -3,8 +3,8 @@
 
 #include <raylib.h>
 
-// Tegning av slottsmiljøet: rutete marmorgulv, løpere og tronsalen.
-// Alt her er ren grafikk – ingen kollisjon eller spillogikk.
+// Tegning av slottsmiljøet: porselensgulv, løpere, søyler og tronsalen.
+// Søylene er det eneste med kollisjon (se ResolvePillarCollision).
 
 // Uendelig slottsgulv. Tegner flisene innenfor viewRadius rundt center.
 // Porselensflisene (assets/floor). Uten dem tegnes det gamle marmorgulvet.
@@ -25,6 +25,12 @@ void DrawCastleProps3D(Vector2 center, float viewRadius);
 void DrawCastlePropsVfx(Vector2 center, float viewRadius);
 // Samme for tronsalen: fyrfat langs muren
 void DrawThroneRoomVfx(Vector2 center, float radius);
+
+// Søyler i storsalen (ikke i tronsalen). PillarsNear fyller `out` med søyler innenfor radius.
+int PillarsNear(Vector2 center, float radius, Vector2* out, int maxCount);
+// Skyver en sirkel (spiller/fiende) ut av søylene. slide > 0: glir også sidelengs rundt
+// søylen mot `goal`, så fiender finner veien rundt. Returnerer true hvis den traff en søyle.
+bool ResolvePillarCollision(Vector2& pos, float radius, Vector2 goal, float slide);
 
 // Myk skygge under en figur – gir en enkel følelse av dybde
 void DrawShadow(Vector2 feet, float width, float height);

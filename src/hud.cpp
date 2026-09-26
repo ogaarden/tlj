@@ -2,6 +2,7 @@
 #include "ui.hpp"
 #include "abilities.hpp"
 #include "items.hpp"
+#include "castle.hpp"
 #include <raymath.h>
 #include <rlgl.h>
 #include <cmath>
@@ -277,6 +278,17 @@ void drawMinimap(const HudState& hud, float s, float top, const Enemy* boss) {
         Vector2 carpetA = toMap({ hud.arenaCenter.x, hud.arenaCenter.y - hud.arenaRadius });
         Vector2 carpetB = toMap({ hud.arenaCenter.x, hud.arenaCenter.y + hud.arenaRadius });
         DrawLineEx(carpetA, carpetB, 14.0f * s, Fade(UI::ROYAL_RED, 0.7f));
+    }
+
+    // Søyler: små grå prikker (bare i storsalen)
+    if (!hud.inBossArena) {
+        Vector2 pillars[256];
+        int n = PillarsNear(hud.player->position, 1800.0f, pillars, 256);
+        for (int i = 0; i < n; i++) {
+            Vector2 m = toMap(pillars[i]);
+            if (!inside(m, 3.0f)) continue;
+            DrawCircleV(m, 2.6f * s, Color{ 205, 200, 190, 200 });
+        }
     }
 
     // Loot-radius rundt spilleren

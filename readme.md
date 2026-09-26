@@ -225,4 +225,12 @@ Notes:
      tramp med stor eksplosjon og kulering, kuler bak seg etter hver storming. Rustning i denne fasen.
    - Under 25 %: KONGEN ER RASENDE! Raskere, flere vakter og spiraler mens han jager.
 
+// 12 oktober – pikselkunst og søyler
+1) Figurene er gjort om til pikselkunst (ca. 1.5 verdensenheter per piksel): nedskalert, færre farger,
+   hard kant og 1 piksel mørk kontur, tegnet med skarpe piksler (TEXTURE_FILTER_POINT). Passer bedre
+   med pikselfonten og porselensgulvet enn de glatte tegningene.
+2) Marmorsøyler med gullringer i storsalen: søylerekker langs løperne og en firkant midt i hver sal.
+   Spilleren og fiendene kan ikke gå gjennom dem (fiender glir rundt), prosjektiler går forbi.
+   Søylene vises som prikker på minimapet, og kister havner aldri inni en søyle.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

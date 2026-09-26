@@ -154,7 +154,91 @@ void forEachBrazier(Vector2 center, float radius, F&& fn) {
     }
 }
 
+// ---------------------------------------------------------------------
+// SØYLER: marmorsøyler i rekker langs løperne og små grupper midt i hver sal.
+// De stenger veien for spilleren og fiendene (prosjektiler går forbi dem).
+// ---------------------------------------------------------------------
+constexpr float PILLAR_RADIUS = 24.0f;
+constexpr float PILLAR_HEIGHT_HALL = 115.0f;
+constexpr float COLONNADE_OFFSET = CARPET_WIDTH / 2.0f + 95.0f; // Avstand fra midten av løperen
+
+template <typename F>
+void forEachPillar(Vector2 center, float radius, F&& fn) {
+    const float CS = (float)CARPET_SPACING;
+    int x0 = (int)floorf((center.x - radius) / CS) - 1, x1 = (int)floorf((center.x + radius) / CS) + 1;
+    int y0 = (int)floorf((center.y - radius) / CS) - 1, y1 = (int)floorf((center.y + radius) / CS) + 1;
+    auto emit = [&](Vector2 p) {
+        if (fabsf(p.x - center.x) <= radius && fabsf(p.y - center.y) <= radius) fn(p);
+    };
+    for (int ix = x0; ix <= x1; ix++) {
+        for (int iy = y0; iy <= y1; iy++) {
+            float bx = ix * CS, by = iy * CS;
+            // Søylerekker langs den loddrette og den vannrette løperen (ikke nær kryssene med fyrfat)
+            for (int k = 2; k <= 4; k++) {
+                float along = k * TILE * 4.0f;
+                for (int side = -1; side <= 1; side += 2) {
+                    emit({ bx + side * COLONNADE_OFFSET, by + along });
+                    emit({ bx + along, by + side * COLONNADE_OFFSET });
+                }
+            }
+            // Fire søyler i en firkant midt i salen
+            Vector2 mid = { bx + CS / 2.0f, by + CS / 2.0f };
+            for (int q = 0; q < 4; q++) emit({ mid.x + ((q & 1) ? 140.0f : -140.0f), mid.y + ((q & 2) ? 140.0f : -140.0f) });
+        }
+    }
+}
+
+// Marmorsøyle med gullringer (3D). Rund topp, så den ser riktig ut ovenfra.
+void drawPillar(Vector2 p) {
+    const Color MARBLE = { 224, 214, 198, 255 };
+    const Color MARBLE_SHADE = { 168, 156, 140, 255 };
+    const Color RING = { 225, 180, 60, 255 };
+    const float H = PILLAR_HEIGHT_HALL;
+    ShadedCube(ToWorld3D(p, 5.0f), { 58.0f, 10.0f, 58.0f }, 45.0f, MARBLE_SHADE);                 // Sokkel (rombe)
+    ShadedCylinder(ToWorld3D(p, 10.0f), ToWorld3D(p, 18.0f), 29.0f, 25.0f, MARBLE, 20);           // Fot
+    ShadedCylinder(ToWorld3D(p, 18.0f), ToWorld3D(p, 22.0f), 25.5f, 25.5f, RING, 20);             // Gullring
+    ShadedCylinder(ToWorld3D(p, 22.0f), ToWorld3D(p, H - 14.0f), 22.0f, 20.0f, MARBLE, 20);       // Skaft
+    for (int i = 0; i < 10; i++) {                                                                 // Riller
+        float a = i * PI / 5.0f;
+        Vector2 o = { p.x + cosf(a) * 20.8f, p.y + sinf(a) * 20.8f };
+        ShadedCylinder(ToWorld3D(o, 26.0f), ToWorld3D(o, H - 18.0f), 1.8f, 1.6f, MARBLE_SHADE, 4);
+    }
+    ShadedCylinder(ToWorld3D(p, H - 14.0f), ToWorld3D(p, H - 10.0f), 22.0f, 22.0f, RING, 20);     // Gullring
+    ShadedCylinder(ToWorld3D(p, H - 10.0f), ToWorld3D(p, H - 2.0f), 22.0f, 29.0f, MARBLE, 20);    // Kapitel
+    ShadedCylinder(ToWorld3D(p, H - 2.0f), ToWorld3D(p, H + 1.0f), 29.0f, 27.0f, RING, 20);       // Gullkant
+    ShadedCylinder(ToWorld3D(p, H + 1.0f), ToWorld3D(p, H + 2.0f), 27.0f, 0.0f, MARBLE_SHADE, 20); // Topp
+}
+
 } // namespace
+
+int PillarsNear(Vector2 center, float radius, Vector2* out, int maxCount) {
+    int n = 0;
+    forEachPillar(center, radius, [&](Vector2 p) { if (n < maxCount) out[n++] = p; });
+    return n;
+}
+
+bool ResolvePillarCollision(Vector2& pos, float radius, Vector2 goal, float slide) {
+    Vector2 near[16];
+    int n = PillarsNear(pos, radius + PILLAR_RADIUS + 4.0f, near, 16);
+    bool hit = false;
+    for (int i = 0; i < n; i++) {
+        Vector2 d = Vector2Subtract(pos, near[i]);
+        float dist = Vector2Length(d);
+        float minDist = radius + PILLAR_RADIUS;
+        if (dist >= minDist) continue;
+        hit = true;
+        Vector2 nrm = dist > 0.01f ? Vector2Scale(d, 1.0f / dist) : Vector2{ 1, 0 };
+        pos = Vector2Add(near[i], Vector2Scale(nrm, minDist));
+        // Gli rundt søylen på den siden som er nærmest målet (så fiender ikke setter seg fast)
+        if (slide > 0.0f) {
+            Vector2 tangent = { -nrm.y, nrm.x };
+            Vector2 toGoal = Vector2Subtract(goal, pos);
+            if (Vector2DotProduct(tangent, toGoal) < 0.0f) tangent = Vector2Scale(tangent, -1.0f);
+            pos = Vector2Add(pos, Vector2Scale(tangent, slide));
+        }
+    }
+    return hit;
+}
 
 void InitCastleTextures() {
     const char* white = "assets/floor/porcelain_white.png";
@@ -237,10 +321,16 @@ void DrawCastleFloor(Vector2 center, float viewRadius) {
         }
     }
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { DrawShadow({ p.x + 5.0f, p.y + 5.0f }, 16.0f, 11.0f); });
+    // Søylene kaster en lang skygge
+    forEachPillar(center, viewRadius, [](Vector2 p) {
+        DrawShadow({ p.x + 10.0f, p.y + 12.0f }, 38.0f, 30.0f);
+        DrawCircleV(p, 33.0f, Fade(BLACK, 0.18f));
+    });
 }
 
 void DrawCastleProps3D(Vector2 center, float viewRadius) {
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { drawBrazier(p); });
+    forEachPillar(center, viewRadius, [](Vector2 p) { drawPillar(p); });
 }
 
 void DrawCastlePropsVfx(Vector2 center, float viewRadius) {

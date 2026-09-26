@@ -66,8 +66,8 @@ void InitSprites() {
         }
         textures[i] = LoadTextureFromImage(img);
         UnloadImage(img);
-        GenTextureMipmaps(&textures[i]);
-        SetTextureFilter(textures[i], TEXTURE_FILTER_TRILINEAR);
+        // Pikselkunst: skarpe piksler, ingen utjevning og ingen mipmaps
+        SetTextureFilter(textures[i], TEXTURE_FILTER_POINT);
         loaded[i] = textures[i].id != 0;
     }
     shader = LoadShaderFromMemory(nullptr, FRAGMENT);

@@ -4,10 +4,10 @@
 #include <raylib.h>
 
 // =====================================================================
-// TEGNEDE FIGURER (sprites)
-// Figurene er tegnet med Higgsfield (assets/sprites/*.png) og vises som
-// "papirfigurer" i 3D-verdenen, som i Paper Mario: de vender alltid mot
-// kameraet, speilvendes etter hvilken vei de går, og hopper/vugger når de går.
+// PIKSELFIGURER (sprites)
+// Figurene ble tegnet med Higgsfield og gjort om til pikselkunst (assets/sprites/*.png,
+// ca. 1.5 verdensenheter per piksel). De vises som flate figurer i 3D-verdenen:
+// vender alltid mot kameraet, speilvendes etter hvilken vei de går, og hopper/vugger.
 // Man kan bytte tilbake til 3D-modellene i innstillingene.
 // =====================================================================
 

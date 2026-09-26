@@ -502,6 +502,7 @@ int main() {
 
             // Oppdater spilleren (sender inn gjeldende kamerarotasjon så WASD matcher skjermen)
             player.update(camera.rotation);
+            if (!inBossArena) ResolvePillarCollision(player.position, 16.0f, player.position, 0.0f); // Søylene stenger veien
 
             // --- TIMEREN ER FERDIG: TELEPORTER TIL BOSS-ARENAEN ---
             if (!inBossArena && spawner.gameTime >= GetBossTimer(selectedEchelon)) {
@@ -559,6 +560,7 @@ int main() {
                     enemy->update(player.position);
                     enemy->applyStatusMovement(before, deltaTime); // Frost og dytt
                     if (inBossArena) enemy->position = ClampToArena(enemy->position, enemy->hitRadius);
+                    else ResolvePillarCollision(enemy->position, enemy->hitRadius * 0.8f, player.position, enemy->speed * 0.7f * deltaTime);
                 }
             }
 
@@ -700,6 +702,7 @@ int main() {
                     float a = GetRandomValue(0, 628) / 100.0f;
                     float d = (float)GetRandomValue(380, 620);
                     Vector2 pos = { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d };
+                    ResolvePillarCollision(pos, 40.0f, pos, 0.0f); // Ikke inni en søyle
                     pickups.push_back({ pos, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
                     VfxShockwave(pos, 80.0f, GOLD);
                 }
@@ -1124,7 +1127,7 @@ int main() {
                 bool sel = settingsRow == 2;
                 if (sel) DrawRectangleLinesEx({ CX - 270.0f, (float)y - 10, 540.0f, 44.0f }, 2.0f, UI::GOLD_LIGHT);
                 DrawText("Figurer", (int)CX - 250, y, 24, sel ? UI::GOLD_LIGHT : WHITE);
-                DrawText(saveData.drawnFigures ? "< TEGNET (Paper-stil) >" : "< 3D-MODELLER >", (int)CX - 120, y + 2, 22, UI::GOLD_LIGHT);
+                DrawText(saveData.drawnFigures ? "< PIKSELKUNST >" : "< 3D-MODELLER >", (int)CX - 120, y + 2, 22, UI::GOLD_LIGHT);
             }
             DrawText("[W/S] velg   [A/D] juster", (int)CX - 250, 365, 18, GRAY);
             DrawText("Fullskjerm", (int)CX - 250, 395, 24, WHITE);
