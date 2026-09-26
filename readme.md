@@ -53,4 +53,10 @@ Notes:
 4) Kamikaze-fiende (Exploder) som eksploderer ved død
 5) Curses: Frailty, Sluggish, Famine, Blunt, Brittle, Myopia
 
+// 29 september
+1) Slottsgulv: rutete marmor med fuger og røde løpere (castle.cpp)
+2) Boss-arenaen er nå kongens tronsal med trone, søyler og bannere
+3) Bossen er Kongen: kappe, hermelin, krone, skjegg og septer
+4) Skygger under alle figurer (første steg mot 3D-look)
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

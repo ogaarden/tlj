@@ -18,6 +18,7 @@
 #include "save.hpp"
 #include "curses.hpp"
 #include "explosions.hpp"
+#include "castle.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -50,7 +51,7 @@ namespace Rewards {
 namespace Arena {
     const Vector2 CENTER = { 0.0f, 20000.0f };
     constexpr float RADIUS = 650.0f;
-    constexpr float INTRO_TIME = 2.0f; // Hvor lenge "BOSS ARENA"-teksten vises
+    constexpr float INTRO_TIME = 2.0f; // Hvor lenge "KONGENS TRONSAL"-teksten vises
 }
 
 // Holder en posisjon innenfor arenaen
@@ -625,30 +626,11 @@ int main() {
             // 2. TEGNING PÅ SKJERMEN
             BeginMode2D(camera);
 
+                // --- SLOTTET: storsalen, eller kongens tronsal når man er hos bossen ---
                 if (inBossArena) {
-                    // --- BOSS-ARENA ---
-                    DrawCircleV(Arena::CENTER, Arena::RADIUS, Color{ 40, 10, 10, 255 });
-                    for (float r = 100.0f; r < Arena::RADIUS; r += 100.0f) {
-                        DrawCircleLines((int)Arena::CENTER.x, (int)Arena::CENTER.y, r, Fade(MAROON, 0.4f));
-                    }
-                    DrawCircleLines((int)Arena::CENTER.x, (int)Arena::CENTER.y, Arena::RADIUS, RED);
-                    DrawCircleLines((int)Arena::CENTER.x, (int)Arena::CENTER.y, Arena::RADIUS + 6.0f, MAROON);
+                    DrawThroneRoom(Arena::CENTER, Arena::RADIUS);
                 } else {
-                    // --- TEGN BAKGRUNN (GRID) ---
-                    int gridSize = 100;
-                    int gridExtent = 2000;
-
-                    for (int x = -gridExtent; x <= gridExtent; x += gridSize) {
-                        DrawLine(x, -gridExtent, x, gridExtent, DARKGRAY);
-                    }
-                    for (int y = -gridExtent; y <= gridExtent; y += gridSize) {
-                        DrawLine(-gridExtent, y, gridExtent, y, DARKGRAY);
-                    }
-
-                    // --- REFRENSERUBRIKKER / OBJEKTER I VERDEN ---
-                    DrawRectangle(-300, -300, 80, 80, RED);
-                    DrawRectangle(400, 200, 100, 100, GREEN);
-                    DrawCircle(0, -500, 60.0f, PURPLE);
+                    DrawCastleFloor(camera);
                 }
 
                 for (const auto& pickup : pickups) {
@@ -720,7 +702,7 @@ int main() {
                     DrawRectangle((int)bossBarX, (int)bossBarY, (int)bossBarWidth, 18, Fade(BLACK, 0.7f));
                     DrawRectangle((int)bossBarX, (int)bossBarY, (int)(bossBarWidth * pct), 18, RED);
                     DrawRectangleLines((int)bossBarX, (int)bossBarY, (int)bossBarWidth, 18, WHITE);
-                    const char* bossName = TextFormat("BOSS - %s", GetEchelon(selectedEchelon).name.c_str());
+                    const char* bossName = TextFormat("KONGEN - %s", GetEchelon(selectedEchelon).name.c_str());
                     DrawText(bossName, Settings::SCREEN_WIDTH / 2 - MeasureText(bossName, 16) / 2, (int)bossBarY + 22, 16, WHITE);
                 }
             }
@@ -807,7 +789,7 @@ int main() {
                 float t = arenaIntroTimer / Arena::INTRO_TIME; // 1 -> 0
                 // Hvitt blink som fader ut, så teksten
                 DrawRectangle(0, 0, Settings::SCREEN_WIDTH, Settings::SCREEN_HEIGHT, Fade(WHITE, std::max(0.0f, (t - 0.7f) / 0.3f)));
-                const char* introText = "BOSS ARENA";
+                const char* introText = "KONGENS TRONSAL";
                 int introSize = 64;
                 DrawText(introText, Settings::SCREEN_WIDTH / 2 - MeasureText(introText, introSize) / 2, Settings::SCREEN_HEIGHT / 2 - 80, introSize, Fade(RED, std::min(1.0f, t * 2.0f)));
             }

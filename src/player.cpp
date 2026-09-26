@@ -1,4 +1,5 @@
 #include "player.hpp"
+#include "castle.hpp"
 #include <cmath>
 #include <algorithm>
 #include <cstdlib>
@@ -54,6 +55,9 @@ void Player::draw(float cameraRotation)
     Vector2 origin = { (float)texture.width / 2.0f, (float)texture.height / 2.0f };
 
     // Blink rødt mens spilleren er udødelig etter et treff
+    // Skygge under føttene
+    DrawShadow({ position.x + 4.0f, position.y + texture.height * 0.35f }, texture.width * 0.35f, texture.height * 0.12f);
+
     Color tint = (slowTimer > 0.0f) ? SKYBLUE : WHITE; // Blålig når man er slowet
     if (invulnerableTimer > 0.0f && ((int)(invulnerableTimer * 20.0f) % 2 == 0)) tint = RED;
 
