@@ -1,4 +1,5 @@
 #include "enemy.hpp"
+#include "vfx.hpp"
 #include "damage_numbers.hpp"
 #include "explosions.hpp"
 #include "castle.hpp"
@@ -75,6 +76,7 @@ void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
 
     if (!isDamageOverTime) {
         SpawnDamageNumber(position, amount, numberColor);
+        VfxHit(position, numberColor);
         PlaySfx(Sfx::HIT);
         return;
     }

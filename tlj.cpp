@@ -25,6 +25,7 @@
 #include "ui.hpp"
 #include "hud.hpp"
 #include "icons.hpp"
+#include "vfx.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -110,6 +111,7 @@ int main() {
     SetWindowMinSize(800, 450); // Alt skalerer med vinduet, men under dette blir teksten for liten
     SetExitKey(KEY_NULL); // ESC skal gå tilbake i menyer, ikke lukke hele spillet
     InitRenderer3D();
+    InitVfx();
     InitGameAudio();
 
     GameState currentState = MAIN_MENU;
@@ -225,6 +227,7 @@ int main() {
         pickups.clear();
         ClearDamageNumbers();
         ClearExplosions();
+        ClearVfx();
     };
 
     // Skade på spilleren fra fiender (kontakt og eksplosjoner)
@@ -366,6 +369,7 @@ int main() {
                 lastPlayerLevel = player.level;
                 currentState = LEVEL_UP;
                 PlaySfx(Sfx::LEVEL_UP);
+                VfxShockwave(player.position, 90.0f, GOLD);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
@@ -394,6 +398,7 @@ int main() {
                 pickups.clear();
                 enemies.clear();
                 ClearExplosions();
+                ClearVfx();
 
                 // Spilleren nederst i arenaen, bossen øverst
                 player.position = { Arena::CENTER.x, Arena::CENTER.y + Arena::RADIUS * 0.6f };
@@ -487,6 +492,7 @@ int main() {
             }
 
             UpdateDamageNumbers(deltaTime);
+            UpdateVfx(deltaTime);
 
             // Fjerne døde fiender (f.eks. kamikaze som har sprengt seg selv)
             for (auto& e : enemies) {
@@ -850,6 +856,17 @@ int main() {
                 for (auto& w : player.weapons) w->draw3D();
                 player.drawModel();
                 DrawExplosions3D();
+
+                // --- VFX: glød, lyn, sjokkbølger og partikler (additivt, etter alt solid) ---
+                VfxBegin(view);
+                    for (const auto& pickup : pickups) {
+                        float h = 8.0f + 3.0f * sinf(bob + pickup.position.x * 0.05f);
+                        Color glow = pickup.type == PickupType::COIN ? Color{ 255, 190, 60, 255 } : pickup.color;
+                        VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, h), pickup.type == PickupType::COIN ? 26.0f : pickup.radius * 5.0f, Fade(glow, 0.55f));
+                    }
+                    for (auto& w : player.weapons) w->drawVfx();
+                    DrawVfxParticles();
+                VfxEnd();
             EndMode3D();
 
             // --- HP-BARER over skadde fiender (ikke bossen – den har egen bar øverst) ---
@@ -1086,6 +1103,7 @@ int main() {
     saveProgress();
     for (auto& rt : clownPreviews) UnloadRenderTexture(rt);
     UnloadRenderTexture(portraitRT);
+    UnloadVfx();
     UnloadRenderer3D();
     UnloadGameAudio();
     CloseWindow();

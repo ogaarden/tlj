@@ -1,5 +1,6 @@
 #include "explosions.hpp"
 #include "audio.hpp"
+#include "vfx.hpp"
 #include <raymath.h>
 #include <vector>
 
@@ -19,6 +20,7 @@ namespace {
 
 void SpawnExplosion(Vector2 position, float radius, float damage) {
     explosions.push_back({ position, radius, damage, EXPLOSION_ANIM_TIME, false });
+    VfxExplosion(position, radius);
     PlaySfx(Sfx::EXPLOSION);
 }
 
@@ -49,21 +51,14 @@ float UpdateExplosions(float deltaTime, Vector2 playerPos, float playerRadius) {
 void DrawExplosions() {
     for (const auto& e : explosions) {
         float t = 1.0f - e.timer / EXPLOSION_ANIM_TIME; // 0 -> 1
-        float r = e.radius * (0.4f + 0.6f * t);
-        DrawCircleV(e.position, r, Fade(ORANGE, 0.5f * (1.0f - t)));
-        DrawCircleV(e.position, r * 0.5f, Fade(YELLOW, 0.6f * (1.0f - t)));
-        DrawCircleLines((int)e.position.x, (int)e.position.y, r, Fade(RED, 1.0f - t));
+        // Svidd merke på gulvet (selve ildkula er VFX, se VfxExplosion)
+        DrawCircleV(e.position, e.radius * 0.8f, Fade(BLACK, 0.35f * (1.0f - t)));
+        DrawCircleLines((int)e.position.x, (int)e.position.y, e.radius, Fade(RED, 0.8f * (1.0f - t)));
     }
 }
 
 void DrawExplosions3D() {
-    for (const auto& e : explosions) {
-        float t = 1.0f - e.timer / EXPLOSION_ANIM_TIME; // 0 -> 1
-        float r = e.radius * (0.3f + 0.5f * t);
-        Vector3 center = { e.position.x, r * 0.5f, e.position.y };
-        DrawSphere(center, r, Fade(ORANGE, 0.45f * (1.0f - t)));
-        DrawSphere(center, r * 0.55f, Fade(YELLOW, 0.6f * (1.0f - t)));
-    }
+    // Ildkula og glørne tegnes av VFX-systemet (vfx.cpp)
 }
 
 void ClearExplosions() {

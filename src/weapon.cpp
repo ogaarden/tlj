@@ -5,6 +5,7 @@
 #include "render3d.hpp"
 #include "castle.hpp"
 #include "audio.hpp"
+#include "vfx.hpp"
 
 // --- Felles hjelpefunksjoner ---
 namespace {
@@ -12,6 +13,7 @@ namespace {
 // Dropp loot (XP/gull), tell drapet og fjern død fiende
 void removeDeadEnemy(std::vector<std::unique_ptr<Enemy>>& enemies, size_t index, std::vector<Pickup>& pickups) {
     enemies[index]->dropLoot(pickups);
+    VfxDeath(enemies[index]->position, Color{ 255, 210, 150, 255 });
     enemies[index]->onDeath();
     Enemy::killCount++;
     PlaySfx(Sfx::KILL);
@@ -82,6 +84,7 @@ Vector2 rotateDegrees(Vector2 v, float degrees) {
 }
 
 constexpr float PROJECTILE_HIT_RADIUS = 5.0f;
+constexpr float SLASH_ROTATION_OFFSET = 0.0f; // Snur slash-teksturen så buen følger bladets retning
 constexpr float PROJECTILE_HEIGHT = 18.0f; // Hvor høyt over bakken prosjektiler flyr (3D)
 
 // Liten skygge under noe som svever
@@ -144,6 +147,7 @@ void ProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std:
 
         p.position = Vector2Add(p.position, Vector2Scale(p.direction, p.speed * deltaTime));
         p.lifetime -= deltaTime;
+        VfxTrail(ToWorld3D(p.position, PROJECTILE_HEIGHT), color, spread ? 11.0f : 9.0f, 0.14f);
 
         bool destroyed = false;
         for (size_t j = 0; j < enemies.size() && !destroyed; ) {
@@ -169,6 +173,14 @@ void ProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std:
         } else {
             i++;
         }
+    }
+}
+
+void ProjectileWeapon::drawVfx() const {
+    for (const auto& p : projectiles) {
+        Vector3 pos = ToWorld3D(p.position, PROJECTILE_HEIGHT);
+        VfxBillboard(VfxTex::GLOW, pos, spread ? 26.0f : 20.0f, Fade(color, 0.85f));
+        VfxBillboard(VfxTex::SPARK, pos, spread ? 16.0f : 12.0f, Color{ 255, 255, 255, 200 }, (float)GetTime() * 360.0f);
     }
 }
 
@@ -212,6 +224,7 @@ void MeleeWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
     if (!anyInRange) return;
 
     damageEnemiesInRadius(playerPos, radius(), scaledDamage(), color, false, enemies, pickups);
+    VfxShockwave(playerPos, radius(), color);
     effectTimer = 0.3f;
     fireTimer = 0.0f;
 }
@@ -220,11 +233,10 @@ void MeleeWeapon::draw() const {
     // Svak ring som viser rekkevidden
     DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius(), Fade(color, 0.3f));
 
-    // Sjokkbølge som vokser utover når slaget treffer
+    // Mørk sprekk-skygge på gulvet rett etter slaget (selve sjokkbølgen er VFX, se VfxShockwave)
     if (effectTimer > 0.0f) {
         float t = 1.0f - effectTimer / 0.3f; // 0 -> 1
-        DrawCircleV(lastPlayerPos, radius() * t, Fade(color, 0.35f * (1.0f - t)));
-        DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius() * t, Fade(color, 1.0f - t));
+        DrawCircleV(lastPlayerPos, radius() * 0.5f, Fade(BLACK, 0.25f * (1.0f - t)));
     }
 }
 
@@ -282,6 +294,12 @@ void BouncingProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vec
 
         p.position = Vector2Add(p.position, Vector2Scale(p.direction, p.speed * deltaTime));
         p.lifetime -= deltaTime;
+        if (homing) {
+            VfxTrail(ToWorld3D(p.position, PROJECTILE_HEIGHT + 6.0f), color, 16.0f, 0.3f);
+            if (GetRandomValue(0, 3) == 0) VfxTrail(ToWorld3D(p.position, PROJECTILE_HEIGHT + 6.0f + GetRandomValue(-6, 6)), WHITE, 5.0f, 0.4f);
+        } else {
+            VfxTrail(ToWorld3D(p.position, PROJECTILE_HEIGHT), Color{ 255, 190, 120, 255 }, 8.0f, 0.16f);
+        }
 
         bool destroyed = false;
 
@@ -322,6 +340,24 @@ void BouncingProjectileWeapon::tick(float deltaTime, Vector2 playerPos, std::vec
     }
 }
 
+void BouncingProjectileWeapon::drawVfx() const {
+    float t = (float)GetTime();
+    for (const auto& p : projectiles) {
+        if (homing) {
+            Vector3 pos = ToWorld3D(p.position, PROJECTILE_HEIGHT + 6.0f);
+            VfxBillboard(VfxTex::GLOW, pos, 44.0f, Fade(color, 0.6f));
+            VfxBillboard(VfxTex::MAGIC_ORB, pos, 38.0f, WHITE, t * 240.0f);
+        } else {
+            // Ricochet: blå gnist som blir oransje for hvert sprett
+            float k = std::min(1.0f, p.hitEnemyIds.size() / 4.0f);
+            Color c = { (unsigned char)(color.r + (255 - color.r) * k), (unsigned char)(color.g + (150 - color.g) * k), (unsigned char)(color.b + (40 - color.b) * k), 255 };
+            Vector3 pos = ToWorld3D(p.position, PROJECTILE_HEIGHT);
+            VfxBillboard(VfxTex::GLOW, pos, 24.0f, c);
+            VfxBillboard(VfxTex::SPARK, pos, 22.0f, WHITE, t * 500.0f);
+        }
+    }
+}
+
 void BouncingProjectileWeapon::draw() const {
     for (const auto& p : projectiles) smallShadow(p.position, homing ? 6.0f : 4.0f);
 }
@@ -333,10 +369,7 @@ void BouncingProjectileWeapon::draw3D() const {
 
         if (homing) {
             // Magisk missil: lysende kjerne med glorie og hale
-            ShadedSphere(pos, 5.0f, color, 6, 8);
-            DrawSphere(pos, 9.0f, Fade(color, 0.3f));
-            Vector3 tail = ToWorld3D(Vector2Subtract(p.position, Vector2Scale(p.direction, 16.0f)), PROJECTILE_HEIGHT + 6.0f);
-            ShadedCylinder(pos, tail, 3.5f, 0.0f, Fade(color, 0.7f), 6);
+            ShadedSphere(pos, 4.0f, Color{ 240, 220, 255, 255 }, 6, 8); // Lys kjerne – gløden er VFX
         } else {
             // Ricochet: mindre og mer oransje for hvert sprett
             float size = std::max(2.5f, 5.0f - bounced * 0.6f);
@@ -361,6 +394,15 @@ void RotWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique
     lastPlayerPos = playerPos;
     pulseTimer += deltaTime;
 
+    // Giftbobler som stiger opp fra tåka
+    bubbleTimer += deltaTime;
+    while (bubbleTimer > 0.05f) {
+        bubbleTimer -= 0.05f;
+        float a = GetRandomValue(0, 628) / 100.0f;
+        float d = radius() * sqrtf(GetRandomValue(0, 100) / 100.0f) * 0.9f;
+        VfxBubble({ playerPos.x + cosf(a) * d, playerPos.y + sinf(a) * d }, 3.0f, Color{ 120, 255, 90, 255 });
+    }
+
     // Samle opp skade hver frame. Når vi har minst 1 hel skade, del den ut til alle i radius.
     // Ved 60 FPS og f.eks. 60 DPS blir dette 1 skade per fiende per frame.
     damageAccumulator += stats.damage * mods.damageMult * deltaTime;
@@ -374,20 +416,30 @@ void RotWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique
 void RotWeapon::draw() const {
     // Pulserende giftsky på gulvet rundt spilleren
     float pulse = 0.5f + 0.5f * sinf(pulseTimer * 4.0f);
-    DrawCircleV(lastPlayerPos, radius(), Fade(DARKGREEN, 0.18f + 0.08f * pulse));
-    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius() - 2.0f * pulse, Fade(color, 0.7f));
+    DrawCircleV(lastPlayerPos, radius(), Fade(Color{ 10, 30, 10, 255 }, 0.12f));
+    DrawCircleLines((int)lastPlayerPos.x, (int)lastPlayerPos.y, radius() - 2.0f * pulse, Fade(color, 0.5f));
 }
 
-void RotWeapon::draw3D() const {
-    // Giftsporer som svever rundt i auraen
+void RotWeapon::drawVfx() const {
+    // To lag gifttåke som roterer hver sin vei og pulserer
+    float pulse = 0.75f + 0.25f * sinf(pulseTimer * 4.0f);
+    unsigned char b = (unsigned char)(255 * pulse);
+    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 2.3f, Color{ b, b, b, 255 }, pulseTimer * 25.0f, 1.2f);
+    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 1.6f, Color{ 120, 200, 120, 255 }, -pulseTimer * 40.0f, 1.4f);
+
+    // Glødende sporer som svever rundt i auraen
     const int spores = 10;
     for (int i = 0; i < spores; i++) {
         float a = pulseTimer * (0.6f + 0.1f * (i % 3)) + i * (2.0f * PI / spores);
         float dist = radius() * (0.35f + 0.5f * (0.5f + 0.5f * sinf(pulseTimer * 0.7f + i)));
         Vector2 pos = { lastPlayerPos.x + cosf(a) * dist, lastPlayerPos.y + sinf(a) * dist };
         float height = 10.0f + 12.0f * (0.5f + 0.5f * sinf(pulseTimer * 2.0f + i * 1.7f));
-        ShadedSphere(ToWorld3D(pos, height), 3.0f, color, 4, 6);
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(pos, height), 14.0f, Color{ 140, 255, 100, 255 });
     }
+}
+
+void RotWeapon::draw3D() const {
+    // Alt det synlige er VFX (gifttåke og sporer), se drawVfx()
 }
 
 // =====================================================================
@@ -406,6 +458,9 @@ void OrbitWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
     angle = fmodf(angle + stats.speed * deltaTime, 360.0f);
     bladeCount = stats.projectiles + mods.extraProjectiles;
     int dmg = scaledDamage();
+
+    // Lysende ribbe bak hvert blad
+    for (int b = 0; b < bladeCount; b++) VfxTrail(ToWorld3D(bladePosition(b), 16.0f), color, 14.0f, 0.18f);
 
     for (int b = 0; b < bladeCount; b++) {
         Vector2 bladePos = bladePosition(b);
@@ -432,6 +487,16 @@ void OrbitWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
             if (time - it->second >= cooldown()) it = lastHitTime.erase(it);
             else ++it;
         }
+    }
+}
+
+void OrbitWeapon::drawVfx() const {
+    for (int b = 0; b < bladeCount; b++) {
+        Vector2 pos = bladePosition(b);
+        float deg = angle + 360.0f / bladeCount * b;
+        // Hugg-bue som følger bladet rundt spilleren
+        VfxDecal(VfxTex::SLASH, pos, 46.0f, Color{ 255, 200, 230, 255 }, deg + SLASH_ROTATION_OFFSET, 14.0f);
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(pos, 16.0f), 26.0f, Fade(color, 0.7f));
     }
 }
 
@@ -561,6 +626,7 @@ void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
         // Hakkete lynstrek fra himmelen rett ned til treffpunktet
         Vector3 sky = { pos.x + (float)GetRandomValue(-20, 20), 420.0f, pos.y + (float)GetRandomValue(-20, 20) };
         bolts.push_back({ pos, area(), BOLT_TIME, BOLT_TIME, jaggedLine(sky, ToWorld3D(pos, 0.0f), 8, 16.0f) });
+        VfxLightningStrike(pos, area());
 
         // Kjeden: hopper videre til nye fiender, svakere for hvert hopp
         queueNextJump(pos, dmg * stats.bounceFalloff, stats.bounces, hitIds, enemies);
@@ -585,16 +651,29 @@ void LightningWeapon::draw() const {
 }
 
 void LightningWeapon::draw3D() const {
+    // Alt det synlige er VFX, se drawVfx()
+}
+
+void LightningWeapon::drawVfx() const {
     for (const auto& bolt : bolts) {
         float alpha = bolt.timer / bolt.maxTimer;
+        // Flimrer litt de første øyeblikkene, som ekte lyn
+        float flicker = (alpha > 0.6f && GetRandomValue(0, 3) == 0) ? 0.5f : 1.0f;
+        unsigned char a = (unsigned char)(255 * alpha * flicker);
         bool isArc = bolt.radius <= 0.0f;
-        Color glow = isArc ? Color{ 140, 200, 255, 255 } : color;
-        float thick = isArc ? 2.5f : 3.5f;
-        for (size_t i = 1; i < bolt.points.size(); i++) {
-            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], thick, thick, 5, Fade(glow, alpha));
-            DrawCylinderEx(bolt.points[i - 1], bolt.points[i], 1.2f, 1.2f, 5, Fade(WHITE, alpha));
+        if (!isArc) {
+            // Nedslag: lyn-teksturen fra himmelen og ned, med blå glød rundt
+            Vector3 sky = bolt.points.front(), ground = bolt.points.back();
+            VfxBeam(VfxTex::LIGHTNING_BOLT, sky, ground, 150.0f, Color{ a, a, a, 255 });
+            VfxBeam(VfxTex::GLOW, sky, ground, 60.0f, Color{ (unsigned char)(60 * alpha), (unsigned char)(110 * alpha), (unsigned char)(220 * alpha), 255 });
+            VfxBillboard(VfxTex::GLOW, Vector3Add(ground, { 0, 12, 0 }), 90.0f * alpha + 30.0f, Color{ (unsigned char)(160 * alpha), (unsigned char)(210 * alpha), a, 255 });
+        } else {
+            // Kjede-bue mellom fiender: hakkete stråle med hvit kjerne
+            for (size_t i = 1; i < bolt.points.size(); i++) {
+                VfxBeam(VfxTex::GLOW, bolt.points[i - 1], bolt.points[i], 18.0f, Color{ (unsigned char)(90 * alpha), (unsigned char)(160 * alpha), a, 255 });
+                VfxBeam(VfxTex::GLOW, bolt.points[i - 1], bolt.points[i], 6.0f, Color{ a, a, a, 255 });
+            }
+            VfxBillboard(VfxTex::SPARK, bolt.points.back(), 40.0f * alpha + 10.0f, Color{ a, a, a, 255 }, alpha * 180.0f);
         }
-        // Lysende kule der buen treffer
-        if (isArc) DrawSphere(bolt.points.back(), 7.0f * alpha + 2.0f, Fade(WHITE, 0.7f * alpha));
     }
 }

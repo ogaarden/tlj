@@ -54,6 +54,8 @@ public:
     // "Pure virtual" betyr at subklassene MÅ skrive sin egen versjon
     virtual void draw() const = 0;
     virtual void draw3D() const {}
+    // drawVfx() – glød, lyn og spor. Tegnes additivt etter alt annet (se vfx.hpp)
+    virtual void drawVfx() const {}
 
     // 0.0 = nettopp brukt, 1.0 = klar. Brukes av HUD-en.
     virtual float cooldownProgress() const {
@@ -85,6 +87,7 @@ public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
 };
 
 // --- AOE-slag rundt spilleren (Ground Slam) ---
@@ -122,6 +125,7 @@ public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
 };
 
 // --- Aura som gjør skade HVER FRAME (Rot) ---
@@ -130,12 +134,14 @@ class RotWeapon : public Weapon {
 private:
     float damageAccumulator = 0.0f;
     float pulseTimer = 0.0f;
+    float bubbleTimer = 0.0f;
     Vector2 lastPlayerPos = { 0, 0 };
 
 public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
     float cooldownProgress() const override { return 1.0f; }
 };
 
@@ -154,6 +160,7 @@ public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
     float cooldownProgress() const override { return 1.0f; }
 };
 
@@ -190,6 +197,7 @@ public:
     void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
     void draw() const override;
     void draw3D() const override;
+    void drawVfx() const override;
 };
 
 #endif // WEAPON_HPP
