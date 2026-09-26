@@ -44,8 +44,9 @@ struct Player {
     int aegis = 0;
     float critChance = 0.05f; // Sjanse for kritisk treff (dobbel skade)
 
-    // Stat-oppgraderinger tatt i level-up denne runden (se StatBoost)
-    int statBoosts[(int)StatBoost::COUNT] = {};
+    // Items denne runden: nivå per item (0 = har ikke) og rekkefølgen de ble plukket i
+    int itemLevels[(int)ItemId::COUNT] = {};
+    std::vector<ItemId> items;
 
 
     int level = 1;
@@ -71,6 +72,7 @@ struct Player {
     float armorReduction() const;      // Andel skade armor tar bort (0.0 - 0.75)
     CombatModifiers combatModifiers() const;
     void addXP(int amount);
+    static int xpForLevel(int level); // XP som trengs fra level -> level + 1
 
     void addWeapon(std::unique_ptr<Weapon> newWeapon);
     Weapon* findAbility(AbilityId id) const;

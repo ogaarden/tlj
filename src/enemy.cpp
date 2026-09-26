@@ -222,6 +222,21 @@ void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
 }
 bool Enemy::isDead() const { return hp <= 0; }
 
+// XP-tiers: blå (små), grønn, rød og lilla (elite og store)
+Color XpTierColor(int value) {
+    if (value < 15) return Color{ 80, 170, 255, 255 };
+    if (value < 40) return Color{ 90, 230, 120, 255 };
+    if (value < 120) return Color{ 255, 80, 90, 255 };
+    return Color{ 200, 110, 255, 255 };
+}
+
+float XpTierRadius(int value) {
+    if (value < 15) return 6.0f;
+    if (value < 40) return 7.5f;
+    if (value < 120) return 9.5f;
+    return 12.0f;
+}
+
 void Enemy::applyEchelonModifiers(float hpMult, float damageMult, float speedMult) {
     hp = (int)(hp * hpMult);
     maxHp = hp;
@@ -230,8 +245,18 @@ void Enemy::applyEchelonModifiers(float hpMult, float damageMult, float speedMul
 }
 
 void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
-    pickups.push_back({ position, xpValue, orbColor, orbRadius, 15.0f, PickupType::XP });
-    if (elite) pickups.push_back({ { position.x + 12.0f, position.y }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+    // XP-krystall med farge etter verdi, som spretter litt ut fra fienden
+    Vector2 scatter = { position.x + (float)GetRandomValue(-10, 10), position.y + (float)GetRandomValue(-10, 10) };
+    pickups.push_back({ scatter, xpValue, XpTierColor(xpValue), XpTierRadius(xpValue), 15.0f, PickupType::XP });
+    if (elite) {
+        pickups.push_back({ { position.x + 12.0f, position.y }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+        if (GetRandomValue(1, 100) <= 30) pickups.push_back({ { position.x - 14.0f, position.y + 6.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
+    } else {
+        // Sjeldne godbiter
+        int roll = GetRandomValue(1, 10000);
+        if (roll <= 25) pickups.push_back({ { position.x, position.y - 10.0f }, 1, SKYBLUE, 12.0f, 0.0f, PickupType::VACUUM });
+        else if (roll <= 85) pickups.push_back({ { position.x, position.y - 10.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
+    }
 
     // Gull er metaprogresjon, så sjansen er lav med vilje
     if (goldChance > 0.0f && GetRandomValue(1, 10000) <= (int)(goldChance * 10000.0f)) {

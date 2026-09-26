@@ -26,6 +26,7 @@ enum class Sfx {
 void InitGameAudio();   // Etter InitWindow
 void UnloadGameAudio(); // Før CloseWindow
 void PlaySfx(Sfx sfx);
+void PlaySfxPitch(Sfx sfx, float pitch); // Som PlaySfx, men med bestemt tonehøyde (1.0 = normal)
 
 // Hovedvolum 0.0 - 1.0
 void SetGameVolume(float volume);

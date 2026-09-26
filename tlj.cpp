@@ -28,6 +28,7 @@
 #include "icons.hpp"
 #include "vfx.hpp"
 #include "music.hpp"
+#include "items.hpp"
 
 enum GameState {
     MAIN_MENU,
@@ -183,6 +184,10 @@ int main() {
     bool giveUpRequested = false;
     double levelUpStart = 0.0; // For animasjonen når level-up-kortene kommer inn
     int chestsPending = 0;     // Skattekister som er plukket opp, men ikke åpnet ennå
+    int rerollsLeft = 3;       // [R] i level-up gir nye valg (begrenset per runde)
+    float vacuumTimer = 0.0f;  // > 0: magnet-pickup suger inn all XP
+    int xpCombo = 0;           // XP plukket opp rett etter hverandre (tonen stiger)
+    float xpComboTimer = 0.0f;
     bool levelUpFromChest = false;
 
     // --- SPAWNER OG FIENDER ---
@@ -199,12 +204,16 @@ int main() {
         player.position = { 0.0f, 0.0f };
         player.level = 1;
         player.currentXp = 0;
-        player.xpToNextLevel = 100;
+        player.xpToNextLevel = Player::xpForLevel(1);
         player.weapons.clear();
         player.invulnerableTimer = 0.0f;
         player.slowTimer = 0.0f;
         player.critChance = 0.05f;
-        for (int& b : player.statBoosts) b = 0;
+        for (int& l : player.itemLevels) l = 0;
+        player.items.clear();
+        rerollsLeft = 3;
+        vacuumTimer = 0.0f;
+        xpCombo = 0;
         lastPlayerLevel = 1;
         runCoins = 0;
         Enemy::killCount = 0;
@@ -389,7 +398,7 @@ int main() {
         else if (currentState == GAMEPLAY) {
 
             if(player.level > lastPlayerLevel){
-                lastPlayerLevel = player.level;
+                lastPlayerLevel++; // Ett valg per level, også når man får flere level samtidig
                 currentState = LEVEL_UP;
                 levelUpFromChest = false;
                 PlaySfx(Sfx::LEVEL_UP);
@@ -398,7 +407,7 @@ int main() {
                 levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
             } else if (chestsPending > 0) {
-                // Skattekiste: et gratis oppgraderingsvalg
+                // Skattekiste: evolusjon hvis en ability er klar, ellers et gratis oppgraderingsvalg
                 chestsPending--;
                 currentState = LEVEL_UP;
                 levelUpFromChest = true;
@@ -406,7 +415,14 @@ int main() {
                 VfxShockwave(player.position, 110.0f, GOLD);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
-                activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
+                activeUpgradeChoices.clear();
+                for (const auto& w : player.weapons) {
+                    if (!CanEvolve(player, *w)) continue;
+                    const Evolution* evo = GetEvolution(w->id);
+                    activeUpgradeChoices.push_back({ ChoiceType::EVOLUTION, w->id, evo->name, evo->description, evo->color });
+                    break;
+                }
+                if (activeUpgradeChoices.empty()) activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
             }
 
             // 1. INPUT & OPPDRATERING
@@ -514,32 +530,53 @@ int main() {
                 }
             }
 
-            // --- OPPDATER OG PLUKK OPP XP-ORBS ---
+            // --- OPPDATER OG PLUKK OPP XP OG ANDRE PICKUPS ---
+            if (vacuumTimer > 0.0f) vacuumTimer -= deltaTime;
+            xpComboTimer -= deltaTime;
+            if (xpComboTimer <= 0.0f) xpCombo = 0;
             for (auto it = pickups.begin(); it != pickups.end(); ) {
+                it->age += deltaTime;
                 float distance = Vector2Distance(it->position, player.position);
 
-                // Hvis orben er innenfor spillerens lootRadius, sug den til deg!
-                if (distance < player.lootRadius) {
-                    float magnetSpeed = 400.0f; // Hvor fort den fyker mot spilleren
+                // Innenfor lootRadius (eller magnet-pickup aktiv for XP): trekkes mot deg, raskere og raskere
+                bool vacuumed = vacuumTimer > 0.0f && it->type == PickupType::XP;
+                if (distance < player.lootRadius || vacuumed || it->pull > 0.0f) {
+                    it->pull += deltaTime;
+                    float magnetSpeed = 220.0f + 1400.0f * it->pull * it->pull;
                     it->position = Vector2MoveTowards(it->position, player.position, magnetSpeed * deltaTime);
+                    distance = Vector2Distance(it->position, player.position);
+                }
 
-                    // Når den er helt nær (f.eks. innenfor 15 piksler), saml den opp
-                    if (distance < 15.0f) {
-                        if (it->type == PickupType::COIN) {
+                if (distance < 15.0f) {
+                    switch (it->type) {
+                        case PickupType::COIN:
                             runCoins += it->value;
                             PlaySfx(Sfx::COIN);
-                        } else if (it->type == PickupType::CHEST) {
+                            break;
+                        case PickupType::CHEST:
                             chestsPending++;
-                        } else {
+                            break;
+                        case PickupType::VACUUM:
+                            vacuumTimer = 2.5f;
+                            PlaySfx(Sfx::LEVEL_UP);
+                            VfxShockwave(player.position, 140.0f, SKYBLUE);
+                            break;
+                        case PickupType::FOOD:
+                            player.hp = std::min(player.maxHp, player.hp + player.maxHp * 0.3f);
+                            PlaySfxPitch(Sfx::COIN, 0.7f);
+                            VfxHit(player.position, Color{ 120, 255, 120, 255 });
+                            SpawnDamageNumber(player.position, (int)(player.maxHp * 0.3f), Color{ 120, 255, 120, 255 });
+                            break;
+                        case PickupType::XP:
                             player.addXP(static_cast<int>(it->value * player.xpMultiplier));
-                            PlaySfx(Sfx::XP);
-                        }
-
-                        // Slett orben fra listen
-                        it = pickups.erase(it);
-                    } else {
-                        ++it;
+                            // Tonen stiger når man plukker mange på rad
+                            xpCombo = std::min(xpCombo + 1, 24);
+                            xpComboTimer = 0.5f;
+                            PlaySfxPitch(Sfx::XP, 0.9f + xpCombo * 0.035f);
+                            VfxTrail(ToWorld3D(player.position, 20.0f), it->color, 18.0f, 0.2f);
+                            break;
                     }
+                    it = pickups.erase(it);
                 } else {
                     ++it;
                 }
@@ -626,6 +663,15 @@ int main() {
             }
                 if (IsKeyPressed(KEY_LEFT) || IsKeyPressed(KEY_A) || IsKeyPressed(KEY_UP) || IsKeyPressed(KEY_W)) {
                     selectedUpgradeOption = (selectedUpgradeOption - 1 + activeUpgradeChoices.size()) % activeUpgradeChoices.size();
+            }
+            // Reroll: helt nye valg (ikke for evolusjoner)
+            bool isEvolution = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
+            if (IsKeyPressed(KEY_R) && rerollsLeft > 0 && !isEvolution) {
+                rerollsLeft--;
+                activeUpgradeChoices = GenerateLevelUpChoices(player, player.levelUpChoices);
+                selectedUpgradeOption = 0;
+                levelUpStart = GetTime();
+                PlaySfx(Sfx::UI_SELECT);
             }
             // Bekreft valg
             if (IsKeyPressed(KEY_ENTER) || IsKeyPressed(KEY_SPACE)) {
@@ -944,8 +990,29 @@ int main() {
                         Vector3 axis = { cosf(spin) * 1.5f, 0.0f, sinf(spin) * 1.5f };
                         Vector3 center = ToWorld3D(pickup.position, h + 2.0f);
                         ShadedCylinder(Vector3Subtract(center, axis), Vector3Add(center, axis), 6.0f, 6.0f, GOLD, 12);
+                    } else if (pickup.type == PickupType::VACUUM) {
+                        // Hesteskomagnet som snurrer
+                        float yaw = (float)GetTime() * 120.0f * DEG2RAD;
+                        Vector2 d = { cosf(yaw), sinf(yaw) };
+                        for (int side = -1; side <= 1; side += 2) {
+                            Vector2 leg = Vector2Add(pickup.position, Vector2Scale(d, 5.0f * side));
+                            ShadedCylinder(ToWorld3D(leg, h), ToWorld3D(leg, h + 10.0f), 2.6f, 2.6f, Color{ 220, 40, 50, 255 }, 8);
+                            ShadedCylinder(ToWorld3D(leg, h + 10.0f), ToWorld3D(leg, h + 14.0f), 2.7f, 2.7f, Color{ 220, 225, 235, 255 }, 8);
+                        }
+                        ShadedCylinder(ToWorld3D(Vector2Subtract(pickup.position, Vector2Scale(d, 7.5f)), h), ToWorld3D(Vector2Add(pickup.position, Vector2Scale(d, 7.5f)), h), 2.6f, 2.6f, Color{ 220, 40, 50, 255 }, 8);
+                    } else if (pickup.type == PickupType::FOOD) {
+                        // Kyllinglår: brun kjøttbit med hvitt bein
+                        float yaw = (float)GetTime() * 60.0f * DEG2RAD;
+                        Vector2 d = { cosf(yaw), sinf(yaw) };
+                        ShadedEllipsoid(ToWorld3D(pickup.position, h + 2.0f), d, { 8.0f, 5.5f, 6.0f }, Color{ 170, 95, 40, 255 }, 6, 8);
+                        Vector2 bone = Vector2Add(pickup.position, Vector2Scale(d, -12.0f));
+                        ShadedCylinder(ToWorld3D(Vector2Add(pickup.position, Vector2Scale(d, -5.0f)), h + 2.0f), ToWorld3D(bone, h + 3.0f), 1.6f, 1.6f, Color{ 240, 235, 220, 255 }, 6);
+                        ShadedSphere(ToWorld3D(bone, h + 3.0f), 2.4f, Color{ 240, 235, 220, 255 }, 4, 6);
                     } else {
-                        ShadedSphere(ToWorld3D(pickup.position, h), pickup.radius, pickup.color, 5, 8);
+                        // XP-krystall: spretter ut når den slippes, svever og snurrer
+                        float hop = pickup.age < 0.4f ? sinf(pickup.age / 0.4f * PI) * 16.0f : 0.0f;
+                        float spin = (float)GetTime() * 150.0f + pickup.position.x * 3.0f;
+                        ShadedCrystal(ToWorld3D(pickup.position, h + hop + pickup.radius), pickup.radius, pickup.radius * 1.7f, spin, pickup.color);
                     }
                 }
 
@@ -993,8 +1060,26 @@ int main() {
                             continue;
                         }
                         float h = 8.0f + 3.0f * sinf(bob + pickup.position.x * 0.05f);
+                        if (pickup.type == PickupType::VACUUM) {
+                            VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, h + 6.0f), 60.0f, Color{ 90, 160, 255, 255 });
+                            VfxDecal(VfxTex::SHOCKWAVE, pickup.position, 50.0f, Color{ 80, 140, 255, 255 }, -uiTime * 120.0f, 1.0f);
+                            continue;
+                        }
+                        if (pickup.type == PickupType::FOOD) {
+                            VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, h), 40.0f, Color{ 120, 200, 90, 255 });
+                            continue;
+                        }
                         Color glow = pickup.type == PickupType::COIN ? Color{ 255, 190, 60, 255 } : pickup.color;
-                        VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, h), pickup.type == PickupType::COIN ? 26.0f : pickup.radius * 5.0f, Fade(glow, 0.55f));
+                        float hop = pickup.age < 0.4f ? sinf(pickup.age / 0.4f * PI) * 16.0f : 0.0f;
+                        Vector3 at = ToWorld3D(pickup.position, h + hop + pickup.radius);
+                        VfxBillboard(VfxTex::GLOW, at, pickup.type == PickupType::COIN ? 26.0f : pickup.radius * 6.0f, Fade(glow, 0.6f));
+                        // Store krystaller (rød/lilla) glitrer
+                        if (pickup.type == PickupType::XP && pickup.radius >= 6.0f) {
+                            float tw = fmodf(uiTime * 1.3f + pickup.position.x * 0.13f, 1.0f);
+                            if (tw < 0.25f) VfxBillboard(VfxTex::SPARK, Vector3Add(at, { 0.0f, pickup.radius, 0.0f }), 26.0f * sinf(tw / 0.25f * PI), WHITE, uiTime * 200.0f);
+                        }
+                        // Spor bak krystaller som suges inn
+                        if (pickup.pull > 0.05f) VfxTrail(at, glow, pickup.radius * 2.5f, 0.12f);
                     }
                     for (auto& enemy : enemies) enemy->drawVfx();
                     DrawEnemyShotsVfx();
@@ -1119,23 +1204,37 @@ int main() {
                     DrawText(rows[i].value.c_str(), (int)(x + 270.0f) - MeasureText(rows[i].value.c_str(), 18), (int)y, 18, WHITE);
                 }
 
-                // Stat-oppgraderinger tatt denne runden (ikon + prikker)
+                // Items (maks 6) med nivå-prikker
                 DrawLineEx({ sp.x + 30.0f, sp.y + 256.0f }, { sp.x + sp.width - 30.0f, sp.y + 256.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
-                DrawText("Stat-oppgraderinger fra level up:", (int)sp.x + 30, (int)sp.y + 266, 16, Color{ 190, 180, 165, 255 });
-                for (int i = 0; i < (int)StatBoost::COUNT; i++) {
-                    int col = i % 5, row = i / 5;
-                    float x = sp.x + 22.0f + col * 116.0f;
-                    float y = sp.y + 296.0f + row * 80.0f;
+                DrawText(TextFormat("Items (%d/%d):", (int)player.items.size(), MAX_ITEM_SLOTS), (int)sp.x + 30, (int)sp.y + 264, 16, Color{ 190, 180, 165, 255 });
+                for (int i = 0; i < MAX_ITEM_SLOTS; i++) {
+                    float x = sp.x + 30.0f + i * 95.0f;
+                    float y = sp.y + 290.0f;
                     Vector2 ic = { x + 22.0f, y + 22.0f };
-                    bool has = player.statBoosts[i] > 0;
                     DrawCircleV(ic, 22.0f, UI::INK);
-                    DrawCircleV(ic, 20.0f, has ? Color{ 70, 50, 70, 255 } : Color{ 40, 36, 48, 255 });
-                    DrawStatBoostIcon((StatBoost)i, ic, 15.0f);
-                    if (!has) DrawCircleV(ic, 20.0f, Fade(BLACK, 0.55f));
-                    DrawText(GetStatBoostInfo((StatBoost)i).name, (int)x, (int)y + 48, 12, has ? WHITE : GRAY);
-                    for (int l = 0; l < MAX_STAT_BOOST; l++) {
-                        DrawRectangle((int)x + 50 + l * 11, (int)y + 16, 8, 8, l < player.statBoosts[i] ? UI::GOLD_LIGHT : Color{ 60, 54, 70, 255 });
+                    DrawCircleV(ic, 20.0f, i < (int)player.items.size() ? Color{ 70, 50, 70, 255 } : Color{ 30, 26, 36, 255 });
+                    if (i >= (int)player.items.size()) continue;
+                    ItemId id = player.items[i];
+                    DrawItemIcon(id, ic, 15.0f);
+                    for (int l = 0; l < MAX_ITEM_LEVEL; l++) {
+                        DrawRectangle((int)x + l * 10, (int)y + 50, 7, 7, l < player.itemLevels[(int)id] ? UI::GOLD_LIGHT : Color{ 60, 54, 70, 255 });
                     }
+                }
+
+                // Oppskrifter: hvor langt hver ability er fra evolusjonen sin
+                DrawText("Evolusjoner (ability paa lv 9 + item, aapnes med en skattekiste):", (int)sp.x + 30, (int)sp.y + 372, 14, Color{ 190, 180, 165, 255 });
+                int line = 0;
+                for (const auto& w : player.weapons) {
+                    const Evolution* evo = GetEvolution(w->id);
+                    if (!evo) continue;
+                    bool hasItem = player.itemLevels[(int)evo->item] > 0;
+                    const char* status;
+                    Color c;
+                    if (w->evolved) { status = TextFormat("%s  - FERDIG!", evo->name); c = Color{ 255, 140, 255, 255 }; }
+                    else if (CanEvolve(player, *w)) { status = TextFormat("%s  - KLAR! Finn en kiste", evo->name); c = UI::GOLD_LIGHT; }
+                    else { status = TextFormat("%s lv %d/9 + %s%s  ->  %s", GetAbilityDefinition(w->id).name.c_str(), w->level, GetItemDef(evo->item).name, hasItem ? " (har)" : "", evo->name); c = Color{ 200, 195, 185, 255 }; }
+                    DrawText(status, (int)sp.x + 30, (int)sp.y + 394 + line * 16, 14, c);
+                    line++;
                 }
 
                 hint("[W/S] Velg   |   [ENTER] Bekreft   |   [ESC] Fortsett");
@@ -1153,9 +1252,11 @@ int main() {
                 UI::DrawSunburst({ CX, 88.0f }, 260.0f, 18, uiTime * 0.25f, Fade(UI::GOLD_LIGHT, 0.16f));
                 float popT = std::min(1.0f, since / 0.35f);
                 float titleSize = std::round(64.0f * (0.6f + 0.4f * popT + 0.12f * sinf(popT * PI)));
-                UI::DrawCenteredText(levelUpFromChest ? "SKATTEKISTE!" : "LEVEL UP!", CX, 88.0f - titleSize * 0.45f, titleSize, UI::GOLD_LIGHT, 4.0f);
-                const char* sub = levelUpFromChest ? "En elite-fiende slapp en kiste  -  velg en gratis belonning"
-                                                   : TextFormat("Du er naa level %d  -  velg en belonning", player.level);
+                bool evolving = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
+                UI::DrawCenteredText(evolving ? "EVOLUSJON!" : (levelUpFromChest ? "SKATTEKISTE!" : "LEVEL UP!"), CX, 88.0f - titleSize * 0.45f, titleSize, evolving ? Color{ 255, 140, 255, 255 } : UI::GOLD_LIGHT, 4.0f);
+                const char* sub = evolving ? "Abilityen og itemet ditt smelter sammen til noe mye sterkere"
+                                : levelUpFromChest ? "En elite-fiende slapp en kiste  -  velg en gratis belonning"
+                                                   : TextFormat("Du er naa level %d  -  velg en belonning", lastPlayerLevel);
                 UI::DrawCenteredText(sub, CX, 134.0f, 20.0f, Color{ 230, 220, 200, 255 });
 
                 // --- Kortene ---
@@ -1211,10 +1312,15 @@ int main() {
                             title = GetAbilityDefinition(choice.ability).name;
                             badge = "NY!";
                             badgeColor = Color{ 110, 220, 110, 255 };
-                        } else if (choice.type == ChoiceType::STAT) {
+                        } else if (choice.type == ChoiceType::ITEM) {
                             title = choice.title;
-                            badge = "STAT";
+                            int lvl = player.itemLevels[(int)choice.item];
+                            badge = lvl == 0 ? "NYTT ITEM" : TextFormat("ITEM %d > %d", lvl, lvl + 1);
                             badgeColor = Color{ 150, 200, 255, 255 };
+                        } else if (choice.type == ChoiceType::EVOLUTION) {
+                            title = choice.title;
+                            badge = "EVOLUSJON";
+                            badgeColor = Color{ 255, 120, 255, 255 };
                         } else if (choice.type == ChoiceType::UPGRADE_ABILITY && existing) {
                             title = GetAbilityDefinition(choice.ability).name;
                             badge = TextFormat("LV %d > %d", existing->level, existing->level + 1);
@@ -1237,17 +1343,21 @@ int main() {
                         DrawCircleV(ic, 42.0f, Color{ 40, 30, 46, 255 });
                         UI::DrawGlow(ic, 42.0f, Fade(accent, 0.45f), Fade(accent, 0.0f));
                         float iconSize = isSelected ? 30.0f + sinf(uiTime * 5.0f) : 29.0f;
-                        if (choice.type == ChoiceType::STAT) DrawStatBoostIcon(choice.stat, ic, iconSize);
+                        if (choice.type == ChoiceType::ITEM) DrawItemIcon(choice.item, ic, iconSize);
                         else DrawAbilityIcon(choice.ability, ic, iconSize);
+                        if (choice.type == ChoiceType::EVOLUTION) {
+                            UI::DrawSunburst(ic, 70.0f, 10, uiTime * 1.5f, Fade(choice.color, 0.5f));
+                            DrawAbilityIcon(choice.ability, ic, iconSize);
+                        }
 
                         // Navn
                         UI::DrawCenteredText(title.c_str(), cardX + cardW / 2.0f, cardY + 166.0f, title.size() > 12 ? 22.0f : 26.0f, isSelected ? UI::GOLD_LIGHT : WHITE);
 
                         // Nivå-prikker: fylte = nåværende, blinkende grønn = den du får
-                        if (choice.type != ChoiceType::HEAL) {
-                            bool isStat = choice.type == ChoiceType::STAT;
-                            int current = isStat ? player.statBoosts[(int)choice.stat] : (existing ? existing->level : 0);
-                            int maxPips = isStat ? MAX_STAT_BOOST : MAX_ABILITY_LEVEL;
+                        if (choice.type != ChoiceType::HEAL && choice.type != ChoiceType::EVOLUTION) {
+                            bool isItem = choice.type == ChoiceType::ITEM;
+                            int current = isItem ? player.itemLevels[(int)choice.item] : (existing ? existing->level : 0);
+                            int maxPips = isItem ? MAX_ITEM_LEVEL : MAX_ABILITY_LEVEL;
                             const float pip = 12.0f, pipGap = 5.0f;
                             float pipsW = maxPips * pip + (maxPips - 1) * pipGap;
                             float px = cardX + cardW / 2.0f - pipsW / 2.0f;
@@ -1265,6 +1375,27 @@ int main() {
                         DrawLineEx({ cardX + 24.0f, cardY + 228.0f }, { cardX + cardW - 24.0f, cardY + 228.0f }, 1.0f, Fade(UI::GOLD_DARK, 0.8f));
                         UI::DrawWrappedText(choice.description.c_str(), cardX + 20.0f, cardY + 242.0f, cardW - 40.0f, 16.0f, Color{ 215, 205, 190, 255 }, true);
 
+                        // Kombo-hint: hvilket item/ability dette kan evolvere med
+                        {
+                            std::string combo;
+                            bool ready = false;
+                            if (choice.type == ChoiceType::ITEM) {
+                                if (const Evolution* evo = GetEvolutionForItem(choice.item)) {
+                                    ready = player.findAbility(evo->ability) != nullptr;
+                                    combo = TextFormat("Kombo: %s", GetAbilityDefinition(evo->ability).name.c_str());
+                                }
+                            } else if (choice.type == ChoiceType::NEW_ABILITY || choice.type == ChoiceType::UPGRADE_ABILITY) {
+                                if (const Evolution* evo = GetEvolution(choice.ability)) {
+                                    ready = player.itemLevels[(int)evo->item] > 0;
+                                    combo = TextFormat("Kombo: %s", GetItemDef(evo->item).name);
+                                }
+                            }
+                            if (!combo.empty()) {
+                                Color cc = ready ? Color{ 255, 140, 255, 255 } : Color{ 150, 140, 160, 255 };
+                                UI::DrawCenteredText((ready ? combo + "  *" : combo).c_str(), cardX + cardW / 2.0f, cardY + cardH - (isSelected ? 78.0f : 40.0f), 14.0f, cc, 1.0f);
+                            }
+                        }
+
                         if (isSelected) {
                             // Tast-hint nederst på det valgte kortet
                             Rectangle pick = { cardX + 30.0f, cardY + cardH - 50.0f, cardW - 60.0f, 36.0f };
@@ -1281,7 +1412,9 @@ int main() {
                     }
                 }
 
-                hint("[A/D] eller [Piltaster] for aa bla   |   [ENTER] for aa velge");
+                bool evoScreen = !activeUpgradeChoices.empty() && activeUpgradeChoices[0].type == ChoiceType::EVOLUTION;
+                if (evoScreen) hint("[ENTER] Evolver!");
+                else hint(TextFormat("[A/D] Bla   |   [ENTER] Velg   |   [R] Nye valg (%d igjen)", rerollsLeft));
                 UI::EndCanvas();
             }
         }

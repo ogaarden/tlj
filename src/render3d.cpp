@@ -368,3 +368,29 @@ void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color
     }
     emitGrid(rings, slices, center);
 }
+
+void ShadedCrystal(Vector3 center, float radius, float height, float spinDegrees, Color color) {
+    float a0 = spinDegrees * DEG2RAD;
+    Vector3 top = { center.x, center.y + height, center.z };
+    Vector3 bottom = { center.x, center.y - height, center.z };
+    Vector3 ring[4];
+    for (int i = 0; i < 4; i++) {
+        float a = a0 + i * PI / 2.0f;
+        ring[i] = { center.x + cosf(a) * radius, center.y, center.z + sinf(a) * radius };
+    }
+    rlCheckRenderBatchLimit(24);
+    rlBegin(RL_TRIANGLES);
+    for (int i = 0; i < 4; i++) {
+        Vector3 p = ring[i], q = ring[(i + 1) % 4];
+        // Flat skyggelegging per fasett gir den krystall-aktige glinsen
+        for (int half = 0; half < 2; half++) {
+            Vector3 tip = half == 0 ? top : bottom;
+            Vector3 n = Vector3Normalize(Vector3CrossProduct(Vector3Subtract(q, p), Vector3Subtract(tip, p)));
+            Vector3 mid = Vector3Scale(Vector3Add(Vector3Add(p, q), tip), 1.0f / 3.0f);
+            if (Vector3DotProduct(n, Vector3Subtract(mid, center)) < 0.0f) n = Vector3Negate(n);
+            Color c = lit(color, n);
+            triangle(p, q, tip, c, c, c, n);
+        }
+    }
+    rlEnd();
+}

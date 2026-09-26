@@ -127,16 +127,26 @@ Weapon* Player::findAbility(AbilityId id) const {
 }
 
 // Behandle oppsamling av XP
+// XP-kurve: 35 + 35L + 4L^2. Level 1->2 = 74 XP, 10->11 = 785, 20->21 = 2335.
+// Med fiendemengden i spawner.cpp gir det første level-up innen 30 sek,
+// ca. level 14 etter 5 min og ca. level 25 etter 10 min.
+// Et fullt build (5 abilities på level 9 + 6 items på nivå 5) krever over 70 level-ups,
+// så man må velge hva man satser på.
+int Player::xpForLevel(int lvl) {
+    return 35 + 35 * lvl + 4 * lvl * lvl;
+}
+
 void Player::addXP(int amount)
 {
     currentXp += amount;
-    if (currentXp >= xpToNextLevel) {
+    // while: nok XP på én gang kan gi flere level (hver gir sitt eget valg, se tlj.cpp)
+    while (currentXp >= xpToNextLevel) {
         currentXp -= xpToNextLevel;
         level++;
-        xpToNextLevel = static_cast<int>(xpToNextLevel * 1.25f); // 25% økning per level
-        
-        // Øk gjerne noen basestats ved Level Up
-        maxHp += 10.0f;
-        hp = maxHp; // Full heal på Level Up
+        xpToNextLevel = xpForLevel(level);
+
+        // Litt mer liv og en liten helbredelse (ikke full – det gjorde spillet for lett)
+        maxHp += 5.0f;
+        hp = std::min(maxHp, hp + maxHp * 0.2f);
     }
 }

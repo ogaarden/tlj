@@ -4,6 +4,7 @@
 #include "ui.hpp"
 #include "icons.hpp"
 #include "shop.hpp"
+#include "items.hpp"
 #include <algorithm>
 #include <cmath>
 
@@ -238,61 +239,78 @@ std::vector<AbilityId> GetSharedAbilityPool() {
 // LEVEL-UP-VALG
 // =====================================================================
 
-const StatBoostInfo& GetStatBoostInfo(StatBoost stat) {
-    static const StatBoostInfo infos[(int)StatBoost::COUNT] = {
-        { "Vitalitet",  "+15% maks HP, og fyller paa like mye", Color{ 230, 60, 70, 255 } },
-        { "Lette sko",  "+8% fart",                               Color{ 190, 130, 70, 255 } },
-        { "Styrke",     "+10% skade paa alle abilities",           Color{ 210, 210, 225, 255 } },
-        { "Hurtighet",  "-6% cooldown paa alle abilities",         Color{ 150, 200, 255, 255 } },
-        { "Rekkevidde", "+10% radius og treffomraade",             Color{ 255, 170, 70, 255 } },
-        { "Magnet",     "+35 radius for aa plukke opp XP og gull", Color{ 230, 60, 60, 255 } },
-        { "Rustning",   "+4 armor (mindre skade fra alt)",         Color{ 170, 180, 200, 255 } },
-        { "Visdom",     "+10% XP",                                 Color{ 90, 170, 255, 255 } },
-        { "Presisjon",  "+5% sjanse for kritisk treff (2x skade)", Color{ 255, 200, 40, 255 } },
+// ---------------------------------------------------------------------
+// EVOLUSJONER: hver ability har ett item som er nøkkelen.
+// Ability på level 9 + itemet (hvilket som helst nivå) -> neste skattekiste
+// gjør den om til en superversjon.
+// ---------------------------------------------------------------------
+namespace {
+struct EvolutionData {
+    Evolution info;
+    void (*apply)(AbilityStats&);
+};
+
+const std::vector<EvolutionData>& evolutions() {
+    static const std::vector<EvolutionData> list = {
+        { { AbilityId::TREFORK, ItemId::JUGGLING_BALL, "Poseidons trefork", "+4 prongs, +3 gjennomboring og +50% skade", Color{ 80, 220, 255, 255 } },
+          [](AbilityStats& s) { s.projectiles += 4; s.pierce += 3; s.damage *= 1.5f; } },
+        { { AbilityId::GROUND_SLAM, ItemId::CHAINMAIL, "Jordskjelv", "+80 radius, 2x skade og -20% cooldown", Color{ 255, 110, 40, 255 } },
+          [](AbilityStats& s) { s.radius += 80.0f; s.damage *= 2.0f; s.cooldown *= 0.8f; } },
+        { { AbilityId::RICOCHET, ItemId::LUCKY_DIE, "Kaoskule", "+2 kuler, +6 sprett og ingen svekkelse per sprett", Color{ 255, 80, 220, 255 } },
+          [](AbilityStats& s) { s.projectiles += 2; s.bounces += 6; s.bounceFalloff = 1.0f; } },
+        { { AbilityId::PIE, ItemId::ROYAL_CAPE, "Bryllupskake", "+3 kaker, +45 sprut-radius og +50% skade", Color{ 255, 235, 245, 255 } },
+          [](AbilityStats& s) { s.projectiles += 3; s.radius += 45.0f; s.damage *= 1.5f; } },
+        { { AbilityId::MAGIC_MISSILE, ItemId::OWL_FEATHER, "Stjerneregn", "+4 missiler, +3 sprett og +30% skade", Color{ 150, 120, 255, 255 } },
+          [](AbilityStats& s) { s.projectiles += 4; s.bounces += 3; s.damage *= 1.3f; } },
+        { { AbilityId::ROT, ItemId::HEART_AMULET, "Svartedauden", "+60 radius og 2.5x skade", Color{ 150, 60, 200, 255 } },
+          [](AbilityStats& s) { s.radius += 60.0f; s.damage *= 2.5f; } },
+        { { AbilityId::DAGGER, ItemId::JESTER_SHOES, "Tusen kniver", "+5 dolker, +2 gjennomboring og -40% cooldown", Color{ 230, 235, 255, 255 } },
+          [](AbilityStats& s) { s.projectiles += 5; s.pierce += 2; s.cooldown *= 0.6f; } },
+        { { AbilityId::ORBIT_BLADES, ItemId::WHETSTONE, "Staalvirvel", "+4 blader, 2x skade, raskere og videre", Color{ 200, 225, 255, 255 } },
+          [](AbilityStats& s) { s.projectiles += 4; s.damage *= 2.0f; s.speed *= 1.6f; s.radius += 30.0f; } },
+        { { AbilityId::LIGHTNING, ItemId::HOURGLASS, "Tordenguden", "+3 lyn, +4 kjede-hopp, -40% cooldown og +50% skade", Color{ 255, 250, 140, 255 } },
+          [](AbilityStats& s) { s.projectiles += 3; s.bounces += 4; s.cooldown *= 0.6f; s.damage *= 1.5f; } },
     };
-    return infos[(int)stat];
+    return list;
+}
+} // namespace
+
+const Evolution* GetEvolution(AbilityId ability) {
+    for (const auto& e : evolutions()) if (e.info.ability == ability) return &e.info;
+    return nullptr;
 }
 
-void DrawStatBoostIcon(StatBoost stat, Vector2 center, float size) {
-    if (stat == StatBoost::CRIT) {
-        // Blink: sikte med rødt senter og gul "!"-glimt
-        const Color INK = { 12, 10, 16, 255 };
-        DrawRing(center, size * 0.62f, size * 0.9f, 0.0f, 360.0f, 32, INK);
-        DrawRing(center, size * 0.66f, size * 0.84f, 0.0f, 360.0f, 32, Color{ 240, 232, 214, 255 });
-        DrawRing(center, size * 0.3f, size * 0.5f, 0.0f, 360.0f, 32, Color{ 220, 50, 50, 255 });
-        DrawCircleV(center, size * 0.18f, Color{ 255, 210, 60, 255 });
-        for (int i = 0; i < 4; i++) {
-            float a = i * PI / 2.0f;
-            Vector2 d = { cosf(a), sinf(a) };
-            DrawLineEx({ center.x + d.x * size * 0.55f, center.y + d.y * size * 0.55f }, { center.x + d.x * size * 1.05f, center.y + d.y * size * 1.05f }, size * 0.14f, INK);
-        }
+const Evolution* GetEvolutionForItem(ItemId item) {
+    for (const auto& e : evolutions()) if (e.info.item == item) return &e.info;
+    return nullptr;
+}
+
+bool CanEvolve(const Player& player, const Weapon& weapon) {
+    if (weapon.evolved || weapon.level < MAX_ABILITY_LEVEL) return false;
+    const Evolution* evo = GetEvolution(weapon.id);
+    return evo && player.itemLevels[(int)evo->item] > 0;
+}
+
+void EvolveAbility(Weapon& weapon) {
+    for (const auto& e : evolutions()) {
+        if (e.info.ability != weapon.id) continue;
+        e.apply(weapon.stats);
+        weapon.evolved = true;
+        weapon.name = e.info.name;
+        weapon.color = e.info.color;
         return;
     }
-    static const ShopUpgrade icons[(int)StatBoost::COUNT] = {
-        ShopUpgrade::VITALITY, ShopUpgrade::SPEED, ShopUpgrade::MIGHT, ShopUpgrade::HASTE,
-        ShopUpgrade::AREA, ShopUpgrade::MAGNET, ShopUpgrade::ARMOR, ShopUpgrade::GROWTH, ShopUpgrade::MIGHT,
-    };
-    DrawUpgradeIcon(icons[(int)stat], center, size);
 }
 
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count) {
-    std::vector<AbilityChoice> candidates;
-    std::vector<AbilityChoice> statCandidates;
-
-    // 0. Stat-oppgraderinger som ikke er maksa
-    for (int i = 0; i < (int)StatBoost::COUNT; i++) {
-        if (player.statBoosts[i] >= MAX_STAT_BOOST) continue;
-        const StatBoostInfo& info = GetStatBoostInfo((StatBoost)i);
-        AbilityChoice c{ ChoiceType::STAT, AbilityId::COUNT, info.name, info.description, info.color };
-        c.stat = (StatBoost)i;
-        statCandidates.push_back(c);
-    }
+    std::vector<AbilityChoice> abilityCandidates;
+    std::vector<AbilityChoice> itemCandidates;
 
     // 1. Oppgraderinger for abilities vi allerede har (inkl. innate)
     for (const auto& w : player.weapons) {
         if (w->level >= MAX_ABILITY_LEVEL) continue;
         const AbilityDefinition& def = GetAbilityDefinition(w->id);
-        candidates.push_back({
+        abilityCandidates.push_back({
             ChoiceType::UPGRADE_ABILITY, w->id,
             TextFormat("%s  Lv %d -> %d", def.name.c_str(), w->level, w->level + 1),
             def.levels[w->level - 1].description,
@@ -305,26 +323,39 @@ std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int coun
         for (AbilityId id : GetSharedAbilityPool()) {
             if (player.findAbility(id)) continue; // Har den allerede -> tilbys som oppgradering over
             const AbilityDefinition& def = GetAbilityDefinition(id);
-            candidates.push_back({ ChoiceType::NEW_ABILITY, id, def.name + "  (NY)", def.description, def.color });
+            abilityCandidates.push_back({ ChoiceType::NEW_ABILITY, id, def.name + "  (NY)", def.description, def.color });
         }
     }
 
-    // Plukk tilfeldige valg. Abilities først, men minst ett (og maks to) stat-valg,
-    // så det alltid finnes noe nyttig selv om alle abilities er fulle.
+    // 3. Items: neste nivå av de man har, og nye så lenge det er ledige item-plasser
+    for (int i = 0; i < (int)ItemId::COUNT; i++) {
+        int level = player.itemLevels[i];
+        if (level >= MAX_ITEM_LEVEL) continue;
+        if (level == 0 && !HasItemSlotFree(player)) continue;
+        const ItemDef& def = GetItemDef((ItemId)i);
+        AbilityChoice c{ ChoiceType::ITEM, AbilityId::COUNT, def.name, def.description, def.color };
+        c.item = (ItemId)i;
+        itemCandidates.push_back(c);
+    }
+
+    // Fordeling: minst ett av hver når det finnes, ellers fyll opp med det som er igjen
+    int itemPicks = 0;
+    if (!itemCandidates.empty()) {
+        itemPicks = abilityCandidates.empty() ? count : (count >= 4 ? 2 : GetRandomValue(1, 2));
+        itemPicks = std::min(itemPicks, count - (abilityCandidates.empty() ? 0 : 1));
+        itemPicks = std::max(itemPicks, 1);
+    }
     std::vector<AbilityChoice> chosen;
-    int statSlots = candidates.empty() ? count : std::min(2, std::max(1, count - (int)candidates.size()));
-    int abilitySlots = count - std::min(statSlots, (int)statCandidates.size());
-    while ((int)chosen.size() < abilitySlots && !candidates.empty()) {
-        int idx = GetRandomValue(0, (int)candidates.size() - 1);
-        chosen.push_back(candidates[idx]);
-        candidates.erase(candidates.begin() + idx);
-    }
-    while ((int)chosen.size() < count && !statCandidates.empty()) {
-        int idx = GetRandomValue(0, (int)statCandidates.size() - 1);
-        chosen.push_back(statCandidates[idx]);
-        statCandidates.erase(statCandidates.begin() + idx);
-    }
-    // Bland rekkefølgen så stat-kortene ikke alltid ligger til høyre
+    auto pickFrom = [&](std::vector<AbilityChoice>& from, int n) {
+        while (n-- > 0 && !from.empty()) {
+            int idx = GetRandomValue(0, (int)from.size() - 1);
+            chosen.push_back(from[idx]);
+            from.erase(from.begin() + idx);
+        }
+    };
+    pickFrom(itemCandidates, itemPicks);
+    pickFrom(abilityCandidates, count - (int)chosen.size());
+    pickFrom(itemCandidates, count - (int)chosen.size());
     for (int i = (int)chosen.size() - 1; i > 0; i--) std::swap(chosen[i], chosen[GetRandomValue(0, i)]);
 
     // Alt er maks-level og alle slots er fulle
@@ -342,21 +373,12 @@ void ApplyAbilityChoice(Player& player, const AbilityChoice& choice) {
         case ChoiceType::UPGRADE_ABILITY:
             if (Weapon* w = player.findAbility(choice.ability)) LevelUpAbility(*w);
             break;
-        case ChoiceType::STAT: {
-            player.statBoosts[(int)choice.stat]++;
-            switch (choice.stat) {
-                case StatBoost::MAX_HP: { float gain = player.maxHp * 0.15f; player.maxHp += gain; player.hp += gain; } break;
-                case StatBoost::SPEED:  player.speed *= 1.08f; break;
-                case StatBoost::MIGHT:  player.damageMult *= 1.10f; break;
-                case StatBoost::HASTE:  player.cooldownMult *= 0.94f; break;
-                case StatBoost::AREA:   player.areaMult *= 1.10f; break;
-                case StatBoost::MAGNET: player.lootRadius += 35.0f; break;
-                case StatBoost::ARMOR:  player.armor += 4.0f; break;
-                case StatBoost::GROWTH: player.xpMultiplier *= 1.10f; break;
-                case StatBoost::CRIT:   player.critChance += 0.05f; break;
-                default: break;
-            }
-        } break;
+        case ChoiceType::ITEM:
+            ApplyItemLevel(player, choice.item);
+            break;
+        case ChoiceType::EVOLUTION:
+            if (Weapon* w = player.findAbility(choice.ability)) EvolveAbility(*w);
+            break;
         case ChoiceType::HEAL:
             player.hp = player.maxHp;
             break;
@@ -433,6 +455,18 @@ void DrawAbilityHud(const Player& player, float centerX, float bottom, float sca
 
         // Innate har tykk gullramme og en liten krone-prikk
         DrawRectangleLinesEx(slot, isInnate ? 3.0f * s : 2.0f * s, isInnate ? UI::GOLD_LIGHT : w.color);
+        if (w.evolved) {
+            // Evolvert: magenta ramme og stjerne i hjørnet
+            DrawRectangleLinesEx(slot, 3.0f * s, Color{ 255, 120, 255, 255 });
+            Vector2 st = { x + slotSize - 8.0f * s, y + 8.0f * s };
+            DrawPoly(st, 5, 7.0f * s, (float)GetTime() * 90.0f, UI::INK);
+            DrawPoly(st, 5, 5.5f * s, (float)GetTime() * 90.0f, Color{ 255, 140, 255, 255 });
+        } else if (CanEvolve(player, w)) {
+            // Klar for evolusjon: pulserende gullglød – finn en skattekiste!
+            float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 7.0f);
+            DrawRectangleLinesEx({ x - 4.0f * s, y - 4.0f * s, slotSize + 8.0f * s, slotSize + 8.0f * s }, 2.5f * s, Fade(UI::GOLD_LIGHT, 0.4f + 0.6f * pulse));
+            text("KLAR!", x + slotSize / 2.0f, y - 16.0f * s, 11.0f * s, Fade(UI::GOLD_LIGHT, 0.6f + 0.4f * pulse));
+        }
         if (isInnate) {
             DrawCircleV({ x + 7.0f * s, y + 7.0f * s }, 4.0f * s, UI::INK);
             DrawCircleV({ x + 7.0f * s, y + 7.0f * s }, 2.8f * s, UI::GOLD_LIGHT);

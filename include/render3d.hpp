@@ -62,6 +62,9 @@ void ShadedSphere(Vector3 center, float radius, Color color, int rings = 8, int 
 void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadius, Color color, int slices = 12);
 void ShadedCube(Vector3 center, Vector3 size, float yawDegrees, Color color);
 
+// Krystall (to pyramider mot hverandre, 4 sider), roterer rundt seg selv. Brukes til XP.
+void ShadedCrystal(Vector3 center, float radius, float height, float spinDegrees, Color color);
+
 // Ellipsoide (strukket kule) orientert etter en retning på gulvet.
 // radii = { fremover, opp, sidelengs }
 void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color, int rings = 8, int slices = 12);

@@ -434,8 +434,11 @@ void RotWeapon::drawVfx() const {
     // To lag gifttåke som roterer hver sin vei og pulserer
     // Dempet så klovnen og fiendene fortsatt synes gjennom tåka
     float pulse = 0.8f + 0.2f * sinf(pulseTimer * 4.0f);
-    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 2.2f, Color{ (unsigned char)(70 * pulse), (unsigned char)(110 * pulse), (unsigned char)(60 * pulse), 255 }, pulseTimer * 25.0f, 1.2f);
-    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 1.5f, Color{ 30, 60, 30, 255 }, -pulseTimer * 40.0f, 1.4f);
+    // Evolvert (Svartedauden): mørk lilla pest i stedet for grønn gift
+    Color mist = evolved ? Color{ (unsigned char)(110 * pulse), (unsigned char)(40 * pulse), (unsigned char)(140 * pulse), 255 }
+                         : Color{ (unsigned char)(70 * pulse), (unsigned char)(110 * pulse), (unsigned char)(60 * pulse), 255 };
+    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 2.2f, mist, pulseTimer * 25.0f, 1.2f);
+    VfxDecal(VfxTex::POISON_MIST, lastPlayerPos, radius() * 1.5f, evolved ? Color{ 60, 20, 70, 255 } : Color{ 30, 60, 30, 255 }, -pulseTimer * 40.0f, 1.4f);
 
     // Glødende sporer som svever rundt i auraen
     const int spores = 10;

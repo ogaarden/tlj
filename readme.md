@@ -142,4 +142,24 @@ Notes:
    mørk bossmusikk i tronsalen. Krysstoner mellom sporene. Eget musikkvolum i innstillinger
 5) Fyrverkeri over slottet i menyen
 
+// 7 oktober – builds, items og evolusjoner
+1) Items (items.cpp): 10 passive gjenstander med 5 nivåer hver, som velges i level-up.
+   Maks 6 items per runde, så man må velge. Nullstilles hver runde.
+   Sjonglørball (+prosjektil), Kongens kappe (+område), Narreskoene (+fart), Slipestein (+skade),
+   Timeglass (-cooldown), Hjerteamulett (+HP/regen), Ringbrynje (+armor), Magnetstein (+pickup),
+   Uglefjær (+XP), Heldig terning (+krit)
+2) Evolusjoner: ability på level 9 + riktig item -> neste skattekiste gjør den til en superversjon.
+   Trefork+Sjonglørball=Poseidons trefork, Ground Slam+Ringbrynje=Jordskjelv,
+   Ricochet+Terning=Kaoskule, Kakekast+Kappe=Bryllupskake, Magic Missile+Uglefjær=Stjerneregn,
+   Rot+Hjerteamulett=Svartedauden, Dagger+Narreskoene=Tusen kniver,
+   Orbit Blades+Slipestein=Stålvirvel, Lightning+Timeglass=Tordenguden.
+   Kortene viser kombo-hint, HUD-en viser "KLAR!", og pausemenyen viser oppskriftene.
+3) Ny XP-kurve (35 + 35L + 4L^2): første level innen 30 sek, ca. level 25 ved 10 min.
+   Et fullt build krever 70+ valg, så man må satse. Level-up gir +5 maks HP og 20 % liv
+   (ikke full heal lenger). Flere level på én gang gir hvert sitt valg.
+4) 3 rerolls per runde ([R] i level-up)
+5) XP-krystaller i fire tiers (blå, grønn, rød, lilla) som spretter ut, glitrer og suges inn
+   raskere og raskere. Tonen stiger når man plukker mange på rad.
+6) Sjeldne drops: magnet (suger inn all XP) og kyllinglår (+30 % liv)
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

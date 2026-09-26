@@ -1,6 +1,7 @@
 #include "hud.hpp"
 #include "ui.hpp"
 #include "abilities.hpp"
+#include "items.hpp"
 #include <raymath.h>
 #include <rlgl.h>
 #include <cmath>
@@ -410,6 +411,26 @@ void DrawGameHud(const HudState& hud) {
 
     // --- Ability-slots nederst i midten ---
     DrawAbilityHud(p, w / 2.0f, h - 12.0f * s, s);
+
+    // --- Items: en rad med små runde plasser over ability-panelet ---
+    {
+        const float r = 15.0f * s;
+        const float gap = 8.0f * s;
+        float totalW = MAX_ITEM_SLOTS * r * 2.0f + (MAX_ITEM_SLOTS - 1) * gap;
+        float y = h - 12.0f * s - 110.0f * s - r - 22.0f * s; // Plass til "KLAR!" over ability-slotsene
+        for (int i = 0; i < MAX_ITEM_SLOTS; i++) {
+            Vector2 c = { w / 2.0f - totalW / 2.0f + r + i * (r * 2.0f + gap), y };
+            bool has = i < (int)p.items.size();
+            DrawCircleV(c, r + 2.0f * s, UI::INK);
+            DrawCircleV(c, r, has ? Color{ 56, 42, 60, 235 } : Color{ 24, 20, 30, 200 });
+            if (!has) continue;
+            ItemId id = p.items[i];
+            DrawItemIcon(id, c, r * 0.72f);
+            // Nivå som en liten gullbue rundt
+            float pct = (float)p.itemLevels[(int)id] / MAX_ITEM_LEVEL;
+            DrawRing(c, r - 1.5f * s, r + 1.0f * s, -90.0f, -90.0f + 360.0f * pct, 24, UI::GOLD_LIGHT);
+        }
+    }
 
     // --- Kontroller nederst til venstre ---
     const char* hint = "[Q/E] Roter   [M] Kart   [ESC] Avslutt";

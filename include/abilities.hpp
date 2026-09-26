@@ -41,8 +41,9 @@ std::vector<AbilityId> GetSharedAbilityPool();
 enum class ChoiceType {
     NEW_ABILITY,
     UPGRADE_ABILITY,
-    STAT, // Stat-oppgradering (maks HP, fart, skade ...)
-    HEAL  // Reserve når alt er fullt og maks-level
+    ITEM,       // Nytt item eller neste nivå av et item
+    EVOLUTION,  // Fra skattekiste: ability på maks level + riktig item
+    HEAL        // Reserve når alt er fullt og maks-level
 };
 
 struct AbilityChoice {
@@ -51,18 +52,23 @@ struct AbilityChoice {
     std::string title;
     std::string description;
     Color color;
-    StatBoost stat = StatBoost::COUNT; // Bare for ChoiceType::STAT
+    ItemId item = ItemId::COUNT; // Bare for ChoiceType::ITEM
 };
 
-// Navn, beskrivelse og farge for en stat-oppgradering
-struct StatBoostInfo {
+// --- Evolusjoner: ability (maks level) + item = superversjon ---
+struct Evolution {
+    AbilityId ability;
+    ItemId item;
     const char* name;
     const char* description;
     Color color;
 };
-const StatBoostInfo& GetStatBoostInfo(StatBoost stat);
-void DrawStatBoostIcon(StatBoost stat, Vector2 center, float size); // Bruker shop-ikonene
+const Evolution* GetEvolution(AbilityId ability);          // nullptr hvis abilityen ikke har en
+const Evolution* GetEvolutionForItem(ItemId item);         // Hvilken evolusjon itemet er nøkkel til
+bool CanEvolve(const Player& player, const Weapon& weapon); // Maks level + har itemet + ikke evolvert
+void EvolveAbility(Weapon& weapon);
 
+// Neste level-up: ability-valg + item-valg (minst ett av hver når det går)
 std::vector<AbilityChoice> GenerateLevelUpChoices(const Player& player, int count = 3);
 void ApplyAbilityChoice(Player& player, const AbilityChoice& choice);
 

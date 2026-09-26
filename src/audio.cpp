@@ -314,6 +314,19 @@ void PlaySfx(Sfx sfx) {
     PlaySound(voice);
 }
 
+void PlaySfxPitch(Sfx sfx, float pitch) {
+    if (!audioReady || sfx == Sfx::COUNT) return;
+    SfxSlot& slot = slots[(int)sfx];
+    double now = GetTime();
+    if (now - slot.lastPlayed < slot.settings.minInterval) return;
+    slot.lastPlayed = now;
+    Sound& voice = slot.voices[slot.nextVoice];
+    slot.nextVoice = (slot.nextVoice + 1) % (int)slot.voices.size();
+    SetSoundVolume(voice, slot.settings.volume);
+    SetSoundPitch(voice, pitch);
+    PlaySound(voice);
+}
+
 void SetGameVolume(float volume) {
     masterVolume = fmaxf(0.0f, fminf(1.0f, volume));
     if (audioReady) SetMasterVolume(masterVolume);

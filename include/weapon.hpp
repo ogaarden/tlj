@@ -38,6 +38,7 @@ public:
     std::string name;
     Color color = WHITE;
     int level = 1;
+    bool evolved = false; // Evolusjon: ability på maks level + riktig item + en skattekiste
     AbilityStats stats;
 
     // Virtuell destruktør er obligatorisk når man bruker arv i C++

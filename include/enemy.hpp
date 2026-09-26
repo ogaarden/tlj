@@ -175,7 +175,9 @@ public:
 enum class PickupType {
     XP,
     COIN,
-    CHEST // Skattekiste fra elite-fiender: gir et gratis oppgraderingsvalg
+    CHEST,  // Skattekiste fra elite-fiender: gir et gratis oppgraderingsvalg
+    VACUUM, // Sjelden magnet: suger inn all XP på bakken
+    FOOD    // Sjeldent kyllinglår: gir liv
 };
 
 // Ting som ligger på bakken og kan plukkes opp (XP-orbs og gullmynter)
@@ -186,6 +188,12 @@ struct Pickup {
     float radius;
     float lifetime;
     PickupType type = PickupType::XP;
+    float age = 0.0f;   // Sekunder siden den ble sluppet (liten "hopp"-animasjon)
+    float pull = 0.0f;  // Hvor lenge den har blitt trukket mot spilleren (akselererer)
 };
+
+// Farge og størrelse på XP-krystaller etter hvor mye de er verdt
+Color XpTierColor(int value);
+float XpTierRadius(int value);
 
 #endif // ENEMY_HPP
