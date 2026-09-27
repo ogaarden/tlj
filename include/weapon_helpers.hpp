@@ -20,6 +20,7 @@ inline void removeDeadEnemy(std::vector<std::unique_ptr<Enemy>>& enemies, size_t
     enemies[index]->dropLoot(pickups);
     VfxDeath(enemies[index]->position, Color{ 255, 210, 150, 255 });
     enemies[index]->onDeath();
+    KillFeel(*enemies[index]);
     Enemy::killCount++;
     PlaySfx(Sfx::KILL);
     KeepCorpse(enemies[index]);

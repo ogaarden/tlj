@@ -51,7 +51,7 @@ Hound::Hound(Vector2 spawnPos, Texture2D tex) {
 }
 
 void Hound::update(Vector2 playerPosition) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     float dist;
     Vector2 dir = dirTo(position, playerPosition, &dist);
     timer -= dt;
@@ -103,7 +103,7 @@ Priest::Priest(Vector2 spawnPos, Texture2D tex) {
 }
 
 void Priest::update(Vector2 playerPosition) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     keepDistance(*this, playerPosition, 300.0f, dt);
     pulseTimer -= dt;
     if (pulseTimer <= 0.0f) { pulseTimer = 1.6f; auraPulse = true; }
@@ -136,7 +136,7 @@ Drummer::Drummer(Vector2 spawnPos, Texture2D tex) {
 }
 
 void Drummer::update(Vector2 playerPosition) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     keepDistance(*this, playerPosition, 150.0f, dt);
 }
 
@@ -164,7 +164,7 @@ Cannoneer::Cannoneer(Vector2 spawnPos, Texture2D tex) {
 }
 
 void Cannoneer::update(Vector2 playerPosition) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     if (windup > 0.0f) {
         // Står stille og sikter, så fyrer den
         facing = dirTo(position, playerPosition);
@@ -214,7 +214,7 @@ Treasurer::Treasurer(Vector2 spawnPos, Texture2D tex) {
 }
 
 void Treasurer::update(Vector2 playerPosition) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     life -= dt;
     if (life <= 0.0f) { escaped = true; hp = 0; return; } // Rømte med gullet!
     if (stumble > 0.0f) { stumble -= dt; return; }

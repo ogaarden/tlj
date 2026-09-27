@@ -445,3 +445,23 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
    og synker ned i gulvet (0.7 sek, maks 160 lik samtidig).
 3) Tunge fiender dør med et smell: kyrasseren gir sjokkbølge og gnister (35 % sjanse for kyllinglår),
    fanebærerens vern brister i en blå ring, og kjempen gir dobbel sjokkbølge og alltid et kyllinglår.
+
+// 31 oktober – en konge verdig navnet, hitstop, kombo og lav-HP-varsel
+1) Kongen er mye farligere: 420 000 HP (før 250 000), 60 skade (før 45) og tre faser.
+   - Fase 1, PÅ TRONEN (100-65 %): seks mønstre på rundgang: firedobbel spiral, vifter (5 x 13 kuler),
+     dekreter, vakter + kulering, SEPTERSTRÅLER (to tette kulestrømmer som feier rundt salen – vist med
+     røde linjer først) og RUTENETT-BOMBARDEMENT (hele salen i sjakkmønster, to runder der de trygge
+     rutene bytter plass).
+   - Fase 2, JAKTEN (65-30 %): hopper ned, jager og skyter små vifter, stormer 3 ganger, og trampet
+     sender sjokklinjer av eksplosjoner ut i seks retninger. To kyrassere kommer inn med en gang,
+     og en til med hver ny vaktbølge. Rustning (tar 55 % skade).
+   - Fase 3, TRONSALEN BRENNER (under 30 %): en ildring kryper innover til 55 % av salen, og alt
+     utenfor brenner (skade hvert halve sekund). Raskere, 4 storminger, spiraler mens han jager,
+     8 sjokklinjer, og en beleiringskjempe blant vaktene.
+   - SISTE DEKRET (under 10 %): dekreter regner ned uten stans – én der du står og to tilfeldige.
+   Alt fryser et øyeblikk når han bytter fase.
+2) Hitstop og slow-motion (gametime.hpp): all spill-logikk går i "spilltid" som kan fryses. Kort frys når
+   en elite dør, litt lengre for kyrassere, fanebærere og kjemper, og slow-motion når en miniboss faller.
+3) Drapskombo: drap som kommer innen 2 sek av hverandre teller opp (vises til høyre fra 10). Ved 50, 100,
+   200, 400 ... jubler publikum: +10 % liv og en regn av mynter rundt deg.
+4) Lavt liv (under 30 %): røde kanter på skjermen som pulserer fortere jo lavere du er.

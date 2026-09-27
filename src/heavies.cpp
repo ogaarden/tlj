@@ -75,7 +75,7 @@ Knight::Knight(Vector2 spawnPos, Texture2D tex) {
 }
 
 void Knight::update(Vector2 playerPosition) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     float dist;
     Vector2 dir = dirTo(position, playerPosition, &dist);
     timer -= dt;
@@ -103,7 +103,8 @@ void Knight::update(Vector2 playerPosition) {
 }
 
 void Knight::onDeath() {
-    // Rustningen smeller i gulvet: sjokkbølge og gnister
+    // Rustningen smeller i gulvet: kort frys, sjokkbølge og gnister
+    HitStop(0.07f, 0.05f);
     VfxShockwave(position, 120.0f, Color{ 200, 205, 225, 255 });
     VfxDeath(position, Color{ 220, 225, 240, 255 });
     VfxHit(position, WHITE);
@@ -211,7 +212,7 @@ Bannerman::Bannerman(Vector2 spawnPos, Texture2D tex) {
 
 void Bannerman::update(Vector2 playerPosition) {
     // Holder seg bak de andre: går mot ca. 330 fra spilleren og rygger hvis du kommer nær
-    float dt = GetFrameTime();
+    float dt = GameDt();
     float dist;
     Vector2 dir = dirTo(position, playerPosition, &dist);
     facing = dir;
@@ -221,6 +222,7 @@ void Bannerman::update(Vector2 playerPosition) {
 
 void Bannerman::onDeath() {
     // Fanen faller: vernet brister i en blå ring
+    HitStop(0.05f, 0.1f);
     VfxShockwave(position, auraRadius(), Color{ 90, 140, 255, 255 });
     VfxDeath(position, Color{ 120, 160, 255, 255 });
     PlaySfxPitch(Sfx::ZAP, 0.7f);
@@ -302,7 +304,7 @@ Giant::Giant(Vector2 spawnPos, Texture2D tex) {
 }
 
 void Giant::update(Vector2 playerPosition) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     float dist;
     Vector2 dir = dirTo(position, playerPosition, &dist);
     facing = dir;
@@ -324,6 +326,7 @@ void Giant::update(Vector2 playerPosition) {
 
 void Giant::onDeath() {
     // Kjempen brister og tre troll velter ut
+    HitStop(0.14f, 0.05f);
     for (int i = 0; i < 3; i++) {
         float a = i * 2.0f * PI / 3.0f + facing.x;
         pendingSpawns.push_back({ EnemyType::GOON, { position.x + cosf(a) * 40.0f, position.y + sinf(a) * 40.0f } });

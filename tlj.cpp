@@ -179,6 +179,7 @@ int main() {
     EchelonModifiers runModifiers;                  // Alle stackede effekter for denne runden
     bool inBossArena = false;
     int bossId = -1;
+    float fireTickTimer = 0.0f; // Ildringen i tronsalen gjør skade med jevne mellomrom
     float arenaIntroTimer = 0.0f;
 
     // --- CURSES (echelon 5+) ---
@@ -231,6 +232,13 @@ int main() {
     std::string minibossAnnounceText;
     float worldChestTimer = 0.0f; // Nedtelling til neste skattekiste som dukker opp i slottet
     int lastKillCount = 0;         // For Vampyrtann (liv per drap)
+    // Drapskombo: drap som kommer tett (innen 2 sek) teller opp. Ved 50, 100, 200 ... jubler
+    // publikum: litt liv tilbake og en regn av mynter.
+    int comboCount = 0;
+    float comboTimer = 0.0f;
+    int comboNextCheer = 50;
+    float cheerTime = -100.0f;     // Når publikum sist jublet (for teksten)
+    int cheerAt = 0;
     float lifeStealBank = 0.0f;
 
     // --- SPAWNER OG FIENDER ---
@@ -272,10 +280,15 @@ int main() {
         minibossOrder = { MinibossKind::EXECUTIONER, MinibossKind::MAGUS, MinibossKind::IRON_KNIGHT };
         for (int i = (int)minibossOrder.size() - 1; i > 0; i--) std::swap(minibossOrder[i], minibossOrder[GetRandomValue(0, i)]);
         lastKillCount = 0;
+        comboCount = 0;
+        comboTimer = 0.0f;
+        comboNextCheer = 50;
+        cheerTime = -100.0f;
         lifeStealBank = 0.0f;
         Enemy::chestCooldown = 0.0f;
         Enemy::pendingSpawns.clear();
         g_corpses.clear();
+        ResetTimeScale();
         Weapon::pendingHeal = 0.0f;
         rerollsLeft = 3;
         vacuumTimer = 0.0f;
@@ -337,7 +350,9 @@ int main() {
     };
 
     while (!WindowShouldClose()) {
-        float deltaTime = GetFrameTime();
+        // Spilltid: kan fryses et øyeblikk (hitstop) når noe stort skjer, se gametime.hpp
+        UpdateTimeScale(GetFrameTime());
+        float deltaTime = GameDt();
         UI::HandleWindowShortcuts();
 
         // Musikk: menyvals i menyene, drivende spor i spillet, bossmusikk i tronsalen
@@ -569,6 +584,8 @@ int main() {
                 boss->applyEchelonModifiers(runModifiers.enemyHpMult, runModifiers.enemyDamageMult, runModifiers.enemySpeedMult);
                 bossId = boss->id;
                 boss->thronePos = { Arena::CENTER.x, Arena::CENTER.y - Arena::RADIUS + 95.0f }; // Foran tronen
+                boss->arenaCenter = Arena::CENTER;
+                boss->arenaRadius = Arena::RADIUS;
                 enemies.push_back(std::move(boss));
             }
 
@@ -664,6 +681,29 @@ int main() {
             // Den rasende kongen kaller inn lakeier i en ring rundt seg
             Boss* king = nullptr;
             for (auto& e : enemies) if (e->id == bossId) king = static_cast<Boss*>(e.get());
+            if (king && (king->knightsRequested > 0 || king->giantsRequested > 0)) {
+                // Tunge vakter: kyrassere (fase 2) og en beleiringskjempe (fase 3) ved kanten av salen
+                for (int i = 0; i < king->knightsRequested + king->giantsRequested; i++) {
+                    bool giant = i >= king->knightsRequested;
+                    float a = GetRandomValue(0, 628) / 100.0f;
+                    Vector2 pos = ClampToArena({ Arena::CENTER.x + cosf(a) * Arena::RADIUS, Arena::CENTER.y + sinf(a) * Arena::RADIUS }, 60.0f);
+                    spawner.spawnEnemy(giant ? EnemyType::GIANT : EnemyType::KNIGHT, pos, enemies, enemyTexture);
+                    VfxShockwave(pos, 90.0f, Color{ 255, 80, 60, 255 });
+                }
+                king->knightsRequested = 0;
+                king->giantsRequested = 0;
+            }
+            // Ildringen: alt utenfor brenner (skade hvert halve sekund)
+            if (king && player.invulnerableTimer <= 0.0f && Vector2Distance(player.position, Arena::CENTER) > king->fireRadius) {
+                fireTickTimer -= deltaTime;
+                if (fireTickTimer <= 0.0f) {
+                    fireTickTimer = 0.5f;
+                    hurtPlayer((float)king->damage * 0.4f);
+                    VfxHit(player.position, Color{ 255, 140, 40, 255 });
+                }
+            } else {
+                fireTickTimer = 0.0f;
+            }
             if (king && king->summonsRequested > 0) {
                 int n = king->summonsRequested;
                 king->summonsRequested = 0;
@@ -781,6 +821,23 @@ int main() {
             {
                 int kills = Enemy::killCount - lastKillCount;
                 lastKillCount = Enemy::killCount;
+                // Drapskombo
+                if (kills > 0) { comboCount += kills; comboTimer = 2.0f; }
+                comboTimer -= deltaTime;
+                if (comboTimer <= 0.0f) { comboCount = 0; comboNextCheer = 50; }
+                if (comboCount >= comboNextCheer) {
+                    cheerAt = comboNextCheer;
+                    comboNextCheer *= 2;
+                    cheerTime = (float)GetTime();
+                    player.hp = std::min(player.maxHp, player.hp + player.maxHp * 0.1f);
+                    for (int i = 0; i < 6 + cheerAt / 50; i++) {
+                        float a = GetRandomValue(0, 628) / 100.0f;
+                        float d = (float)GetRandomValue(40, 140);
+                        pickups.push_back({ { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d }, 1, GOLD, 5.0f, 30.0f, PickupType::COIN });
+                    }
+                    VfxShockwave(player.position, 150.0f, GOLD);
+                    PlaySfxPitch(Sfx::LEVEL_UP, 1.3f);
+                }
                 lifeStealBank += kills * player.lifePerKill + Weapon::pendingHeal;
                 Weapon::pendingHeal = 0.0f;
                 if (lifeStealBank >= 1.0f) {
@@ -855,7 +912,7 @@ int main() {
 
             // Fjerne døde fiender (f.eks. kamikaze som har sprengt seg selv)
             for (auto& e : enemies) {
-                if (e->isDead()) { e->onDeath(); KeepCorpse(e); }
+                if (e->isDead()) { e->onDeath(); KillFeel(*e); KeepCorpse(e); }
             }
             // Likene velter og synker ned
             for (auto& c : g_corpses) c.t += deltaTime;
@@ -1693,6 +1750,41 @@ int main() {
             hud.cameraYaw = camera.rotation;
             hud.showMinimap = showMinimap;
             DrawGameHud(hud);
+
+            // --- LAVT LIV: røde, pulserende kanter på skjermen ---
+            if (player.hp < player.maxHp * 0.3f && player.hp > 0.0f) {
+                float danger = 1.0f - player.hp / (player.maxHp * 0.3f);          // 0 -> 1 jo lavere
+                float pulse = 0.55f + 0.45f * sinf(uiTime * (5.0f + 5.0f * danger));
+                unsigned char a = (unsigned char)(150 * (0.35f + 0.65f * danger) * pulse);
+                int sw = GetScreenWidth(), sh = GetScreenHeight();
+                int edge = (int)(sh * 0.22f);
+                Color red = { 170, 0, 20, a }, clear = { 170, 0, 20, 0 };
+                DrawRectangleGradientV(0, 0, sw, edge, red, clear);
+                DrawRectangleGradientV(0, sh - edge, sw, edge, clear, red);
+                DrawRectangleGradientH(0, 0, edge, sh, red, clear);
+                DrawRectangleGradientH(sw - edge, 0, edge, sh, clear, red);
+            }
+
+            // --- DRAPSKOMBO (høyre side, under kartet) ---
+            if (comboCount >= 10) {
+                UI::BeginCanvas();
+                float k = std::min(1.0f, comboTimer / 2.0f);
+                float pop = 1.0f + 0.25f * std::max(0.0f, comboTimer - 1.8f) / 0.2f; // Spretter litt ved hvert drap
+                Color c = comboCount >= 200 ? Color{ 255, 90, 60, 255 } : comboCount >= 100 ? Color{ 255, 160, 60, 255 } : UI::GOLD_LIGHT;
+                UI::DrawCenteredText(TextFormat("%d", comboCount), 1175.0f, 300.0f, 44.0f * pop, c, 3.0f);
+                UI::DrawCenteredText("KOMBO", 1175.0f, 348.0f, 16.0f, Fade(WHITE, 0.85f), 2.0f);
+                DrawRectangle(1125, 370, 100, 5, Fade(BLACK, 0.5f));
+                DrawRectangle(1125, 370, (int)(100 * k), 5, c);
+                UI::EndCanvas();
+            }
+            if (uiTime - cheerTime < 2.2f) {
+                float t = (float)(uiTime - cheerTime);
+                float a = t < 1.7f ? 1.0f : (2.2f - t) / 0.5f;
+                UI::BeginCanvas();
+                UI::DrawCenteredText("PUBLIKUM JUBLER!", CX, 250.0f, 42.0f + 6.0f * std::max(0.0f, 0.3f - t) / 0.3f, Fade(UI::GOLD_LIGHT, a), 3.0f);
+                UI::DrawCenteredText(TextFormat("%d drap paa rad  -  +10%% liv og en regn av gull", cheerAt), CX, 298.0f, 18.0f, Fade(WHITE, a), 2.0f);
+                UI::EndCanvas();
+            }
 
             // --- MINIBOSS-VARSEL ---
             {

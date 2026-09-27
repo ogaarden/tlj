@@ -1,4 +1,5 @@
 #include "player.hpp"
+#include "gametime.hpp"
 #include "castle.hpp"
 #include "render3d.hpp"
 #include "clowns.hpp"
@@ -11,7 +12,7 @@
 
 void Player::update(float cameraRotation)
 {
-    float deltaTime = GetFrameTime();
+    float deltaTime = GameDt();
 
     if (invulnerableTimer > 0.0f) invulnerableTimer -= deltaTime;
     if (dashCooldown > -1.0f) dashCooldown -= deltaTime; // Går litt under 0, så klar-blinket vises kort

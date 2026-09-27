@@ -7,6 +7,7 @@
 #include <vector>
 #include <memory>
 #include "sprites.hpp"
+#include "gametime.hpp"
 
 enum class EnemyType {
     FOOTMAN,
@@ -170,9 +171,13 @@ public:
 // Jager spilleren, stopper opp for å varsle, og dasher så mot spilleren.
 class Boss : public Enemy {
 private:
-    // Fase 1 (TRONE): sitter på tronen og skyter mønstre, sender dekreter og kaller inn vakter.
-    // Under 55 % HP: HOPPER ned (LEAP) og går over til fase 2 (JAKT): jager, stormer og tramper.
-    // Under 25 % HP: rasende – raskere, og skyter spiraler mens han jager.
+    // Fase 1 (TRONE, 100-65 %): seks mønstre på rundgang: spiral, vifter, dekreter, vakter,
+    //   septerstråler som feier rundt salen og et rutenett-bombardement.
+    // Fase 2 (JAKT, 65-30 %): hopper ned, jager, stormer 3 ganger og tramper (med sjokklinjer
+    //   av eksplosjoner ut fra seg). Kyrassere blant vaktene.
+    // Fase 3 (RASENDE, under 30 %): tronsalen brenner – en ildring kryper innover og gjør skade
+    //   utenfor. Raskere, fire storminger, spiraler mens han jager, en kjempe blant vaktene.
+    // Under 10 %: SISTE DEKRET – dekreter regner ned uten stans.
     enum class Mode { THRONE, LEAP, HUNT };
     enum class Phase { CHASE, WINDUP, DASH, STOMP };
     Mode mode = Mode::THRONE;
@@ -191,7 +196,10 @@ private:
     int volleysLeft = 0;
     int dashesLeft = 0;
     float chaseShotTimer = 0.0f;
-    struct Decree { Vector2 pos; float t; };     // Rød sirkel som eksploderer når t når 1
+    struct Decree { Vector2 pos; float t; };     // Rød sirkel som eksploderer når t når 1 (t < 0 = venter)
+    float beamAngle = 0.0f;     // Septerstrålene
+    float lastDecreeRain = 0.0f;
+    bool finalDecree = false;
     std::vector<Decree> decrees;
     Vector2 leapFrom = { 0, 0 }, leapTo = { 0, 0 };
 
@@ -205,6 +213,11 @@ public:
     float enragedAt = -100.0f;      // Når siste store fasebytte skjedde (for varselteksten)
     const char* announcement = "";  // Teksten som vises ("KONGEN REISER SEG!" osv.)
     int summonsRequested = 0;       // Hvor mange vakter spillet skal kalle inn rundt kongen
+    int knightsRequested = 0;       // ... og hvor mange kyrassere
+    int giantsRequested = 0;        // ... og beleiringskjemper
+    Vector2 arenaCenter = { 0, 0 }; // Settes av spillet
+    float arenaRadius = 650.0f;
+    float fireRadius = 1e9f;        // Fase 3: alt utenfor denne radiusen brenner (spillet gjør skaden)
     bool onThrone() const { return mode == Mode::THRONE; }
 
     Boss(Vector2 spawnPos, Texture2D tex);
@@ -417,6 +430,12 @@ struct Corpse {
 };
 inline std::vector<Corpse> g_corpses;
 constexpr float CORPSE_TIME = 0.7f;
+
+// Litt "tyngde" når noe stort dør: kort frys for elites, slow-motion for minibosser
+inline void KillFeel(const Enemy& e) {
+    if (e.miniboss) HitStop(0.9f, 0.2f);
+    else if (e.elite) HitStop(0.035f, 0.15f);
+}
 
 // Flytter en død fiende over til likene (den er ellers ferdig). Skattmesteren som rømte blir ikke lik.
 inline void KeepCorpse(std::unique_ptr<Enemy>& e) {

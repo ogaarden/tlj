@@ -66,7 +66,7 @@ std::unique_ptr<Enemy> CreateMiniboss(MinibossKind kind, int index, Vector2 pos,
 // Bøddelen: går mot deg og løfter øksa. Rød sirkel viser hvor den treffer.
 // ---------------------------------------------------------------------
 void Executioner::update(Vector2 playerPos) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     Vector2 toPlayer = Vector2Subtract(playerPos, position);
     float dist = Vector2Length(toPlayer);
     timer -= dt;
@@ -117,7 +117,7 @@ void Executioner::drawVfx() const {
 // Hoffmagikeren: holder avstand, skyter ringer av magiske kuler og teleporterer
 // ---------------------------------------------------------------------
 void Magus::update(Vector2 playerPos) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     Vector2 toPlayer = Vector2Subtract(playerPos, position);
     float dist = Vector2Length(toPlayer);
     Vector2 dir = dist > 0.01f ? Vector2Scale(toPlayer, 1.0f / dist) : Vector2{ 0, 1 };
@@ -170,7 +170,7 @@ void Magus::drawVfx() const {
 // Jernridderen: sikter (rød linje), og stormer så i full fart gjennom deg
 // ---------------------------------------------------------------------
 void IronKnight::update(Vector2 playerPos) {
-    float dt = GetFrameTime();
+    float dt = GameDt();
     Vector2 toPlayer = Vector2Subtract(playerPos, position);
     float dist = Vector2Length(toPlayer);
     Vector2 dir = dist > 0.01f ? Vector2Scale(toPlayer, 1.0f / dist) : Vector2{ 0, 1 };
