@@ -317,4 +317,16 @@ Notes:
 3) Nye modeller: statuer på trinnet marmorsokkel, fanestativ med frynser og kronemerke,
    våpenstativ og fontene. All pynt er litt større enn før.
 
+// 20 oktober – detaljerte gulv i salene
+1) Salene har fått egne teksturer (assets/floor/, laget med tools/gen_room_textures.py – kjør det
+   på nytt for å justere dem). Alle flis-teksturene er sømløse:
+   - Hagegården: gress med strå og små blomster, grusganger av småstein, steinkant og blomsterbed
+     med masse blomster rundt hver hekk
+   - Rustkammeret: skiferheller med fuger, sprekker og slitasje, jernramme med nagler og
+     et skjold med kryssede sverd i midten
+   - Statuegalleriet og Fanehallen: vevde løpere med rutebord og kronemedaljonger / liljer
+   - Porselenssalongen: stort malt delftteppe med skjellbord, blomsterkrans og stjerne
+   - Storsalen: innlagt marmormedaljong med kompassrose og marmorårer
+2) Teksturene ligger fast på gulvet (verdenskoordinater), så de henger sammen på tvers av formene.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

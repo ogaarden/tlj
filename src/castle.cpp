@@ -488,62 +488,174 @@ float decorCover(const DecorItem& d, const Camera3D& cam, Vector2 focus) {
     return Clamp(1.0f - dist / MARGIN, 0.0f, 1.0f);
 }
 
+// --- TEKSTURER til salenes gulv (laget av tools/gen_room_textures.py) ---
+struct FloorTex { Texture2D t{}; bool ok = false; };
+FloorTex texGrass, texGravel, texSlate, texFlowers, texRunnerRed, texRunnerBlue, texDelftRug, texMedallion;
+
+void loadFloorTex(FloorTex& f, const char* path, bool tiled) {
+    if (!FileExists(path)) return;
+    f.t = LoadTexture(path);
+    GenTextureMipmaps(&f.t);
+    SetTextureFilter(f.t, TEXTURE_FILTER_TRILINEAR);
+    SetTextureWrap(f.t, tiled ? TEXTURE_WRAP_REPEAT : TEXTURE_WRAP_CLAMP);
+    f.ok = f.t.id != 0;
+}
+
+// Teksturerte former på gulvet. UV følger verdenskoordinatene (scale = verdensenheter per tekstur),
+// så teksturen ligger fast på gulvet og går sømløst over flere former.
+void texBegin(const FloorTex& f) {
+    rlDrawRenderBatchActive();
+    rlDisableBackfaceCulling();
+    rlSetTexture(f.t.id);
+    rlBegin(RL_TRIANGLES);
+}
+void texEnd() {
+    rlEnd();
+    rlSetTexture(0);
+    rlDrawRenderBatchActive();
+    rlEnableBackfaceCulling();
+}
+void texVertex(Vector2 p, float u, float v, Color c) {
+    rlColor4ub(c.r, c.g, c.b, c.a);
+    rlTexCoord2f(u, v);
+    rlVertex2f(p.x, p.y);
+}
+void texQuadWorld(Vector2 a, Vector2 b, Vector2 c, Vector2 d, float scale, Color tint) {
+    auto V = [&](Vector2 p) { texVertex(p, p.x / scale, p.y / scale, tint); };
+    V(a); V(b); V(c); V(a); V(c); V(d);
+}
+
+// Firkant med verdens-UV
+void texRect(const FloorTex& f, Rectangle r, float scale, Color tint = WHITE) {
+    if (!f.ok) { DrawRectangleRec(r, tint); return; }
+    texBegin(f);
+    texQuadWorld({ r.x, r.y }, { r.x + r.width, r.y }, { r.x + r.width, r.y + r.height }, { r.x, r.y + r.height }, scale, tint);
+    texEnd();
+}
+
+// Ring (eller skive når inner = 0) med verdens-UV
+void texRing(const FloorTex& f, Vector2 c, float inner, float outer, float scale, Color tint = WHITE) {
+    if (!f.ok) { DrawRing(c, inner, outer, 0.0f, 360.0f, 64, tint); return; }
+    texBegin(f);
+    const int SEG = 72;
+    for (int i = 0; i < SEG; i++) {
+        float a0 = i * 2.0f * PI / SEG, a1 = (i + 1) * 2.0f * PI / SEG;
+        Vector2 o0 = { c.x + cosf(a0) * outer, c.y + sinf(a0) * outer }, o1 = { c.x + cosf(a1) * outer, c.y + sinf(a1) * outer };
+        Vector2 i0 = { c.x + cosf(a0) * inner, c.y + sinf(a0) * inner }, i1 = { c.x + cosf(a1) * inner, c.y + sinf(a1) * inner };
+        texQuadWorld(i0, o0, o1, i1, scale, tint);
+    }
+    texEnd();
+}
+
+// Stripe fra a til b med en viss bredde (grusganger)
+void texStrip(const FloorTex& f, Vector2 a, Vector2 b, float width, float scale, Color tint = WHITE) {
+    Vector2 d = Vector2Normalize(Vector2Subtract(b, a));
+    Vector2 n = { -d.y * width / 2.0f, d.x * width / 2.0f };
+    if (!f.ok) { DrawLineEx(a, b, width, tint); return; }
+    texBegin(f);
+    texQuadWorld(Vector2Add(a, n), Vector2Add(b, n), Vector2Subtract(b, n), Vector2Subtract(a, n), scale, tint);
+    texEnd();
+}
+
+// Hele teksturen lagt på en rund skive (tepper og medaljonger)
+void texDiscMapped(const FloorTex& f, Vector2 c, float r) {
+    if (!f.ok) { DrawCircleV(c, r, WHITE); return; }
+    texBegin(f);
+    const int SEG = 96;
+    for (int i = 0; i < SEG; i++) {
+        float a0 = i * 2.0f * PI / SEG, a1 = (i + 1) * 2.0f * PI / SEG;
+        texVertex(c, 0.5f, 0.5f, WHITE);
+        texVertex({ c.x + cosf(a0) * r, c.y + sinf(a0) * r }, 0.5f + cosf(a0) * 0.5f, 0.5f + sinf(a0) * 0.5f, WHITE);
+        texVertex({ c.x + cosf(a1) * r, c.y + sinf(a1) * r }, 0.5f + cosf(a1) * 0.5f, 0.5f + sinf(a1) * 0.5f, WHITE);
+    }
+    texEnd();
+}
+
+// Løper: teksturen går på tvers (u) og gjentas langs (v)
+void texRunner(const FloorTex& f, Vector2 c, float width, float length, bool alongY) {
+    if (!f.ok) { DrawRectangleRec(alongY ? Rectangle{ c.x - width / 2, c.y - length / 2, width, length } : Rectangle{ c.x - length / 2, c.y - width / 2, length, width }, CARPET_RED); return; }
+    float vlen = length / width;
+    texBegin(f);
+    Vector2 p[4]; float uv[4][2];
+    if (alongY) {
+        p[0] = { c.x - width / 2, c.y - length / 2 }; p[1] = { c.x + width / 2, c.y - length / 2 };
+        p[2] = { c.x + width / 2, c.y + length / 2 }; p[3] = { c.x - width / 2, c.y + length / 2 };
+    } else {
+        p[0] = { c.x - length / 2, c.y + width / 2 }; p[1] = { c.x - length / 2, c.y - width / 2 };
+        p[2] = { c.x + length / 2, c.y - width / 2 }; p[3] = { c.x + length / 2, c.y + width / 2 };
+    }
+    float u[4] = { 0, 1, 1, 0 }, v[4] = { 0, 0, vlen, vlen };
+    (void)uv;
+    int idx[6] = { 0, 1, 2, 0, 2, 3 };
+    for (int k : idx) texVertex(p[k], u[k], v[k], WHITE);
+    texEnd();
+}
+
 // --- GULVET I HVER SAL: løpere, gress, tepper og steingulv som gir salene sitt eget preg ---
 void drawRoomFloor(const RoomInfo& r) {
     Vector2 c = r.center;
-    auto rect = [&](float w, float h, Color col) { // w langs midtgangen (dreies med salen)
-        float rw = r.turn ? h : w, rh = r.turn ? w : h;
-        DrawRectangleRec({ c.x - rw / 2.0f, c.y - rh / 2.0f, rw, rh }, col);
-    };
+    const Color STONE_LIGHT = { 205, 198, 188, 255 };
     switch (r.room) {
         case Room::STATUES:
-            // Lang løper mellom statuerekkene, med gullkant
-            rect(260.0f, 1200.0f, CARPET_GOLD);
-            rect(236.0f, 1176.0f, shade(CARPET_RED, -15));
-            rect(150.0f, 1090.0f, CARPET_RED);
+            // Vevd rød løper med kronemedaljonger mellom statuerekkene, med steinkant
+            DrawRectangleRec(r.turn ? Rectangle{ c.x - 616, c.y - 146, 1232, 292 } : Rectangle{ c.x - 146, c.y - 616, 292, 1232 }, Color{ 60, 50, 50, 90 });
+            texRunner(texRunnerRed, c, 270.0f, 1200.0f, !r.turn);
             break;
         case Room::BANNERS:
-            // Koboltblå løper med hvit kant
-            rect(250.0f, 1250.0f, Color{ 235, 232, 225, 255 });
-            rect(226.0f, 1226.0f, Color{ 35, 60, 150, 255 });
+            // Vevd koboltblå løper med liljer
+            DrawRectangleRec(r.turn ? Rectangle{ c.x - 636, c.y - 141, 1272, 282 } : Rectangle{ c.x - 141, c.y - 636, 282, 1272 }, Color{ 40, 40, 60, 90 });
+            texRunner(texRunnerBlue, c, 260.0f, 1240.0f, !r.turn);
             break;
-        case Room::ARMORY:
-            // Mørkt skifergulv med jernkant (rustkammeret er et kaldt sted)
-            rect(1000.0f, 1000.0f, Color{ 70, 68, 78, 255 });
-            rect(980.0f, 980.0f, Color{ 92, 90, 100, 255 });
-            for (int k = -4; k <= 4; k++) {
-                float o = k * 108.0f;
-                DrawLineEx({ c.x + o, c.y - 490.0f }, { c.x + o, c.y + 490.0f }, 3.0f, Color{ 70, 68, 78, 255 });
-                DrawLineEx({ c.x - 490.0f, c.y + o }, { c.x + 490.0f, c.y + o }, 3.0f, Color{ 70, 68, 78, 255 });
+        case Room::ARMORY: {
+            // Skiferheller med jernramme og nagler
+            Rectangle area = { c.x - 520, c.y - 520, 1040, 1040 };
+            DrawRectangleRec({ area.x - 16, area.y - 16, area.width + 32, area.height + 32 }, Color{ 48, 46, 54, 255 });
+            texRect(texSlate, area, 256.0f);
+            DrawRectangleLinesEx({ area.x - 10, area.y - 10, area.width + 20, area.height + 20 }, 8.0f, Color{ 92, 90, 98, 255 });
+            for (int k = 0; k <= 16; k++) {
+                float t = area.x - 10 + k * (area.width + 20) / 16.0f;
+                for (float yy : { area.y - 6, area.y + area.height + 6 }) DrawCircleV({ t, yy }, 3.5f, Color{ 150, 148, 158, 255 });
+                float t2 = area.y - 10 + k * (area.height + 20) / 16.0f;
+                for (float xx : { area.x - 6, area.x + area.width + 6 }) DrawCircleV({ xx, t2 }, 3.5f, Color{ 150, 148, 158, 255 });
+            }
+            // Rundt skjold-emblem i midten
+            DrawCircleV(c, 120.0f, Color{ 222, 178, 64, 255 });
+            DrawCircleV(c, 108.0f, Color{ 140, 28, 40, 255 });
+            DrawRing(c, 60.0f, 68.0f, 0.0f, 360.0f, 48, Color{ 222, 178, 64, 255 });
+            for (int k = 0; k < 2; k++) {                                 // Kryssede sverd
+                float a = (45.0f + k * 90.0f) * DEG2RAD;
+                Vector2 d = { cosf(a) * 95.0f, sinf(a) * 95.0f };
+                DrawLineEx(Vector2Subtract(c, d), Vector2Add(c, d), 9.0f, Color{ 210, 214, 225, 255 });
             }
             break;
-        case Room::GARDEN:
-            // Gressplen rundt fontenen, med grusgang og steinkant
-            DrawCircleV(c, 600.0f, Color{ 150, 140, 120, 255 });
-            DrawCircleV(c, 585.0f, Color{ 86, 140, 76, 255 });
-            DrawRing(c, 250.0f, 330.0f, 0.0f, 360.0f, 72, Color{ 205, 190, 160, 255 });     // Grusring
-            DrawCircleV(c, 160.0f, Color{ 205, 190, 160, 255 });                             // Grus rundt fontenen
-            for (int k = 0; k < 4; k++) {                                                    // Grusganger ut
+        }
+        case Room::GARDEN: {
+            // Gressplen med steinkant, grusganger, grus rundt fontenen og blomsterbed rundt hekkene
+            texRing(texSlate, c, 580.0f, 612.0f, 128.0f, STONE_LIGHT);
+            texRing(texGrass, c, 0.0f, 582.0f, 170.0f);
+            for (int k = 0; k < 4; k++) {
                 Vector2 dir = { cosf(k * PI / 2.0f), sinf(k * PI / 2.0f) };
-                DrawLineEx(Vector2Add(c, Vector2Scale(dir, 150.0f)), Vector2Add(c, Vector2Scale(dir, 590.0f)), 70.0f, Color{ 205, 190, 160, 255 });
+                texStrip(texGravel, Vector2Add(c, Vector2Scale(dir, 150.0f)), Vector2Add(c, Vector2Scale(dir, 584.0f)), 80.0f, 128.0f);
+            }
+            texRing(texGravel, c, 245.0f, 330.0f, 128.0f);
+            texRing(texGravel, c, 0.0f, 175.0f, 128.0f);
+            texRing(texSlate, c, 168.0f, 182.0f, 128.0f, STONE_LIGHT);
+            for (int k = 0; k < 8; k++) {
+                float a = (22.5f + k * 45.0f) * DEG2RAD;
+                Vector2 bed = { c.x + cosf(a) * 420.0f, c.y + sinf(a) * 420.0f };
+                texRing(texSlate, bed, 78.0f, 90.0f, 128.0f, STONE_LIGHT);
+                texRing(texFlowers, bed, 0.0f, 80.0f, 110.0f);
             }
             break;
+        }
         case Room::PORCELAIN:
-            // Stort rundt delftteppe: koboltblått med hvite ringer
-            DrawCircleV(c, 560.0f, Color{ 240, 238, 232, 255 });
-            DrawCircleV(c, 540.0f, Color{ 35, 60, 150, 255 });
-            DrawRing(c, 380.0f, 396.0f, 0.0f, 360.0f, 72, Color{ 240, 238, 232, 255 });
-            DrawRing(c, 150.0f, 160.0f, 0.0f, 360.0f, 48, Color{ 240, 238, 232, 255 });
-            for (int k = 0; k < 8; k++) {                                                    // Stjerne i midten
-                float a = k * PI / 4.0f;
-                DrawLineEx(c, { c.x + cosf(a) * 140.0f, c.y + sinf(a) * 140.0f }, 10.0f, Color{ 240, 238, 232, 255 });
-            }
+            // Stort rundt delftteppe
+            DrawCircleV({ c.x + 6, c.y + 8 }, 566.0f, Color{ 0, 0, 0, 50 });
+            texDiscMapped(texDelftRug, c, 560.0f);
             break;
         case Room::GRAND:
-            // Stor marmorplate rundt statuen i midten
-            DrawCircleV(c, 200.0f, CARPET_GOLD);
-            DrawCircleV(c, 188.0f, Color{ 225, 215, 198, 255 });
-            DrawRing(c, 120.0f, 128.0f, 0.0f, 360.0f, 48, CARPET_GOLD);
+            // Innlagt marmormedaljong med kompassrose under statuen
+            texDiscMapped(texMedallion, c, 230.0f);
             break;
     }
 }
@@ -660,6 +772,14 @@ void InitCastleTextures() {
                 dst[y * ATLAS_TILE * 2 + i * ATLAS_TILE + x] = px[y * ATLAS_TILE + x];
         UnloadImage(img);
     }
+    loadFloorTex(texGrass, "assets/floor/grass.png", true);
+    loadFloorTex(texGravel, "assets/floor/gravel.png", true);
+    loadFloorTex(texSlate, "assets/floor/slate.png", true);
+    loadFloorTex(texFlowers, "assets/floor/flowerbed.png", true);
+    loadFloorTex(texRunnerRed, "assets/floor/runner_red.png", true);
+    loadFloorTex(texRunnerBlue, "assets/floor/runner_blue.png", true);
+    loadFloorTex(texDelftRug, "assets/floor/delft_rug.png", false);
+    loadFloorTex(texMedallion, "assets/floor/medallion.png", false);
     floorAtlas = LoadTextureFromImage(atlas);
     UnloadImage(atlas);
     GenTextureMipmaps(&floorAtlas);
