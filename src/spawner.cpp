@@ -20,13 +20,14 @@
 // =====================================================================
 namespace Difficulty {
     constexpr float SPAWN_DISTANCE = 950.0f;   // Utenfor skjermen, også med kameraet zoomet ut
-    constexpr int MAX_ALIVE = 800;             // Tak på fiender samtidig (ytelse)
+    constexpr int MAX_ALIVE = 480;             // Tak på fiender samtidig (lesbarhet og ytelse)
 
-    // Gammel kurve (8 + 4n + 0.55n²) + et kubisk ledd som først merkes etter ca. 2 min
+    // Referansekurve for XP: så mye XP en wave skal gi totalt (uansett hvor mange fiender den har)
     float baseWaveSize(int n) { return 10.0f + 5.0f * n + 0.6f * n * n; }
+    // Antall fiender per wave: vokser jevnt, men flater ut sent. Sent i runden kommer i stedet
+    // tunge fiender (kyrassere, fanebærere og kjemper) – færre figurer, men farligere.
     int waveSize(int n) {
-        float late = (float)std::max(0, n - 3);
-        return (int)(baseWaveSize(n) + 0.09f * late * late * late);
+        return (int)std::min(300.0f, 10.0f + 5.0f * n + 0.45f * n * n);
     }
     // XP per fiende: like mye XP per wave som med den gamle kurven (litt mindre sent)
     float xpScale(int n) {
@@ -40,18 +41,18 @@ namespace Difficulty {
 
     // Fiender blir sterkere jo lenger runden varer (m = minutter). Stiger raskere tidlig enn før,
     // så levelene dine ikke løper fra fiendene.
-    float hpMult(float m)     { return 1.0f + 0.25f * m + 0.045f * m * m; }  // 2 min: x1.7, 5 min: x3.4, 10 min: x8
+    float hpMult(float m)     { return 1.0f + 0.25f * m + 0.055f * m * m; }  // 2 min: x1.7, 5 min: x3.6, 10 min: x9
     float damageMult(float m) { return 1.0f + 0.14f * m; }                   // 10 min: x2.4
     float speedMult(float m)  { return fminf(1.45f, 1.0f + 0.035f * m); }    // 10 min: +35 %, maks +45 %
 
-    // Sjanse for elite: 0 det første 1.5 minuttet, så 3 % + 0.8 % per minutt (maks 14 %)
-    float eliteChance(float m) { return m < 1.5f ? 0.0f : fminf(0.14f, 0.03f + 0.008f * (m - 1.5f)); }
+    // Sjanse for elite: 0 det første 1.5 minuttet, så 3 % + 1.2 % per minutt (maks 20 %)
+    float eliteChance(float m) { return m < 1.5f ? 0.0f : fminf(0.20f, 0.03f + 0.012f * (m - 1.5f)); }
 
     // Horde midt i hver wave fra 1:15 (1:15, 1:45, 2:15 ...), altså hvert 30. sekund.
     // Hvert 2. minutt fra 2:45 (2:45, 4:45, 6:45 ...) er horden et stormangrep.
     bool isHordeWave(int waveIndex) { return waveIndex >= 2; }
     bool isAssaultWave(int waveIndex) { return waveIndex >= 5 && (waveIndex - 5) % 4 == 0; }
-    int hordeSize(int n) { return (int)(12 + 4 * n + 0.15f * n * n); }
+    int hordeSize(int n) { return (int)(12 + 3 * n + 0.08f * n * n); }
 }
 
 std::vector<WaveDefinition> BuildWaves() {
@@ -77,6 +78,11 @@ std::vector<WaveDefinition> BuildWaves() {
                                           { EnemyType::ARCHER, part(0.09f) }, { EnemyType::HOUND, std::max(1, part(0.025f)) } };
             if (n >= 7) { g.push_back({ EnemyType::PRIEST, std::max(1, part(0.02f)) }); g.push_back({ EnemyType::DRUMMER, std::max(1, part(0.02f)) }); }
             if (n >= 9) g.push_back({ EnemyType::CANNONEER, std::max(1, part(0.025f)) });
+            // Tunge fiender: få, men de merkes. Kyrassere fra 4 min, fanebærere fra 5 min,
+            // beleiringskjemper fra 6:30 (én til å begynne med, så flere)
+            if (n >= 9)  g.push_back({ EnemyType::KNIGHT, 1 + (n - 9) / 2 });
+            if (n >= 11) g.push_back({ EnemyType::BANNERMAN, 1 + (n - 11) / 4 });
+            if (n >= 14) g.push_back({ EnemyType::GIANT, 1 + (n - 14) / 3 });
             waves.push_back({ n, g });
         }
     }
@@ -235,8 +241,7 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
             lastHordeKind = HordeKind::RING;
             int count = Difficulty::hordeSize(n);
             // Blanding som blir tøffere: lakeier først, så soldater og troll, så armbrøstskyttere.
-            // Etter 7 min kommer hordene i to ringer, den ytre litt lenger ute.
-            int rings = n >= 14 ? 2 : 1;
+            int rings = 1; // Én ring: sent i runden er det heller de tunge fiendene som gjør det farlig
             for (int ring = 0; ring < rings; ring++) {
                 float dist = Difficulty::SPAWN_DISTANCE + ring * 220.0f;
                 for (int i = 0; i < count; i++) {
@@ -246,6 +251,7 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
                     if (n >= 6) type = (i % 4 == 0) ? EnemyType::GOON : EnemyType::FOOTMAN;
                     if (n >= 10 && i % 5 == 2) type = EnemyType::ARCHER;
                     if (n >= 12 && i % 11 == 6) type = EnemyType::DRUMMER; // Hele hordens ring går fortere
+                    if (n >= 12 && ring == 0 && i % 12 == 3) type = EnemyType::KNIGHT;
                     if (ring == 1) type = (i % 2 == 0) ? EnemyType::FOOTMAN : EnemyType::ARCHER;
                     spawnEnemy(type, pos, enemies, enemyTexture, 0.3f); // Hordefiender gir mindre XP
                     // Den første er hordens kaptein: en elite (uten kiste)
@@ -274,7 +280,7 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
         } else {
             spawnEnemy(nextType, spawnPos, enemies, enemyTexture);
             // Mobilisering: en ekstra fiende for hver som kommer
-            if (decree == Decree::MUSTER) spawnEnemy(nextType, Vector2Add(spawnPos, { 40.0f, 30.0f }), enemies, enemyTexture);
+            if (decree == Decree::MUSTER && nextType != EnemyType::GIANT) spawnEnemy(nextType, Vector2Add(spawnPos, { 40.0f, 30.0f }), enemies, enemyTexture);
         }
     }
     // Når taket er nådd skal det ikke hope seg opp et stort rykk som kommer med én gang
@@ -303,7 +309,7 @@ void WaveSpawner::spawnAssault(int n, Vector2 playerPos, std::vector<std::unique
     float power = 1.0f + 0.25f * assaultsSpawned; // Hvert stormangrep er større enn det forrige
     size_t first = enemies.size();
     // Stormangrep kan gå over det vanlige taket, men ikke uendelig (ytelse)
-    auto full = [&]() { return (int)enemies.size() >= Difficulty::MAX_ALIVE + 350; };
+    auto full = [&]() { return (int)enemies.size() >= Difficulty::MAX_ALIVE + 250; };
 
     if (kind == HordeKind::GUARD) {
         int inner = (int)((10 + 1.2f * n) * power);
@@ -388,6 +394,12 @@ void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::
         enemy = std::make_unique<Cannoneer>(spawnPos, enemyTexture);
     } else if (type == EnemyType::TREASURER) {
         enemy = std::make_unique<Treasurer>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::KNIGHT) {
+        enemy = std::make_unique<Knight>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::BANNERMAN) {
+        enemy = std::make_unique<Bannerman>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::GIANT) {
+        enemy = std::make_unique<Giant>(spawnPos, enemyTexture);
     }
     if (!enemy) return;
 
@@ -410,7 +422,8 @@ void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::
         if (GetRandomValue(0, 999) < (int)((xp - whole) * 1000.0f)) whole++;
         enemy->xpValue = std::max(1, whole);
     }
-    if (type != EnemyType::EXPLODER && type != EnemyType::TREASURER && GetRandomValue(1, 1000) <= (int)(Difficulty::eliteChance(m) * 1000.0f)) {
+    bool canBeElite = type != EnemyType::EXPLODER && type != EnemyType::TREASURER && type != EnemyType::GIANT && type != EnemyType::BANNERMAN;
+    if (canBeElite && GetRandomValue(1, 1000) <= (int)(Difficulty::eliteChance(m) * 1000.0f)) {
         enemy->makeElite();
     }
     // Gull skaleres ned på samme måte som XP: flere fiender betyr ikke mer gull per minutt

@@ -419,3 +419,19 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
    som før. Septeret heter nå Prismelaser (+2 stråler, +6 sprett, ingen svekkelse).
 3) Top Geek holder en retro strålepistol (sølv med røde ribber og grønn emitter) i 3D-modellen,
    og ability-ikonet er en strålepistol med en laser som spretter.
+
+// 29 oktober – færre, men farligere fiender sent i runden
+1) Mye færre fiender sent: waves vokser jevnt og flater ut (ca. 105 i wave 10, 290 i wave 20,
+   maks 300, før ca. 790). Tak på 480 samtidig (før 800), stormangrep maks 730 (før 1150).
+   Hordene har én ring hele runden og er mindre. XP per wave er den samme – hver fiende gir mer.
+2) Fiendene er sterkere i stedet: HP x9 ved 10 min (før x8), og elite-sjansen går opp til 20 %.
+3) Tre nye tunge fiender (heavies.cpp), med egne 3D-modeller:
+   - Kyrasser (fra 4 min, også i hordene fra 5:30): tung ridder i full rustning med lanse og skjold.
+     Går sakte, stopper, sikter (rødt felt på gulvet, lansespissen gløder) og stormer gjennom deg
+     med dobbel skade. Puster ut etterpå – da er det din tur. Dyttes nesten ikke.
+   - Fanebærer (fra 5 min): holder seg bak med kongens fane. Alle fiender innen 230 tar HALV skade
+     (blå ring på gulvet og blått skimmer rundt de vernede). Drep ham først!
+   - Beleiringskjempe (fra 6:30): enorm og treg, med lenker på håndleddene. Løfter en steinblokk over
+     hodet og kaster den dit du står (rød sirkel, stor skade). Når den dør, brister den og tre troll
+     velter ut. Mye XP og gull.
+   Antallet øker utover: ved 10 min kommer ca. 6 kyrassere, 3 fanebærere og 3 kjemper per wave.

@@ -17,7 +17,11 @@ enum class EnemyType {
     PRIEST,     // Hoffprest: holder seg bak og helbreder fiendene rundt seg
     DRUMMER,    // Trommeslager: fiendene rundt ham går mye fortere
     CANNONEER,  // Kanonér: lobber granater som lander der du står (rød sirkel)
-    TREASURER   // Skattmester: sjelden, løper fra deg og mister mynter. Mye gull og en kiste hvis du tar ham
+    TREASURER,  // Skattmester: sjelden, løper fra deg og mister mynter. Mye gull og en kiste hvis du tar ham
+    // --- Tunge fiender sent i runden: få, men farlige ---
+    KNIGHT,     // Kyrasser (fra 4 min): tung ridder som sikter (rødt felt) og stormer gjennom deg
+    BANNERMAN,  // Fanebærer (fra 5 min): fiender rundt fanen tar halv skade. Drep ham først!
+    GIANT       // Beleiringskjempe (fra 6:30): enorm, kaster steinblokker, blir til 3 troll når den dør
 };
 
 struct Pickup;
@@ -101,9 +105,10 @@ public:
     bool chestCarrier = false;        // Slipper alltid en skattekiste (horde-kaptein)
     bool miniboss = false;            // Miniboss: slipper Kongens septer (se miniboss.hpp)
     float hasteTimer = 0.0f;          // Trommeslagerens takt: går 40 % fortere så lenge denne er > 0
+    float wardTimer = 0.0f;           // Fanebærerens vern: tar halv skade så lenge denne er > 0
     bool ignoresAuras = false;        // Skattmesteren: påvirkes ikke av prest, trommeslager eller Kongens fest
     // Aura (prest og trommeslager): spill-løkka bruker den på fiendene rundt
-    enum class Aura { NONE, HEAL, HASTE };
+    enum class Aura { NONE, HEAL, HASTE, WARD };
     virtual Aura aura() const { return Aura::NONE; }
     virtual float auraRadius() const { return 0.0f; }
     bool auraPulse = false;           // Presten: satt når den skal helbrede (spill-løkka nullstiller)
@@ -116,6 +121,8 @@ public:
     // Kister fra elites har en felles nedkjøling, så de ikke regner ned sent i runden.
     // luck (Firkløver) gjør både kister og sjeldne drops vanligere.
     static inline float chestCooldown = 0.0f;
+    // Fiender som skal dukke opp når en annen dør (kjempen blir til troll). Spill-løkka spawner dem.
+    static inline std::vector<std::pair<EnemyType, Vector2>> pendingSpawns;
     static inline float luck = 1.0f; // Fase for gangeanimasjonen (forskjellig for hver fiende)
 
     // Tegning i to lag (se render3d.hpp):
@@ -345,6 +352,54 @@ struct Pickup {
     PickupType type = PickupType::XP;
     float age = 0.0f;   // Sekunder siden den ble sluppet (liten "hopp"-animasjon)
     float pull = 0.0f;  // Hvor lenge den har blitt trukket mot spilleren (akselererer)
+};
+
+// =====================================================================
+// TUNGE FIENDER (heavies.cpp): få, store og seige. Kommer sent i runden i stedet for
+// enda flere småfiender, så skjermen ikke blir et hav av figurer.
+// =====================================================================
+
+// Kyrasser: rustning fra topp til tå og en lanse. Går sakte, stopper, sikter (rødt felt på gulvet)
+// og stormer i en rett linje. Dyttes nesten ikke.
+class Knight : public Enemy {
+    enum class Phase { WALK, AIM, CHARGE, RECOVER };
+    Phase phase = Phase::WALK;
+    float timer = 2.0f;
+    Vector2 chargeDir = { 0, 1 };
+public:
+    Knight(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void draw() const override;
+    void draw3D() const override;
+    void drawVfx() const override;
+    float modelHeight() const override { return 56.0f * modelScale; }
+    int contactDamage() const override { return phase == Phase::CHARGE ? damage * 2 : damage; }
+};
+
+// Fanebærer: holder seg bak de andre med kongens fane. Alle fiender rundt ham tar halv skade.
+class Bannerman : public Enemy {
+public:
+    Bannerman(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void draw3D() const override;
+    void drawVfx() const override;
+    float modelHeight() const override { return 64.0f * modelScale; }
+    Aura aura() const override { return Aura::WARD; }
+    float auraRadius() const override { return 230.0f; }
+};
+
+// Beleiringskjempe: enorm og treg. Løfter en steinblokk over hodet og kaster den dit du står
+// (rød sirkel). Når den dør, brister den og tre troll kommer ut.
+class Giant : public Enemy {
+    float throwTimer = 3.0f;
+    float windup = 0.0f;
+public:
+    Giant(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void draw3D() const override;
+    void drawVfx() const override;
+    void onDeath() override;
+    float modelHeight() const override { return 60.0f * modelScale; }
 };
 
 // Farge og størrelse på XP-krystaller etter hvor mye de er verdt

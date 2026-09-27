@@ -274,6 +274,7 @@ int main() {
         lastKillCount = 0;
         lifeStealBank = 0.0f;
         Enemy::chestCooldown = 0.0f;
+        Enemy::pendingSpawns.clear();
         Weapon::pendingHeal = 0.0f;
         rerollsLeft = 3;
         vacuumTimer = 0.0f;
@@ -635,12 +636,20 @@ int main() {
                     if (e->miniboss || e->id == bossId || e->ignoresAuras) continue;
                     if (Vector2DistanceSqr(e->position, s->position) > r2) continue;
                     if (aura == Enemy::Aura::HASTE) { e->hasteTimer = 0.2f; continue; }
+                    if (aura == Enemy::Aura::WARD) { if (e.get() != s.get()) e->wardTimer = 0.2f; continue; }
                     if (e->hp >= e->maxHp) continue;
                     e->hp = std::min(e->maxHp, e->hp + std::max(1, e->maxHp / 8)); // 12.5 % av maks-HP
                     VfxHit(e->position, Color{ 255, 220, 120, 255 });
                     healedAny = true;
                 }
                 if (healedAny) VfxDeath(s->position, Color{ 255, 215, 110, 255 });
+            }
+
+            // Fiender som dukker opp når en annen dør (beleiringskjempen blir til tre troll)
+            if (!Enemy::pendingSpawns.empty()) {
+                auto spawns = std::move(Enemy::pendingSpawns);
+                Enemy::pendingSpawns.clear();
+                for (auto& [type, pos] : spawns) spawner.spawnEnemy(type, pos, enemies, enemyTexture);
             }
 
             // Den rasende kongen kaller inn lakeier i en ring rundt seg
@@ -1491,6 +1500,9 @@ int main() {
                     }
                     for (auto& enemy : enemies) {
                         enemy->drawVfx();
+                        // Fanebærerens vern: blått skimmer rundt fiender som tar halv skade
+                        if (enemy->wardTimer > 0.0f)
+                            VfxBillboard(VfxTex::GLOW, ToWorld3D(enemy->position, enemy->modelHeight() * ENEMY_VISUAL_SCALE * 0.5f), enemy->hitRadius * 4.0f, Color{ 30, 60, 140, 255 });
                         // Fare: fiender som er nær deg får en rød glød på gulvet, sterkere jo nærmere
                         {
                             float d = Vector2Distance(enemy->position, player.position);

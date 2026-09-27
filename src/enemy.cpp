@@ -87,6 +87,7 @@ void Enemy::knockBack(Vector2 direction, float strength) {
 }
 
 void Enemy::applyStatusMovement(Vector2 before, float dt) {
+    if (wardTimer > 0.0f) wardTimer -= dt;
     if (hasteTimer > 0.0f) {
         hasteTimer -= dt;
         position = Vector2Add(before, Vector2Scale(Vector2Subtract(position, before), 1.4f));
@@ -229,6 +230,7 @@ void Lackey::draw3D() const {
 void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
     if (amount <= 0) return;
     if (damageTakenMult < 1.0f) amount = std::max(1, (int)(amount * damageTakenMult));
+    if (wardTimer > 0.0f) amount = std::max(1, amount / 2); // Fanebærerens vern
     bool crit = !isDamageOverTime && GetRandomValue(1, 1000) <= (int)(critChance * 1000.0f);
     if (crit) amount = (int)(amount * critMultiplier);
     hp -= amount;
