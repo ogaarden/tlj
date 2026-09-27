@@ -275,6 +275,7 @@ int main() {
         lifeStealBank = 0.0f;
         Enemy::chestCooldown = 0.0f;
         Enemy::pendingSpawns.clear();
+        g_corpses.clear();
         Weapon::pendingHeal = 0.0f;
         rerollsLeft = 3;
         vacuumTimer = 0.0f;
@@ -527,6 +528,14 @@ int main() {
                 if (roomBonus == RoomBonus::SPEED) player.speed *= 1.08f;
                 player.update(camera.rotation);
                 player.speed = normalSpeed;
+            }
+            // Unnvikelsesrull: sus og støvsky når den starter, lysende spor mens den varer
+            if (player.justDashed) {
+                PlaySfxPitch(Sfx::BOSS_CHARGE, 2.2f);
+                VfxShockwave(player.position, 45.0f, Color{ 200, 220, 255, 255 });
+            }
+            if (player.dashTimer > 0.0f) {
+                VfxTrail(ToWorld3D(player.position, 22.0f), Color{ 170, 210, 255, 255 }, 34.0f, 0.25f);
             }
             if (roomBonus == RoomBonus::REGEN && player.hp > 0.0f) player.hp = std::min(player.maxHp, player.hp + 2.0f * deltaTime);
             if (!inBossArena) ResolvePillarCollision(player.position, 16.0f, player.position, 0.0f); // Søylene stenger veien
@@ -846,11 +855,14 @@ int main() {
 
             // Fjerne døde fiender (f.eks. kamikaze som har sprengt seg selv)
             for (auto& e : enemies) {
-                if (e->isDead()) e->onDeath();
+                if (e->isDead()) { e->onDeath(); KeepCorpse(e); }
             }
+            // Likene velter og synker ned
+            for (auto& c : g_corpses) c.t += deltaTime;
+            g_corpses.erase(std::remove_if(g_corpses.begin(), g_corpses.end(), [](const Corpse& c) { return c.t >= CORPSE_TIME; }), g_corpses.end());
             enemies.erase(
                 std::remove_if(enemies.begin(), enemies.end(),
-                    [](const std::unique_ptr<Enemy>& e) { return e->isDead(); }),
+                    [](const std::unique_ptr<Enemy>& e) { return !e || e->isDead(); }),
                 enemies.end()
             );
 
@@ -1005,7 +1017,7 @@ int main() {
                 ClownPose pose;
                 pose.position = { 0.0f, 0.0f };
                 pose.facing = { 0.15f, 1.0f };
-                pose.tint = (player.invulnerableTimer > 0.0f && fmodf(uiTime * 10.0f, 1.0f) < 0.5f) ? Color{ 255, 150, 150, 255 } : WHITE;
+                pose.tint = (player.dashTimer <= 0.0f && player.invulnerableTimer > 0.0f && fmodf(uiTime * 10.0f, 1.0f) < 0.5f) ? Color{ 255, 150, 150, 255 } : WHITE;
                 DrawClown(player.clown, pose);
             EndMode3D();
             EndTextureMode();
@@ -1266,6 +1278,13 @@ int main() {
                     if (charge > 0.0f) DrawCircleV(c.position, 110.0f * charge, Fade(Color{ 220, 120, 255, 255 }, 0.4f));
                 }
                 player.drawShadow();
+                // Rullen lader opp: en tynn bue rundt føttene som fylles, og et lite blink når den er klar
+                if (player.dashCooldown > 0.0f) {
+                    float k = 1.0f - player.dashCooldown / Player::DASH_COOLDOWN;
+                    DrawRing(player.position, 30.0f, 33.5f, -90.0f, -90.0f + 360.0f * k, 36, Fade(Color{ 170, 210, 255, 255 }, 0.55f));
+                } else if (player.dashCooldown > -0.25f) {
+                    DrawRing(player.position, 29.0f, 35.0f, 0.0f, 360.0f, 36, Fade(WHITE, 0.8f));
+                }
                 for (auto& w : player.weapons) w->draw();
                 for (auto& enemy : enemies) enemy->draw();
                 DrawExplosions();
@@ -1395,6 +1414,26 @@ int main() {
                     SetShadeFlash(enemy->hitFlash * 0.85f);
                     drawEnemyModel(*enemy);
                 }
+                // Likene: blinker hvitt, velter bakover (bort fra spilleren) og synker ned i gulvet
+                for (const auto& c : g_corpses) {
+                    const Enemy& e = *c.body;
+                    if (HasSprite(e.spriteId())) continue;
+                    float k = c.t / CORPSE_TIME;
+                    float fall = std::min(1.0f, k / 0.35f);
+                    fall = 1.0f - (1.0f - fall) * (1.0f - fall);              // Rask start, myk landing
+                    float sink = k > 0.45f ? (k - 0.45f) / 0.55f : 0.0f;
+                    float visual = (e.miniboss || e.id == bossId) ? 1.0f : ENEMY_VISUAL_SCALE;
+                    float scale = visual * e.modelScale;
+                    Vector2 away = Vector2Normalize(Vector2Subtract(e.position, player.position));
+                    SetShadeFlash(std::max(0.0f, 0.9f - k * 4.0f));
+                    rlPushMatrix();
+                        rlTranslatef(e.position.x, -sink * 30.0f * scale, e.position.y);
+                        rlRotatef(fall * 82.0f, away.y, 0.0f, -away.x);
+                        rlScalef(scale, scale * (1.0f - 0.25f * sink), scale);
+                        rlTranslatef(-e.position.x, 0.0f, -e.position.y);
+                        e.draw3D();
+                    rlPopMatrix();
+                }
                 SetShadeFlash(0.0f);
                 SetShapeDetail(1.0f);
                 for (auto& w : player.weapons) w->draw3D();
@@ -1420,7 +1459,7 @@ int main() {
                         float p = player.weapons[0]->cooldownProgress();
                         if (p < 0.2f) sd.squash -= (1.0f - p / 0.2f) * 0.8f; // Liten "puff" når standardvåpenet brukes
                     }
-                    if (player.invulnerableTimer > 0.0f && ((int)(player.invulnerableTimer * 20.0f) % 2 == 0)) sd.tint = Color{ 255, 120, 120, 255 };
+                    if (player.dashTimer <= 0.0f && player.invulnerableTimer > 0.0f && ((int)(player.invulnerableTimer * 20.0f) % 2 == 0)) sd.tint = Color{ 255, 120, 120, 255 };
                     else if (player.slowTimer > 0.0f) sd.tint = SKYBLUE;
                     QueueSprite(sd);
                 } else {

@@ -472,6 +472,6 @@ void DrawGameHud(const HudState& hud) {
     }
 
     // --- Kontroller nederst til venstre ---
-    const char* hint = "[Q/E] Roter   [M] Kart   [ESC] Avslutt";
+    const char* hint = "[SPACE] Rull   [Q/E] Roter   [M] Kart   [ESC] Avslutt";
     hudText(hint, 14.0f * s, h - 24.0f * s, 12.0f * s, Fade(Color{ 220, 210, 190, 255 }, 0.7f));
 }

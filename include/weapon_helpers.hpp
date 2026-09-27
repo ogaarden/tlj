@@ -22,6 +22,7 @@ inline void removeDeadEnemy(std::vector<std::unique_ptr<Enemy>>& enemies, size_t
     enemies[index]->onDeath();
     Enemy::killCount++;
     PlaySfx(Sfx::KILL);
+    KeepCorpse(enemies[index]);
     enemies.erase(enemies.begin() + index);
 }
 

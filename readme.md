@@ -435,3 +435,13 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
      hodet og kaster den dit du står (rød sirkel, stor skade). Når den dør, brister den og tre troll
      velter ut. Mye XP og gull.
    Antallet øker utover: ved 10 min kommer ca. 6 kyrassere, 3 fanebærere og 3 kjemper per wave.
+
+// 30 oktober – unnvikelsesrull, fiender som faller og tunge dødsøyeblikk
+1) Unnvikelsesrull [SPACE] eller [SHIFT]: klovnen tar en kolbøtte fremover (3.4x fart i 0.2 sek) og er
+   udødelig mens den ruller. 2.6 sek cooldown, vist som en blå bue rundt føttene som fylles opp
+   (og et hvitt blink når den er klar). Lagd for å komme seg gjennom kyrasserens storming,
+   kjempens steinblokk, kanongranater og ringer som lukker seg.
+2) Fiender forsvinner ikke lenger med en gang de dør: de blinker hvitt, velter bakover bort fra deg
+   og synker ned i gulvet (0.7 sek, maks 160 lik samtidig).
+3) Tunge fiender dør med et smell: kyrasseren gir sjokkbølge og gnister (35 % sjanse for kyllinglår),
+   fanebærerens vern brister i en blå ring, og kjempen gir dobbel sjokkbølge og alltid et kyllinglår.

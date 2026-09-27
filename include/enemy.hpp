@@ -5,6 +5,7 @@
 #include <raymath.h>
 #include <cmath>
 #include <vector>
+#include <memory>
 #include "sprites.hpp"
 
 enum class EnemyType {
@@ -374,6 +375,8 @@ public:
     void drawVfx() const override;
     float modelHeight() const override { return 56.0f * modelScale; }
     int contactDamage() const override { return phase == Phase::CHARGE ? damage * 2 : damage; }
+    void onDeath() override;
+    void extraLoot(std::vector<Pickup>& pickups) const override;
 };
 
 // Fanebærer: holder seg bak de andre med kongens fane. Alle fiender rundt ham tar halv skade.
@@ -386,6 +389,7 @@ public:
     float modelHeight() const override { return 64.0f * modelScale; }
     Aura aura() const override { return Aura::WARD; }
     float auraRadius() const override { return 230.0f; }
+    void onDeath() override;
 };
 
 // Beleiringskjempe: enorm og treg. Løfter en steinblokk over hodet og kaster den dit du står
@@ -399,8 +403,28 @@ public:
     void draw3D() const override;
     void drawVfx() const override;
     void onDeath() override;
+    void extraLoot(std::vector<Pickup>& pickups) const override;
     float modelHeight() const override { return 60.0f * modelScale; }
 };
+
+// =====================================================================
+// LIK: døde fiender blir liggende et øyeblikk – de blinker, velter bakover og synker ned i gulvet
+// (i stedet for å forsvinne). Bare utseende; de gjør ingenting.
+// =====================================================================
+struct Corpse {
+    std::unique_ptr<Enemy> body;
+    float t = 0.0f;
+};
+inline std::vector<Corpse> g_corpses;
+constexpr float CORPSE_TIME = 0.7f;
+
+// Flytter en død fiende over til likene (den er ellers ferdig). Skattmesteren som rømte blir ikke lik.
+inline void KeepCorpse(std::unique_ptr<Enemy>& e) {
+    if (!e || g_corpses.size() >= 160) return;
+    if (auto* t = dynamic_cast<Treasurer*>(e.get()); t && t->escaped) return;
+    e->hitFlash = 1.0f;
+    g_corpses.push_back({ std::move(e), 0.0f });
+}
 
 // Farge og størrelse på XP-krystaller etter hvor mye de er verdt
 Color XpTierColor(int value);

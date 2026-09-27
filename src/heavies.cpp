@@ -102,6 +102,18 @@ void Knight::update(Vector2 playerPosition) {
     }
 }
 
+void Knight::onDeath() {
+    // Rustningen smeller i gulvet: sjokkbølge og gnister
+    VfxShockwave(position, 120.0f, Color{ 200, 205, 225, 255 });
+    VfxDeath(position, Color{ 220, 225, 240, 255 });
+    VfxHit(position, WHITE);
+    PlaySfxPitch(Sfx::EXPLOSION, 1.5f);
+}
+
+void Knight::extraLoot(std::vector<Pickup>& pickups) const {
+    if (GetRandomValue(1, 100) <= 35) pickups.push_back({ { position.x - 16.0f, position.y + 8.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
+}
+
 void Knight::draw() const {
     if (phase == Phase::AIM) {
         // Rødt felt der den kommer til å storme
@@ -205,6 +217,13 @@ void Bannerman::update(Vector2 playerPosition) {
     facing = dir;
     if (dist > 370.0f) position = Vector2Add(position, Vector2Scale(dir, speed * dt));
     else if (dist < 270.0f) position = Vector2Subtract(position, Vector2Scale(dir, speed * 0.8f * dt));
+}
+
+void Bannerman::onDeath() {
+    // Fanen faller: vernet brister i en blå ring
+    VfxShockwave(position, auraRadius(), Color{ 90, 140, 255, 255 });
+    VfxDeath(position, Color{ 120, 160, 255, 255 });
+    PlaySfxPitch(Sfx::ZAP, 0.7f);
 }
 
 void Bannerman::drawVfx() const {
@@ -311,6 +330,13 @@ void Giant::onDeath() {
     }
     VfxExplosion(position, 90.0f);
     VfxShockwave(position, 160.0f, Color{ 180, 150, 110, 255 });
+    VfxShockwave(position, 240.0f, Color{ 120, 100, 80, 255 });
+    PlaySfxPitch(Sfx::EXPLOSION, 0.5f);
+}
+
+void Giant::extraLoot(std::vector<Pickup>& pickups) const {
+    // Alltid et kyllinglår – du har fortjent det
+    pickups.push_back({ { position.x + 20.0f, position.y - 10.0f }, 1, WHITE, 10.0f, 0.0f, PickupType::FOOD });
 }
 
 void Giant::drawVfx() const {

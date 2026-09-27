@@ -3,6 +3,7 @@
 #include "render3d.hpp"
 #include "clowns.hpp"
 #include <cmath>
+#include <rlgl.h>
 #include <algorithm>
 #include <cstdlib>
 #include <vector>
@@ -13,6 +14,8 @@ void Player::update(float cameraRotation)
     float deltaTime = GetFrameTime();
 
     if (invulnerableTimer > 0.0f) invulnerableTimer -= deltaTime;
+    if (dashCooldown > -1.0f) dashCooldown -= deltaTime; // Går litt under 0, så klar-blinket vises kort
+    justDashed = false;
     if (slowTimer > 0.0f) slowTimer -= deltaTime;
     if (hpRegen > 0.0f && hp > 0.0f) hp = std::min(maxHp, hp + hpRegen * deltaTime);
 
@@ -48,6 +51,25 @@ void Player::update(float cameraRotation)
         facingDir = worldMovement;
     }
 
+    // Unnvikelsesrull: bykser i gangretningen (eller dit klovnen ser) og er udødelig imens
+    if (dashTimer <= 0.0f && dashCooldown <= 0.0f && (IsKeyPressed(KEY_SPACE) || IsKeyPressed(KEY_LEFT_SHIFT))) {
+        dashDir = isMoving ? worldMovement : facingDir;
+        if (Vector2Length(dashDir) < 0.01f) dashDir = { 0.0f, 1.0f };
+        dashDir = Vector2Normalize(dashDir);
+        dashTimer = DASH_TIME;
+        dashCooldown = DASH_COOLDOWN;
+        justDashed = true;
+    }
+    if (dashTimer > 0.0f) {
+        dashTimer -= deltaTime;
+        invulnerableTimer = std::max(invulnerableTimer, 0.08f);
+        facingDir = dashDir;
+        walkTime += deltaTime * 2.0f;
+        position.x += dashDir.x * speed * DASH_SPEED_MULT * deltaTime;
+        position.y += dashDir.y * speed * DASH_SPEED_MULT * deltaTime;
+        return;
+    }
+
     // 3. Oppdater posisjonen i verden
     float currentSpeed = speed * (slowTimer > 0.0f ? (1.0f - slowAmount) : 1.0f);
     position.x += worldMovement.x * currentSpeed * deltaTime;
@@ -62,7 +84,7 @@ void Player::drawShadow() const {
 void Player::drawModel() const {
     // Blålig når man er slowet, blinker rødt mens man er udødelig etter et treff
     Color tint = (slowTimer > 0.0f) ? SKYBLUE : WHITE;
-    if (invulnerableTimer > 0.0f && ((int)(invulnerableTimer * 20.0f) % 2 == 0)) tint = RED;
+    if (dashTimer <= 0.0f && invulnerableTimer > 0.0f && ((int)(invulnerableTimer * 20.0f) % 2 == 0)) tint = RED;
 
     ClownPose pose;
     pose.position = position;
@@ -74,6 +96,18 @@ void Player::drawModel() const {
     if (!weapons.empty()) {
         float p = weapons[0]->cooldownProgress();
         pose.attack = p < 0.3f ? 1.0f - p / 0.3f : 0.0f;
+    }
+    if (dashTimer > 0.0f) {
+        // Rullen: klovnen tar en hel kolbøtte fremover rundt midten av kroppen
+        float angle = (1.0f - dashTimer / DASH_TIME) * 360.0f;
+        const float mid = 22.0f;
+        rlPushMatrix();
+            rlTranslatef(position.x, mid, position.y);
+            rlRotatef(angle, dashDir.y, 0.0f, -dashDir.x);
+            rlTranslatef(-position.x, -mid, -position.y);
+            DrawClown(clown, pose);
+        rlPopMatrix();
+        return;
     }
     DrawClown(clown, pose);
 }

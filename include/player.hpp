@@ -76,6 +76,15 @@ struct Player {
     float walkTime = 0.0f;
     bool isMoving = false;
 
+    // Unnvikelsesrull [SPACE] / [SHIFT]: et raskt byks i gangretningen, udødelig mens den varer
+    static constexpr float DASH_TIME = 0.2f;
+    static constexpr float DASH_COOLDOWN = 2.6f;
+    static constexpr float DASH_SPEED_MULT = 3.4f;
+    float dashTimer = 0.0f;     // > 0 mens den ruller
+    float dashCooldown = 0.0f;  // > 0 til neste rull er klar
+    Vector2 dashDir = { 0.0f, 1.0f };
+    bool justDashed = false;    // Satt den framen rullen starter (spill-løkka spiller lyd og effekt)
+
     void drawShadow() const; // I gulvlaget
     void drawModel() const;  // I 3D-laget
     float takeDamage(float rawDamage); // Returnerer faktisk skade (0 hvis dodge)
