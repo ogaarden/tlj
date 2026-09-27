@@ -221,9 +221,17 @@ void Lackey::draw3D() const {
 
 void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
     if (amount <= 0) return;
-    if (damageTakenMult < 1.0f) amount = std::max(1, (int)(amount * damageTakenMult));
+    if (damageTakenMult != 1.0f) amount = std::max(1, (int)(amount * damageTakenMult));
     bool crit = !isDamageOverTime && GetRandomValue(1, 1000) <= (int)(critChance * 1000.0f);
     if (crit) amount = (int)(amount * critMultiplier);
+    // Rustning: trekkes fra hvert direkte treff (etter kritisk treff, så krit slår godt gjennom)
+    bool blocked = false;
+    if (!isDamageOverTime && armor > 0) {
+        int before = amount;
+        amount = std::max(1, amount - armor);
+        blocked = amount < before * 0.6f;
+        if (blocked) numberColor = Color{ 190, 190, 205, 255 }; // Grått tall = rustningen tok mesteparten
+    }
     hp -= amount;
     hitFlash = isDamageOverTime ? fmaxf(hitFlash, 0.25f) : 1.0f;
 
@@ -231,7 +239,8 @@ void Enemy::takeDamage(int amount, Color numberColor, bool isDamageOverTime) {
         SpawnDamageNumber(position, amount, numberColor, crit);
         VfxHit(position, crit ? Color{ 255, 220, 80, 255 } : numberColor);
         if (crit) VfxHit(position, WHITE);
-        PlaySfx(Sfx::HIT);
+        if (blocked) PlaySfxPitch(Sfx::HIT, 1.8f); // Metallisk "pling"
+        else PlaySfx(Sfx::HIT);
         return;
     }
 
@@ -965,5 +974,229 @@ void Archer::drawVfx() const {
         float t = 1.0f - aimTimer / ARCHER_AIM_TIME;
         Rig r(position, facing);
         VfxBillboard(VfxTex::SPARK, r.at(15.0f, 1.0f, 24.0f), 10.0f + 26.0f * t, Color{ 255, 80, 60, 255 }, t * 180.0f);
+    }
+}
+
+
+// =====================================================================
+// STERKE FIENDER SENT I RUNDEN
+// Færre, men tøffere fiender, så skjermen ikke fylles helt opp.
+// =====================================================================
+
+// --- Hoffgarde ---
+RoyalGuard::RoyalGuard(Vector2 spawnPos, Texture2D tex) : Footman(spawnPos, tex) {
+    speed = 115.0f;
+    hp = 420;
+    maxHp = 420;
+    damage = 16;
+    armor = 8;           // Dolker og Rot biter dårlig, store treff går godt gjennom
+    xpValue = 45;
+    orbColor = Color{ 190, 30, 50, 255 };
+    goldChance = 0.10f;
+    goldValue = 2;
+    hitRadius = 18.0f;
+    modelScale = 1.1f;
+    knockbackScale = 0.6f;
+}
+
+// --- Steintroll ---
+namespace {
+    constexpr float TROLL_WINDUP = 0.9f;        // Tid spilleren har til å se stormen komme
+    constexpr float TROLL_CHARGE_TIME = 0.55f;
+    constexpr float TROLL_CHARGE_SPEED = 620.0f;
+    constexpr float TROLL_WINDED_TIME = 1.3f;   // Sårbar etter stormen
+    constexpr float TROLL_CHARGE_RANGE = 560.0f;
+}
+
+StoneTroll::StoneTroll(Vector2 spawnPos, Texture2D tex) : Goon(spawnPos, tex) {
+    speed = 58.0f;
+    hp = 1600;
+    maxHp = 1600;
+    damage = 32;
+    xpValue = 120;
+    orbColor = Color{ 110, 120, 140, 255 };
+    goldChance = 0.35f;
+    goldValue = 4;
+    hitRadius = 30.0f;
+    modelScale = 1.35f;
+    knockbackScale = 0.25f;
+    timer = 3.0f + (id % 7) * 0.4f; // Så ikke alle stormer samtidig
+}
+
+void StoneTroll::update(Vector2 playerPosition) {
+    float dt = GetFrameTime();
+    Vector2 toPlayer = Vector2Subtract(playerPosition, position);
+    float dist = Vector2Length(toPlayer);
+    Vector2 dir = dist > 0.01f ? Vector2Scale(toPlayer, 1.0f / dist) : Vector2{ 0, 1 };
+    timer -= dt;
+
+    switch (phase) {
+        case Phase::CHASE:
+            facing = dir;
+            position = Vector2Add(position, Vector2Scale(dir, speed * dt));
+            if (timer <= 0.0f && dist < TROLL_CHARGE_RANGE) {
+                phase = Phase::WINDUP;
+                timer = TROLL_WINDUP;
+                chargeDir = dir;
+                PlaySfxPitch(Sfx::BOSS_CHARGE, 1.4f);
+            }
+            break;
+        case Phase::WINDUP:
+            // Sikter mot spilleren til like før stormen – så låses retningen
+            if (timer > 0.25f) chargeDir = dir;
+            facing = chargeDir;
+            if (timer <= 0.0f) {
+                phase = Phase::CHARGE;
+                timer = TROLL_CHARGE_TIME;
+            }
+            break;
+        case Phase::CHARGE:
+            facing = chargeDir;
+            position = Vector2Add(position, Vector2Scale(chargeDir, TROLL_CHARGE_SPEED * dt));
+            if (timer <= 0.0f) {
+                phase = Phase::WINDED;
+                timer = TROLL_WINDED_TIME;
+                damageTakenMult = 1.5f; // Sårbar: tar 50 % mer skade
+            }
+            break;
+        case Phase::WINDED:
+            if (timer <= 0.0f) {
+                phase = Phase::CHASE;
+                timer = 4.5f + (float)GetRandomValue(0, 20) / 10.0f;
+                damageTakenMult = 1.0f;
+            }
+            break;
+    }
+}
+
+int StoneTroll::contactDamage() const {
+    return phase == Phase::CHARGE ? (int)(damage * 1.5f) : damage;
+}
+
+void StoneTroll::draw() const {
+    // Varsel-felt på gulvet: der trollet kommer til å storme
+    if (phase == Phase::WINDUP) {
+        float t = 1.0f - timer / TROLL_WINDUP;
+        Vector2 end = Vector2Add(position, Vector2Scale(chargeDir, TROLL_CHARGE_SPEED * TROLL_CHARGE_TIME));
+        DrawLineEx(position, end, hitRadius * 2.0f, Fade(RED, 0.15f + 0.35f * t));
+        DrawCircleV(end, hitRadius, Fade(RED, 0.2f + 0.3f * t));
+        // Lyse kanter, så varselet synes også på den røde løperen
+        Vector2 side = Vector2Scale({ -chargeDir.y, chargeDir.x }, hitRadius);
+        Color edge = Fade(Color{ 255, 220, 140, 255 }, 0.4f + 0.5f * t);
+        DrawLineEx(Vector2Add(position, side), Vector2Add(end, side), 3.0f, edge);
+        DrawLineEx(Vector2Subtract(position, side), Vector2Subtract(end, side), 3.0f, edge);
+        DrawCircleLines((int)end.x, (int)end.y, hitRadius, edge);
+    }
+    Enemy::draw();
+}
+
+void StoneTroll::drawVfx() const {
+    Enemy::drawVfx();
+    if (phase == Phase::WINDUP) {
+        float t = 1.0f - timer / TROLL_WINDUP;
+        VfxDecal(VfxTex::GLOW, position, (60.0f + 40.0f * t) * modelScale, Color{ 200, 40, 30, 255 }, 0.0f, 1.0f);
+    } else if (phase == Phase::WINDED) {
+        // Svimmel: gule stjerner som går rundt over hodet
+        float spin = (float)GetTime() * 5.0f;
+        for (int i = 0; i < 3; i++) {
+            float a = spin + i * (2.0f * PI / 3.0f);
+            Vector3 p = ToWorld3D({ position.x + cosf(a) * 18.0f, position.y + sinf(a) * 18.0f }, 118.0f * modelScale);
+            VfxBillboard(VfxTex::SPARK, p, 16.0f, Color{ 255, 220, 80, 255 }, spin * 60.0f);
+        }
+    }
+}
+
+Color StoneTroll::spriteTint() const {
+    if (phase == Phase::WINDUP) {
+        float pulse = 0.5f + 0.5f * sinf((float)GetTime() * 30.0f);
+        return Color{ 255, (unsigned char)(150 + 60 * pulse), (unsigned char)(150 + 60 * pulse), 255 };
+    }
+    if (phase == Phase::WINDED) return Color{ 210, 220, 255, 255 };
+    return WHITE;
+}
+
+// --- Hoffprest ---
+namespace {
+    constexpr float PRIEST_RANGE = 280.0f;      // Avstanden den prøver å holde til spilleren
+    constexpr float PRIEST_HEAL_RADIUS = 230.0f;
+    constexpr float PRIEST_HEAL_PERCENT = 0.20f; // Andel av maks-HP som helbredes
+    constexpr float PRIEST_HEAL_COOLDOWN = 3.2f;
+    const Color HEAL_GREEN = { 110, 255, 140, 255 };
+}
+
+CourtPriest::CourtPriest(Vector2 spawnPos, Texture2D tex) {
+    position = spawnPos;
+    speed = 95.0f;
+    hp = 160;
+    maxHp = 160;
+    damage = 10;
+    xpValue = 40;
+    orbColor = Color{ 240, 235, 220, 255 };
+    goldChance = 0.15f;
+    goldValue = 2;
+    orbRadius = 7.0f;
+    texture = tex;
+    healTimer = 2.0f + (id % 5) * 0.3f;
+}
+
+void CourtPriest::update(Vector2 playerPosition) {
+    float dt = GetFrameTime();
+    Vector2 toPlayer = Vector2Subtract(playerPosition, position);
+    float dist = Vector2Length(toPlayer);
+    Vector2 dir = dist > 0.01f ? Vector2Scale(toPlayer, 1.0f / dist) : Vector2{ 0, 1 };
+    facing = dir;
+
+    // Hold avstand, som armbrøstskytterne
+    if (dist > PRIEST_RANGE + 40.0f) position = Vector2Add(position, Vector2Scale(dir, speed * dt));
+    else if (dist < PRIEST_RANGE - 60.0f) position = Vector2Subtract(position, Vector2Scale(dir, speed * 0.8f * dt));
+
+    healTimer -= dt;
+    pulse = fmaxf(0.0f, pulse - dt * 1.6f);
+}
+
+void CourtPriest::support(std::vector<std::unique_ptr<Enemy>>& allEnemies) {
+    if (healTimer > 0.0f) return;
+
+    bool healedAny = false;
+    for (auto& e : allEnemies) {
+        if (e.get() == this || e->isDead() || e->hp >= e->maxHp) continue;
+        if (e->miniboss || dynamic_cast<Boss*>(e.get())) continue; // Ikke bossen og minibossene
+        if (Vector2Distance(position, e->position) > PRIEST_HEAL_RADIUS) continue;
+
+        int heal = std::max(1, (int)(e->maxHp * PRIEST_HEAL_PERCENT));
+        heal = std::min(heal, e->maxHp - e->hp);
+        e->hp += heal;
+        SpawnDamageNumber(e->position, heal, HEAL_GREEN);
+        VfxHit(e->position, HEAL_GREEN);
+        healedAny = true;
+    }
+
+    if (healedAny) {
+        pulse = 1.0f;
+        healTimer = PRIEST_HEAL_COOLDOWN;
+        PlaySfxPitch(Sfx::XP, 0.55f); // Mykt klokkespill
+    } else {
+        healTimer = 0.3f; // Ingen trengte helbredelse – sjekk igjen snart
+    }
+}
+
+void CourtPriest::draw() const {
+    // Svak grønn sirkel viser hvor langt helbredelsen når
+    DrawCircleLines((int)position.x, (int)position.y, PRIEST_HEAL_RADIUS, Fade(HEAL_GREEN, 0.25f));
+    if (pulse > 0.0f) {
+        float r = PRIEST_HEAL_RADIUS * (1.0f - pulse * 0.8f);
+        DrawCircleV(position, r, Fade(HEAL_GREEN, 0.18f * pulse));
+    }
+    Enemy::draw();
+}
+
+void CourtPriest::drawVfx() const {
+    Enemy::drawVfx();
+    float glow = 0.6f + 0.4f * sinf((float)GetTime() * 3.0f + id);
+    VfxDecal(VfxTex::GLOW, position, 55.0f, Color{ 40, (unsigned char)(140 * glow), 60, 255 }, 0.0f, 1.0f);
+    VfxBillboard(VfxTex::GLOW, ToWorld3D(position, 80.0f), 26.0f, Color{ 120, 200, 110, 255 });
+    if (pulse > 0.0f) {
+        VfxDecal(VfxTex::SHOCKWAVE, position, PRIEST_HEAL_RADIUS * 2.0f * (1.0f - pulse * 0.7f),
+                 Color{ 60, (unsigned char)(200 * pulse), 90, 255 }, 0.0f, 1.2f);
     }
 }

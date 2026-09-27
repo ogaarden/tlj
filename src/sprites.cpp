@@ -12,6 +12,7 @@ const char* FILES[(int)SpriteId::COUNT] = {
     "assets/sprites/footman.png", "assets/sprites/goon.png", "assets/sprites/lackey.png", "assets/sprites/exploder.png",
     "assets/sprites/archer.png",
     "assets/sprites/executioner.png", "assets/sprites/magus.png", "assets/sprites/iron_knight.png", "assets/sprites/king.png",
+    nullptr, nullptr, nullptr, // Lages ved å fargelegge andre figurer om (se DERIVED under)
 };
 
 // Høyde i verden. Litt større enn 3D-modellene, så tegningene synes godt fra kameraet.
@@ -19,6 +20,63 @@ const float HEIGHTS[(int)SpriteId::COUNT] = {
     84.0f, 84.0f, 92.0f, 84.0f,
     70.0f, 92.0f, 50.0f, 50.0f, 70.0f,
     84.0f, 76.0f, 80.0f, 170.0f,
+    80.0f, 132.0f, 72.0f,
+};
+
+// ---------------------------------------------------------------------
+// OMFARGEDE FIGURER ("palette swap", som i gamle NES-spill)
+// Nye fiendetyper lages fra eksisterende tegninger ved å endre fargene piksel
+// for piksel i HSV (fargetone, metning, lysstyrke). Mørke konturer beholdes.
+// ---------------------------------------------------------------------
+bool inHue(float h, float from, float to) { return h >= from && h <= to; }
+
+Color recolor(Color c, float hue, float sat, float val) {
+    Color out = ColorFromHSV(hue, Clamp(sat, 0.0f, 1.0f), Clamp(val, 0.0f, 1.0f));
+    out.a = c.a;
+    return out;
+}
+
+// Hoffgarde (fra fotsoldaten): blå tunika -> karmosinrød, stålrustning -> gull
+Color guardColors(Color c) {
+    Vector3 hsv = ColorToHSV(c);
+    float h = hsv.x, s = hsv.y, v = hsv.z;
+    if (v < 0.22f) return c;                                          // Konturer
+    if (inHue(h, 185.0f, 265.0f) && s > 0.25f) return recolor(c, 352.0f, s * 1.1f, v * 0.85f);
+    // Stål (grått, lite metning) -> gull. Hudtoner (oransje-ish) i ansiktet røres ikke.
+    bool steel = s < 0.12f || (s < 0.32f && !inHue(h, 5.0f, 45.0f));
+    if (steel && v > 0.30f) return recolor(c, 44.0f, 0.60f, fminf(1.0f, v * 1.08f));
+    return c;
+}
+
+// Steintroll (fra trollet): grønn hud -> skifergrå stein, klær litt mørkere
+Color trollColors(Color c) {
+    Vector3 hsv = ColorToHSV(c);
+    float h = hsv.x, s = hsv.y, v = hsv.z;
+    if (v < 0.20f) return c;
+    if (inHue(h, 55.0f, 170.0f) && s > 0.18f) return recolor(c, 212.0f, s * 0.30f, v * 0.80f);
+    return recolor(c, h, s * 0.8f, v * 0.85f);
+}
+
+// Hoffprest (fra hoffmagikeren): blå kappe og hatt -> hvit og gull
+Color priestColors(Color c) {
+    Vector3 hsv = ColorToHSV(c);
+    float h = hsv.x, s = hsv.y, v = hsv.z;
+    if (v < 0.20f) return c;
+    if (inHue(h, 190.0f, 280.0f) && s > 0.20f) return recolor(c, 42.0f, s * 0.12f, fminf(1.0f, v * 1.45f + 0.15f));
+    if (inHue(h, 30.0f, 60.0f) && s > 0.35f) return recolor(c, 46.0f, 0.75f, v * 1.1f); // Gulldetaljer litt sterkere
+    return c;
+}
+
+struct DerivedSprite {
+    SpriteId id;
+    const char* source;
+    Color (*colors)(Color);
+};
+
+const DerivedSprite DERIVED[] = {
+    { SpriteId::GUARD,  "assets/sprites/footman.png", guardColors },
+    { SpriteId::TROLL,  "assets/sprites/goon.png",    trollColors },
+    { SpriteId::PRIEST, "assets/sprites/magus.png",   priestColors },
 };
 
 Texture2D textures[(int)SpriteId::COUNT] = {};
@@ -46,13 +104,32 @@ void main() {
 }
 )";
 
+
+// Leser bildet for en figur: enten fra fil, eller omfarget fra en annen figur
+bool loadSpriteImage(int i, Image& img) {
+    for (const DerivedSprite& d : DERIVED) {
+        if ((int)d.id != i) continue;
+        if (!FileExists(d.source)) return false;
+        img = LoadImage(d.source);
+        ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        Color* px = (Color*)img.data;
+        for (int p = 0; p < img.width * img.height; p++) {
+            if (px[p].a > 0) px[p] = d.colors(px[p]);
+        }
+        return true;
+    }
+    if (FILES[i] == nullptr || !FileExists(FILES[i])) return false;
+    img = LoadImage(FILES[i]);
+    ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+    return true;
+}
+
 } // namespace
 
 void InitSprites() {
     for (int i = 0; i < (int)SpriteId::COUNT; i++) {
-        if (!FileExists(FILES[i])) continue;
-        Image img = LoadImage(FILES[i]);
-        ImageFormat(&img, PIXELFORMAT_UNCOMPRESSED_R8G8B8A8);
+        Image img{};
+        if (!loadSpriteImage(i, img)) continue;
         // Hodet: tyngdepunktet til de synlige pikslene i øverste tredjedel
         {
             Color* px = (Color*)img.data;

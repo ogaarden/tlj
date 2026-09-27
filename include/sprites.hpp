@@ -15,6 +15,7 @@ enum class SpriteId {
     JESTER, WESTER, GEEK, PIERROT,                       // Spillbare klovner
     FOOTMAN, GOON, LACKEY, EXPLODER, ARCHER,             // Vanlige fiender
     EXECUTIONER, MAGUS, IRON_KNIGHT, KING,               // Minibosser og kongen
+    GUARD, TROLL, PRIEST,                                // Sterke fiender sent i runden (omfargede, se sprites.cpp)
     COUNT
 };
 

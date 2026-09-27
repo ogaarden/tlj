@@ -234,3 +234,9 @@ Notes:
    Søylene vises som prikker på minimapet, og kister havner aldri inni en søyle.
 
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj
+
+// Færre, men sterkere fiender sent i runden
+1) Wave-størrelsen flater ut: ~170 fiender i wave 20 (før ~750), maks 260 samtidig
+2) Nye fiender: Hoffgarde (rustning), Steintroll (stormer, sårbar etterpå), Hoffprest (helbreder)
+3) Hordene er én ring på maks 50, med garder og troll sent
+4) XP per wave er uendret, så levelingen går like fort

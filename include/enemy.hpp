@@ -5,6 +5,7 @@
 #include <raymath.h>
 #include <cmath>
 #include <vector>
+#include <memory>
 #include "sprites.hpp"
 
 enum class EnemyType {
@@ -12,7 +13,10 @@ enum class EnemyType {
     GOON,
     LACKEY,
     EXPLODER,
-    ARCHER   // Armbrøstskytter: holder avstand og skyter piler
+    ARCHER,  // Armbrøstskytter: holder avstand og skyter piler
+    GUARD,   // Hoffgarde: rustning som tar av skade på hvert treff
+    TROLL,   // Steintroll: enorm og treg, stormer mot deg, sårbar etterpå
+    PRIEST   // Hoffprest: holder seg bak og helbreder fiendene rundt seg
 };
 
 struct Pickup;
@@ -64,6 +68,8 @@ public:
     void dropLoot(std::vector<Pickup>& pickups) const; // XP + evt. gull når fienden dør
     virtual void onDeath() {}                          // Kalles når fienden dør (uansett årsak)
     virtual int contactDamage() const { return damage; } // Skade ved berøring
+    // Kalles etter at alle fiender har flyttet seg – for fiender som påvirker andre (f.eks. helbreder)
+    virtual void support(std::vector<std::unique_ptr<Enemy>>& allEnemies) { (void)allEnemies; }
 
     // Echelon-effekter som gjør fienden sterkere (kalles når den spawner)
     virtual void applyEchelonModifiers(float hpMult, float damageMult, float speedMult);
@@ -83,7 +89,8 @@ public:
     float slowAmount = 0.0f;          // 0.5 = halv fart
     Vector2 knockVelocity = { 0, 0 }; // Dytt (bjeller, bumerang), dør ut raskt
     float knockbackScale = 1.0f;      // Store fiender dyttes mindre (bossen nesten ikke)
-    float damageTakenMult = 1.0f;     // < 1 = rustning (kongen i fase 2)
+    float damageTakenMult = 1.0f;     // < 1 = rustning (kongen i fase 2), > 1 = sårbar
+    int armor = 0;                    // Trekkes fra hvert direkte treff (minst 1 skade går alltid gjennom)
     bool chestCarrier = false;        // Slipper alltid en skattekiste (horde-kaptein)
     bool miniboss = false;            // Miniboss: slipper Kongens septer (se miniboss.hpp)
     const char* title = "";           // Navn som vises over HP-baren (minibosser)
@@ -226,6 +233,46 @@ public:
     void drawVfx() const override;
     int contactDamage() const override { return damage / 2; }
     SpriteId spriteId() const override { return SpriteId::ARCHER; }
+};
+
+// Hoffgarde: rød og gyllen rustning. Tar av `armor` skade på hvert treff, så svake
+// og raske våpen (dolker, Rot) biter dårlig – store treff og kritiske treff er best.
+class RoyalGuard : public Footman {
+public:
+    RoyalGuard(Vector2 spawnPos, Texture2D tex);
+    SpriteId spriteId() const override { return SpriteId::GUARD; }
+};
+
+// Steintroll: enormt og tregt. Stopper opp, brøler (rød varsel-linje) og stormer mot deg.
+// Etter stormen står det og puster – da tar det 50 % ekstra skade.
+class StoneTroll : public Goon {
+    enum class Phase { CHASE, WINDUP, CHARGE, WINDED };
+    Phase phase = Phase::CHASE;
+    float timer = 3.0f;
+    Vector2 chargeDir = { 0, 1 };
+public:
+    StoneTroll(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    int contactDamage() const override;
+    void draw() const override;
+    void drawVfx() const override;
+    Color spriteTint() const override;
+    SpriteId spriteId() const override { return SpriteId::TROLL; }
+};
+
+// Hoffprest: holder avstand bak de andre og helbreder alle fiender i nærheten med jevne mellomrom.
+// Skjør – drep den først!
+class CourtPriest : public Enemy {
+    float healTimer = 2.0f;
+    float pulse = 0.0f; // 1 -> 0 etter en helbredelse (for effekten)
+public:
+    CourtPriest(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void support(std::vector<std::unique_ptr<Enemy>>& allEnemies) override;
+    void draw() const override;
+    void drawVfx() const override;
+    int contactDamage() const override { return damage / 2; }
+    SpriteId spriteId() const override { return SpriteId::PRIEST; }
 };
 
 enum class PickupType {

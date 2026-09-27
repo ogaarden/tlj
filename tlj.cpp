@@ -562,6 +562,8 @@ int main() {
                     if (inBossArena) enemy->position = ClampToArena(enemy->position, enemy->hitRadius);
                     else ResolvePillarCollision(enemy->position, enemy->hitRadius * 0.8f, player.position, enemy->speed * 0.7f * deltaTime);
                 }
+                // Fiender som påvirker andre fiender (hoffprestene helbreder)
+                for (size_t i = 0; i < enemies.size(); i++) enemies[i]->support(enemies);
             }
 
             // Den rasende kongen kaller inn lakeier i en ring rundt seg
