@@ -41,7 +41,10 @@ namespace {
 // --- Baseklasse ---
 void Enemy::draw() const {
     // På gulvet: bare skyggen. Selve figuren tegnes i draw3D().
-    DrawShadow({ position.x + 4.0f, position.y + 4.0f }, 15.0f * modelScale, 8.0f * modelScale);
+    // Mørk, rødlig skygge (tydeligere enn spillerens), så fiendene synes på det lyse gulvet
+    float k = ENEMY_VISUAL_SCALE * modelScale;
+    DrawEllipse((int)position.x + 3, (int)position.y + 3, 17.0f * k, 9.5f * k, Fade(Color{ 40, 0, 8, 255 }, 0.55f));
+    DrawEllipse((int)position.x + 3, (int)position.y + 3, 11.0f * k, 6.0f * k, Fade(Color{ 20, 0, 4, 255 }, 0.35f));
 }
 
 void Enemy::draw3D() const {

@@ -372,3 +372,14 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
    Skyggedanser +7 %, Kavaleriets marsj +5 %, Fanehallen +8 %.
    Fiendene blir raskere fortere: +3.5 % per minutt (maks +45 %), så etter ca. 10 min er vanlige
    soldater like raske som en Jester uten fart-items. Man kan ikke lenger bare løpe fra alt.
+
+// 24 oktober – fiendene synes og ser farlige ut
+1) Blekk-kontur rundt alle fiendene (dypt karmosin, nesten svart). Tegnes som et ekstra pass der
+   formene blåses opp og bare baksiden vises (BeginOutlinePass i render3d.cpp), så hver figur får
+   en tydelig kant mot gulvet – også soldatene i karmosin livré på de røde løperne.
+2) Gulvet er dempet (mørkere og litt kjøligere), så figurene står fram i stedet for å drukne i
+   de travle delft-flisene.
+3) Fiendene tegnes 20 % større (ENEMY_VISUAL_SCALE, bare utseendet – hitboksen er den samme).
+   Minibosser og Kongen er uendret.
+4) Mørk, rødlig skygge under fiendene, og en rød fare-glød på gulvet under fiender som er nær deg
+   (sterkere jo nærmere de kommer).

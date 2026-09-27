@@ -1230,6 +1230,11 @@ int main() {
                 } else {
                     DrawCastleFloor(player.position, View3D::GROUND_SIZE / 2.0f);
                 }
+                // Demp gulvet (mørkere og kjøligere), så figurene står fram mot det i stedet for å drukne
+                {
+                    float half = View3D::GROUND_SIZE / 2.0f;
+                    DrawRectangleV({ player.position.x - half, player.position.y - half }, { half * 2.0f, half * 2.0f }, Fade(Color{ 14, 12, 34, 255 }, 0.38f));
+                }
                 for (const auto& pickup : pickups) {
                     DrawEllipse((int)pickup.position.x + 2, (int)pickup.position.y + 2, pickup.radius, pickup.radius * 0.6f, Fade(BLACK, 0.3f));
                 }
@@ -1326,11 +1331,31 @@ int main() {
                 // Mange fiender -> færre trekanter per fiende (de er små på skjermen uansett)
                 SetShapeDetail(1.0f - Clamp(((float)enemies.size() - 80.0f) / 300.0f, 0.0f, 0.45f));
                 const bool animate = currentState == GAMEPLAY; // Figurene står stille i menyer og pause
+                // Nye fiender stiger opp av gulvet; elite-fiender er større
+                auto enemyRise = [](const Enemy& e) {
+                    float rise = std::min(1.0f, e.age / 0.45f);
+                    return 1.0f - (1.0f - rise) * (1.0f - rise);
+                };
+                auto drawEnemyModel = [&](Enemy& e) {
+                    float rise = enemyRise(e);
+                    float visual = (e.miniboss || e.id == bossId) ? 1.0f : ENEMY_VISUAL_SCALE; // Bossene er store nok
+                    float scale = visual * e.modelScale * (0.5f + 0.5f * rise);
+                    rlPushMatrix();
+                        rlTranslatef(e.position.x, -(1.0f - rise) * 25.0f, e.position.y);
+                        rlScalef(scale, scale, scale);
+                        rlTranslatef(-e.position.x, 0.0f, -e.position.y);
+                        e.draw3D();
+                    rlPopMatrix();
+                };
+                // Mørk blekk-kontur rundt alle fiendene først (dypt karmosin, nesten svart),
+                // så de skiller seg tydelig fra det lyse porselensgulvet og ser farlige ut
+                BeginOutlinePass(1.7f, Color{ 38, 4, 12, 255 });
+                for (auto& enemy : enemies)
+                    if (!HasSprite(enemy->spriteId())) drawEnemyModel(*enemy);
+                EndOutlinePass();
                 for (auto& enemy : enemies) {
-                    // Nye fiender stiger opp av gulvet; elite-fiender er større. Treff gir hvitt glimt.
-                    float rise = std::min(1.0f, enemy->age / 0.45f);
-                    rise = 1.0f - (1.0f - rise) * (1.0f - rise);
-                    float scale = enemy->modelScale * (0.5f + 0.5f * rise);
+                    // Treff gir hvitt glimt
+                    float rise = enemyRise(*enemy);
                     if (HasSprite(enemy->spriteId())) {
                         // Tegnet figur: går med beina, snur seg som en papirfigur
                         float w = enemy->walkCycle();
@@ -1359,12 +1384,7 @@ int main() {
                         continue;
                     }
                     SetShadeFlash(enemy->hitFlash * 0.85f);
-                    rlPushMatrix();
-                        rlTranslatef(enemy->position.x, -(1.0f - rise) * 25.0f, enemy->position.y);
-                        rlScalef(scale, scale, scale);
-                        rlTranslatef(-enemy->position.x, 0.0f, -enemy->position.y);
-                        enemy->draw3D();
-                    rlPopMatrix();
+                    drawEnemyModel(*enemy);
                 }
                 SetShadeFlash(0.0f);
                 SetShapeDetail(1.0f);
@@ -1471,6 +1491,16 @@ int main() {
                     }
                     for (auto& enemy : enemies) {
                         enemy->drawVfx();
+                        // Fare: fiender som er nær deg får en rød glød på gulvet, sterkere jo nærmere
+                        {
+                            float d = Vector2Distance(enemy->position, player.position);
+                            if (d < 280.0f) {
+                                float k = 1.0f - d / 280.0f;
+                                k *= k;
+                                Color danger = { (unsigned char)(150 * k), (unsigned char)(12 * k), (unsigned char)(20 * k), 255 };
+                                VfxDecal(VfxTex::GLOW, enemy->position, 46.0f * ENEMY_VISUAL_SCALE * enemy->modelScale, danger);
+                            }
+                        }
                         if (enemy->slowTimer > 0.0f) {
                             // Frosset: blå glød rundt fienden
                             float k = std::min(1.0f, enemy->slowTimer) * enemy->slowAmount;

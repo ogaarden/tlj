@@ -18,6 +18,9 @@ constexpr float RIM = 0.55f;      // Hvor sterkt kantlyset er
 
 Vector3 viewDir = Vector3Normalize({ 0.0f, 0.95f, 0.3f });
 float flashAmount = 0.0f;
+// Konturpass (se BeginOutlinePass): formene blåses opp og tegnes i én mørk farge
+float outlineWidth = 0.0f;
+Color outlineColor = { 0, 0, 0, 255 };
 float shapeDetail = 1.0f;
 
 int detailed(int n, int minimum) {
@@ -27,6 +30,7 @@ int detailed(int n, int minimum) {
 float shakeTrauma = 0.0f;
 
 Color lit(Color base, Vector3 normal) {
+    if (outlineWidth > 0.0f) return { outlineColor.r, outlineColor.g, outlineColor.b, base.a };
     float d = Vector3DotProduct(normal, LIGHT_DIR);
     float k = AMBIENT + DIFFUSE * fmaxf(d, 0.0f);
     // Kantlys: flater som vender bort fra kameraet (konturen) blir lysere
@@ -121,6 +125,21 @@ void SetShadeViewDir(Vector3 towardCamera) {
 
 void SetShapeDetail(float detail) {
     shapeDetail = detail < 0.3f ? 0.3f : (detail > 1.0f ? 1.0f : detail);
+}
+
+void BeginOutlinePass(float width, Color color) {
+    // Tegn det som ligger i batchen med vanlig culling først, og cull så FORSIDENE:
+    // da vises bare baksiden av de oppblåste formene – en mørk kant rundt silhuetten.
+    rlDrawRenderBatchActive();
+    rlSetCullFace(RL_CULL_FACE_FRONT);
+    outlineWidth = width;
+    outlineColor = color;
+}
+
+void EndOutlinePass() {
+    rlDrawRenderBatchActive();
+    rlSetCullFace(RL_CULL_FACE_BACK);
+    outlineWidth = 0.0f;
 }
 
 void SetShadeFlash(float amount) {
@@ -236,6 +255,7 @@ void emitGrid(int rings, int slices, Vector3 center) {
 } // namespace
 
 void ShadedSphere(Vector3 center, float radius, Color color, int rings, int slices) {
+    radius += outlineWidth;
     rings = detailed(rings, 3);
     slices = detailed(slices, 4);
     const std::vector<Vector3>& unit = unitSphere(rings, slices);
@@ -253,6 +273,13 @@ void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadi
     Vector3 axis = Vector3Subtract(end, start);
     if (Vector3Length(axis) < 0.001f) return;
     Vector3 dir = Vector3Normalize(axis);
+    if (outlineWidth > 0.0f) {
+        // Konturpass: tykkere og litt lengre i begge ender
+        start = Vector3Subtract(start, Vector3Scale(dir, outlineWidth));
+        end = Vector3Add(end, Vector3Scale(dir, outlineWidth));
+        startRadius += outlineWidth;
+        endRadius += outlineWidth;
+    }
 
     // To vektorer vinkelrett på aksen
     Vector3 helper = (fabsf(dir.y) < 0.95f) ? Vector3{ 0, 1, 0 } : Vector3{ 1, 0, 0 };
@@ -311,6 +338,7 @@ void ShadedCylinder(Vector3 start, Vector3 end, float startRadius, float endRadi
 }
 
 void ShadedCube(Vector3 center, Vector3 size, float yawDegrees, Color color) {
+    size = { size.x + 2.0f * outlineWidth, size.y + 2.0f * outlineWidth, size.z + 2.0f * outlineWidth };
     float yaw = yawDegrees * DEG2RAD;
     Vector3 ax = { cosf(yaw), 0.0f, -sinf(yaw) };  // Lokal x-akse
     Vector3 ay = { 0.0f, 1.0f, 0.0f };
@@ -346,6 +374,7 @@ void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color
     f = Vector3Normalize(f);
     Vector3 u = { 0.0f, 1.0f, 0.0f };
     Vector3 sd = Vector3CrossProduct(u, f);
+    radii = { radii.x + outlineWidth, radii.y + outlineWidth, radii.z + outlineWidth };
 
     rings = detailed(rings, 3);
     slices = detailed(slices, 4);
@@ -370,6 +399,8 @@ void ShadedEllipsoid(Vector3 center, Vector2 forward, Vector3 radii, Color color
 }
 
 void ShadedCrystal(Vector3 center, float radius, float height, float spinDegrees, Color color) {
+    radius += outlineWidth;
+    height += outlineWidth;
     float a0 = spinDegrees * DEG2RAD;
     Vector3 top = { center.x, center.y + height, center.z };
     Vector3 bottom = { center.x, center.y - height, center.z };

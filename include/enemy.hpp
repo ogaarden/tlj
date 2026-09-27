@@ -30,6 +30,10 @@ void DrawEnemyShots3D();
 void DrawEnemyShotsVfx();
 void ClearEnemyShots();
 
+// Fiendene tegnes litt større enn hitboksen tilsier, så de synes (og ser farlige ut) med
+// kameraet så langt unna. Påvirker bare tegningen, ikke treff.
+constexpr float ENEMY_VISUAL_SCALE = 1.2f;
+
 class Enemy {
 private:
     static inline int nextId = 0;

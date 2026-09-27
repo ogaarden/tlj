@@ -42,6 +42,13 @@ void SetShadeViewDir(Vector3 towardCamera);
 // 0 = vanlige farger, 1 = helt hvit. Brukes til å blinke fiender hvite når de blir truffet.
 void SetShadeFlash(float amount);
 
+// Kontur (blekk-strek rundt figurene, så de synes godt mot det lyse gulvet).
+// Alt som tegnes mellom Begin/End blåses opp med `width` og tegnes i `color`, med
+// forsidene skjult – så bare en kant rundt silhuetten blir igjen. Tegn så figurene
+// vanlig etterpå. Koster én ekstra tegning av hver figur.
+void BeginOutlinePass(float width, Color color);
+void EndOutlinePass();
+
 // Detaljnivå for kuler/sylindre (1 = fullt, 0.5 = halvparten så mange trekanter).
 // Senkes automatisk når det er mange fiender på skjermen, så spillet holder farten.
 void SetShapeDetail(float detail);
