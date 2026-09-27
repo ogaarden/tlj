@@ -15,6 +15,8 @@ enum class Decree {
     BLOOD_MOON,  // Blodmåne: nye fiender slår 50 % hardere, men slipper mye mer gull
     HUNT,        // Den store jakten: tre hundeflokker slippes løs rundt deg
     MUSTER,      // Mobilisering: dobbelt så mange fiender, +50 % XP
+    DARKNESS,    // Mørklegging: lysene slukkes, du ser bare rett rundt deg, men +50 % XP
+    GOLD_RAIN,   // Gullregn: mynter regner ned rundt deg, men nye fiender har +40 % HP
     COUNT
 };
 const char* DecreeTitle(Decree d);
@@ -43,6 +45,11 @@ public:
     static constexpr float DECREE_LENGTH = 30.0f;
     Decree decree = Decree::NONE;
     float decreeStart = -100.0f;
+    // Skattmesteren kommer kl. 3:15 og deretter hvert 3. minutt
+    static constexpr float TREASURER_FIRST = 195.0f;
+    static constexpr float TREASURER_EVERY = 180.0f;
+    float lastTreasurerTime = -100.0f;   // Når siste skattmester kom (HUD-en viser et varsel)
+    int treasurersSpawned = 0;
     float decreeLeft() const { return decree == Decree::NONE ? 0.0f : decreeStart + DECREE_LENGTH - gameTime; }
 
 private:

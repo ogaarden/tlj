@@ -16,7 +16,8 @@ enum class EnemyType {
     HOUND,      // Kongens hund: kommer i flokk, kryper sammen og hopper på deg
     PRIEST,     // Hoffprest: holder seg bak og helbreder fiendene rundt seg
     DRUMMER,    // Trommeslager: fiendene rundt ham går mye fortere
-    CANNONEER   // Kanonér: lobber granater som lander der du står (rød sirkel)
+    CANNONEER,  // Kanonér: lobber granater som lander der du står (rød sirkel)
+    TREASURER   // Skattmester: sjelden, løper fra deg og mister mynter. Mye gull og en kiste hvis du tar ham
 };
 
 struct Pickup;
@@ -66,6 +67,7 @@ public:
     void takeDamage(int amount, Color numberColor = WHITE, bool isDamageOverTime = false);
     bool isDead() const;
     void dropLoot(std::vector<Pickup>& pickups) const; // XP + evt. gull når fienden dør
+    virtual void extraLoot(std::vector<Pickup>& pickups) const { (void)pickups; } // Ekstra bytte (skattmesteren)
     virtual void onDeath() {}                          // Kalles når fienden dør (uansett årsak)
     virtual int contactDamage() const { return damage; } // Skade ved berøring
 
@@ -95,6 +97,7 @@ public:
     bool chestCarrier = false;        // Slipper alltid en skattekiste (horde-kaptein)
     bool miniboss = false;            // Miniboss: slipper Kongens septer (se miniboss.hpp)
     float hasteTimer = 0.0f;          // Trommeslagerens takt: går 40 % fortere så lenge denne er > 0
+    bool ignoresAuras = false;        // Skattmesteren: påvirkes ikke av prest, trommeslager eller Kongens fest
     // Aura (prest og trommeslager): spill-løkka bruker den på fiendene rundt
     enum class Aura { NONE, HEAL, HASTE };
     virtual Aura aura() const { return Aura::NONE; }
@@ -297,6 +300,26 @@ public:
     void drawVfx() const override;
     int contactDamage() const override { return damage / 3; }
     SpriteId spriteId() const override { return SpriteId::CANNONEER; }
+};
+
+// Skattmester: dukker opp noen ganger i runden med en sekk full av kongens gull.
+// Løper fra deg, snubler innimellom (og mister en mynt), og rømmer etter 25 sek.
+class Treasurer : public Enemy {
+    float life = 25.0f;
+    float stumbleTimer = 2.2f;
+    float stumble = 0.0f;       // > 0: har snublet og står stille
+    float wander = 0.0f;
+public:
+    bool escaped = false;
+    Treasurer(Vector2 spawnPos, Texture2D tex);
+    void update(Vector2 playerPosition) override;
+    void draw3D() const override;
+    void drawVfx() const override;
+    void onDeath() override;
+    void extraLoot(std::vector<Pickup>& pickups) const override;
+    int contactDamage() const override { return 0; } // Han vil bare vekk
+    float timeLeft() const { return life; }
+    bool droppedCoin = false;   // Satt når han mister en mynt (spill-løkka legger den på bakken)
 };
 
 enum class PickupType {

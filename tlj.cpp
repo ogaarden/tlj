@@ -89,6 +89,7 @@ struct RunSummary {
     int survivalGold = 0; // Bonus for overlevd tid
     int levelGold = 0;    // Bonus for level
     int bossGold = 0;     // Bonus for å slå bossen
+    float echelonMult = 1.0f; // Høyere echelon = mer gull (+15 % per echelon over 1)
     float greedMult = 1.0f;
     int totalGold = 0;
 };
@@ -106,7 +107,8 @@ RunSummary CalculateRunSummary(bool died, bool bossDefeated, int echelon, float 
     r.survivalGold = (int)(time / 60.0f * Rewards::GOLD_PER_MINUTE);
     r.levelGold = (level - 1) * Rewards::GOLD_PER_LEVEL;
     r.greedMult = greedMult;
-    r.totalGold = (int)((r.coinGold + r.survivalGold + r.levelGold + r.bossGold) * greedMult);
+    r.echelonMult = 1.0f + 0.15f * (echelon - 1);
+    r.totalGold = (int)((r.coinGold + r.survivalGold + r.levelGold + r.bossGold) * r.echelonMult * greedMult);
     return r;
 }
 
@@ -551,9 +553,22 @@ int main() {
                     gongFor = spawner.decreeStart;
                     PlaySfxPitch(Sfx::BOSS_GONG, 1.25f);
                 }
+                // Gullregn: mynter faller ned rundt spilleren
+                static float rainTimer = 0.0f;
+                if (spawner.decree == Decree::GOLD_RAIN) {
+                    rainTimer -= deltaTime;
+                    if (rainTimer <= 0.0f) {
+                        rainTimer = 0.45f;
+                        float a = (float)GetRandomValue(0, 360) * DEG2RAD;
+                        float d = (float)GetRandomValue(80, 420);
+                        Vector2 at = { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d };
+                        pickups.push_back({ at, 1, GOLD, 5.0f, 12.0f, PickupType::COIN });
+                        VfxBillboard(VfxTex::SPARK, ToWorld3D(at, 40.0f), 30.0f, Color{ 255, 220, 120, 255 }, (float)GetRandomValue(0, 360));
+                    }
+                }
                 // Kongens fest: alle vanlige fiender går fortere så lenge dekretet varer
                 if (spawner.decree == Decree::FEAST)
-                    for (auto& e : enemies) if (!e->miniboss) e->hasteTimer = 0.2f;
+                    for (auto& e : enemies) if (!e->miniboss && !e->ignoresAuras) e->hasteTimer = 0.2f;
             }
             camera.target = player.position;
 
@@ -575,6 +590,15 @@ int main() {
                 }
             }
 
+            // Skattmesteren mister mynter når han snubler
+            for (auto& e : enemies) {
+                Treasurer* t = dynamic_cast<Treasurer*>(e.get());
+                if (!t || !t->droppedCoin) continue;
+                t->droppedCoin = false;
+                pickups.push_back({ { t->position.x + (float)GetRandomValue(-10, 10), t->position.y + (float)GetRandomValue(-10, 10) }, 1, GOLD, 5.0f, 30.0f, PickupType::COIN });
+                PlaySfxPitch(Sfx::COIN, 1.3f);
+            }
+
             // Auraer: presten helbreder og trommeslageren gir fart til fiendene rundt seg
             for (auto& s : enemies) {
                 Enemy::Aura aura = s->aura();
@@ -584,7 +608,7 @@ int main() {
                 float r2 = s->auraRadius() * s->auraRadius();
                 bool healedAny = false;
                 for (auto& e : enemies) {
-                    if (e->miniboss || e->id == bossId) continue;
+                    if (e->miniboss || e->id == bossId || e->ignoresAuras) continue;
                     if (Vector2DistanceSqr(e->position, s->position) > r2) continue;
                     if (aura == Enemy::Aura::HASTE) { e->hasteTimer = 0.2f; continue; }
                     if (e->hp >= e->maxHp) continue;
@@ -1437,6 +1461,31 @@ int main() {
             // --- SKADETALL (projiseres fra 3D-posisjonen, så teksten alltid er rett vei) ---
             DrawDamageNumbers(view);
 
+            // --- DEKRET-OVERLEGG (under HUD-en): mørklegging og blodmåne ---
+            if (!inBossArena && spawner.decree != Decree::NONE) {
+                float since = spawner.gameTime - spawner.decreeStart;
+                float left = spawner.decreeLeft();
+                if (spawner.decree == Decree::DARKNESS) {
+                    // Mørklegging: alt blir mørkt utenfor en lyssirkel rundt spilleren (tones inn og ut)
+                    float fade = Clamp(fminf(since, left) / 1.5f, 0.0f, 1.0f);
+                    Vector2 c = GroundToScreen(view, player.position, 30.0f);
+                    float sh = (float)GetScreenHeight();
+                    float r0 = sh * 0.20f, r1 = sh * 0.46f;
+                    float far = (float)(GetScreenWidth() + GetScreenHeight()) * 1.2f;
+                    const int STEPS = 18;
+                    for (int i = 0; i < STEPS; i++) {
+                        float ra = r0 + (r1 - r0) * i / STEPS, rb = r0 + (r1 - r0) * (i + 1) / STEPS;
+                        float k = (i + 1) / (float)STEPS;
+                        DrawRing(c, ra, rb, 0.0f, 360.0f, 64, Fade(Color{ 5, 5, 15, 255 }, 0.9f * k * k * fade));
+                    }
+                    DrawRing(c, r1, far, 0.0f, 360.0f, 64, Fade(Color{ 5, 5, 15, 255 }, 0.9f * fade));
+                }
+                if (spawner.decree == Decree::BLOOD_MOON) {
+                    // Rødt skjær over hele skjermen
+                    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(Color{ 140, 0, 10, 255 }, 0.24f), Fade(Color{ 90, 0, 0, 255 }, 0.12f));
+                }
+            }
+
             // --- PILER I SKJERMKANTEN mot kister (gull), septre (blå) og miniboss-sirkler (lilla) ---
             {
                 float sw = (float)GetScreenWidth(), sh = (float)GetScreenHeight();
@@ -1446,13 +1495,14 @@ int main() {
                     float cross = (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
                     if (cross < 0.0f) DrawTriangle(a, b, c, col); else DrawTriangle(a, c, b, col);
                 };
-                struct Target { Vector2 pos; int kind; }; // 0 = kiste, 1 = septer, 2 = miniboss-sirkel
+                struct Target { Vector2 pos; int kind; }; // 0 = kiste, 1 = septer, 2 = miniboss-sirkel, 3 = skattmester
                 std::vector<Target> targets;
                 for (const auto& pk : pickups) {
                     if (pk.type == PickupType::CHEST) targets.push_back({ pk.position, 0 });
                     else if (pk.type == PickupType::SCEPTER) targets.push_back({ pk.position, 1 });
                 }
                 for (const auto& c : summonCircles) targets.push_back({ c.position, 2 });
+                for (const auto& e : enemies) if (dynamic_cast<const Treasurer*>(e.get())) targets.push_back({ e->position, 3 });
 
                 for (const Target& tg : targets) {
                     Vector2 sp = GroundToScreen(view, tg.pos, 12.0f);
@@ -1464,7 +1514,7 @@ int main() {
                     Vector2 at = Vector2Add(mid, Vector2Scale(d, std::min(tx, ty)));
                     float pulse = 0.75f + 0.25f * sinf(uiTime * 6.0f);
                     float r = (tg.kind == 2 ? 20.0f : 16.0f) * barScale;
-                    Color col = tg.kind == 0 ? UI::GOLD_LIGHT : tg.kind == 1 ? Color{ 110, 190, 255, 255 } : Color{ 200, 110, 255, 255 };
+                    Color col = tg.kind == 0 || tg.kind == 3 ? UI::GOLD_LIGHT : tg.kind == 1 ? Color{ 110, 190, 255, 255 } : Color{ 200, 110, 255, 255 };
                     Vector2 n = { -d.y, d.x };
                     Vector2 tip = Vector2Add(at, Vector2Scale(d, r * 1.4f));
                     Vector2 b0 = Vector2Add(at, Vector2Scale(n, r * 0.8f)), b1 = Vector2Subtract(at, Vector2Scale(n, r * 0.8f));
@@ -1478,6 +1528,12 @@ int main() {
                         DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.45f, r * 1.4f, r * 0.95f }, Color{ 150, 90, 40, 255 });
                         DrawRectangleRec({ c.x - r * 0.7f, c.y - r * 0.12f, r * 1.4f, r * 0.14f }, UI::GOLD_LIGHT);
                         DrawRectangleRec({ c.x - r * 0.12f, c.y - r * 0.2f, r * 0.24f, r * 0.3f }, UI::GOLD_LIGHT);
+                    } else if (tg.kind == 3) {
+                        // Pengesekk med gullmynt
+                        DrawCircleV({ c.x, c.y + r * 0.1f }, r * 0.62f, UI::INK);
+                        DrawCircleV({ c.x, c.y + r * 0.1f }, r * 0.52f, Color{ 170, 125, 75, 255 });
+                        DrawRectangleRec({ c.x - r * 0.22f, c.y - r * 0.62f, r * 0.44f, r * 0.3f }, Color{ 170, 125, 75, 255 });
+                        DrawCircleV({ c.x, c.y + r * 0.12f }, r * 0.24f, UI::GOLD_LIGHT);
                     } else if (tg.kind == 1) {
                         // Septer: stav med blå krystall
                         DrawLineEx({ c.x - r * 0.5f, c.y + r * 0.6f }, { c.x + r * 0.3f, c.y - r * 0.3f }, r * 0.28f, UI::INK);
@@ -1533,10 +1589,6 @@ int main() {
             if (!inBossArena && spawner.decree != Decree::NONE) {
                 float since = spawner.gameTime - spawner.decreeStart;
                 float left = spawner.decreeLeft();
-                if (spawner.decree == Decree::BLOOD_MOON) {
-                    // Rødt skjær over hele skjermen
-                    DrawRectangleGradientV(0, 0, GetScreenWidth(), GetScreenHeight(), Fade(Color{ 120, 0, 10, 255 }, 0.16f), Fade(Color{ 60, 0, 0, 255 }, 0.06f));
-                }
                 UI::BeginCanvas();
                 if (since < 3.5f) {
                     // Stort opprop når dekretet kommer
@@ -1551,6 +1603,18 @@ int main() {
                     UI::DrawCenteredText(label, CX, 96.0f, 18.0f, Color{ 255, 205, 90, 255 }, 2.0f);
                 }
                 UI::EndCanvas();
+            }
+
+            // --- SKATTMESTER-VARSEL ---
+            {
+                float since = spawner.gameTime - spawner.lastTreasurerTime;
+                if (!inBossArena && since >= 0.0f && since < 3.0f) {
+                    float a = since < 2.4f ? 1.0f : (3.0f - since) / 0.6f;
+                    UI::BeginCanvas();
+                    UI::DrawCenteredText("SKATTMESTEREN ER HER!", CX, 270.0f, 34.0f, Fade(UI::GOLD_LIGHT, a), 3.0f);
+                    UI::DrawCenteredText("Ta ham foer han roemmer med gullet", CX, 310.0f, 18.0f, Fade(WHITE, a), 2.0f);
+                    UI::EndCanvas();
+                }
             }
 
             // --- HORDE-VARSEL ---
@@ -1913,6 +1977,7 @@ int main() {
             goldLine("Overlevd tid", TextFormat("%d g", lastRun.survivalGold), LIGHTGRAY);
             goldLine("Level-bonus", TextFormat("%d g", lastRun.levelGold), LIGHTGRAY);
             if (lastRun.bossGold > 0) goldLine("Boss-bonus", TextFormat("%d g", lastRun.bossGold), GREEN);
+            if (lastRun.echelonMult > 1.0f) goldLine(TextFormat("Echelon %d-bonus", lastRun.echelon), TextFormat("x%.2f", lastRun.echelonMult), GOLD);
             if (lastRun.greedMult > 1.0f) goldLine("Greed", TextFormat("x%.1f", lastRun.greedMult), LIGHTGRAY);
             DrawLineEx({ px + 40.0f, (float)y }, { px + 480.0f, (float)y }, 2.0f, UI::GOLD_DARK);
             UI::DrawOutlinedText("TOTALT", px + 40.0f, y + 15.0f, 30.0f, UI::GOLD_LIGHT);

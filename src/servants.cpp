@@ -194,3 +194,77 @@ void Cannoneer::drawVfx() const {
     VfxBillboard(VfxTex::SPARK, fuse, 14.0f + 30.0f * k, Color{ 255, 190, 90, 255 }, t * 400.0f);
     VfxBillboard(VfxTex::GLOW, fuse, 18.0f + 40.0f * k, Color{ 255, 120, 40, 255 });
 }
+
+// --- Skattmester ---
+Treasurer::Treasurer(Vector2 spawnPos, Texture2D tex) {
+    position = spawnPos;
+    speed = 135.0f;
+    hp = maxHp = 900;     // Tåler en del: man må jage ham en stund
+    damage = 0;
+    xpValue = 120;
+    orbColor = GOLD;
+    orbRadius = 8.0f;
+    goldChance = 0.0f;    // Gullet kommer fra sekken (extraLoot)
+    hitRadius = 18.0f;
+    knockbackScale = 0.5f;
+    ignoresAuras = true;  // Ellers blir han umulig å ta igjen under Kongens fest
+    modelScale = 1.3f;    // Litt større, så han er lett å få øye på
+    texture = tex;
+    wander = (float)GetRandomValue(-100, 100) / 100.0f;
+}
+
+void Treasurer::update(Vector2 playerPosition) {
+    float dt = GetFrameTime();
+    life -= dt;
+    if (life <= 0.0f) { escaped = true; hp = 0; return; } // Rømte med gullet!
+    if (stumble > 0.0f) { stumble -= dt; return; }
+
+    // Løper bort fra spilleren, i en slak bue så han ikke bare forsvinner rett frem
+    Vector2 away = dirTo(playerPosition, position);
+    float t = (float)GetTime() * 0.7f + id;
+    Vector2 side = { -away.y, away.x };
+    Vector2 dir = Vector2Normalize(Vector2Add(away, Vector2Scale(side, 0.5f * sinf(t) + 0.4f * wander)));
+    facing = dir;
+    position = Vector2Add(position, Vector2Scale(dir, speed * dt));
+
+    // Snubler i den tunge sekken og mister en mynt
+    stumbleTimer -= dt;
+    if (stumbleTimer <= 0.0f) {
+        stumbleTimer = 1.6f + (float)GetRandomValue(0, 100) / 100.0f;
+        stumble = 0.55f;
+        droppedCoin = true;
+    }
+}
+
+void Treasurer::drawVfx() const {
+    // Gyllen glans rundt ham, og gnister fra sekken
+    float t = (float)GetTime();
+    float pulse = 0.75f + 0.25f * sinf(t * 6.0f);
+    VfxDecal(VfxTex::GLOW, position, 110.0f, Color{ (unsigned char)(110 * pulse), (unsigned char)(85 * pulse), 20, 255 }, 0.0f, 1.0f);
+    VfxBillboard(VfxTex::GLOW, ToWorld3D(position, 30.0f), 70.0f, Color{ 90, 70, 15, 255 });
+    if (GetRandomValue(0, 5) == 0)
+        VfxBillboard(VfxTex::SPARK, ToWorld3D({ position.x + GetRandomValue(-12, 12), position.y + GetRandomValue(-12, 12) }, 30.0f + GetRandomValue(0, 20)), 16.0f, Color{ 255, 220, 120, 255 }, t * 300.0f);
+}
+
+void Treasurer::onDeath() {
+    if (escaped) {
+        // Forsvinner i en sky av gullstøv
+        VfxDeath(position, Color{ 255, 210, 90, 255 });
+        VfxShockwave(position, 90.0f, Color{ 255, 210, 90, 255 });
+    } else {
+        VfxExplosion(position, 70.0f);
+        VfxShockwave(position, 160.0f, Color{ 255, 215, 80, 255 });
+        AddCameraShake(0.4f);
+    }
+}
+
+void Treasurer::extraLoot(std::vector<Pickup>& pickups) const {
+    if (escaped) return;
+    // Sekken sprekker: en ring av mynter og en skattekiste
+    for (int i = 0; i < 16; i++) {
+        float a = i * PI / 8.0f;
+        float d = 30.0f + (i % 2) * 22.0f;
+        pickups.push_back({ { position.x + cosf(a) * d, position.y + sinf(a) * d }, 2, GOLD, 5.0f, 30.0f, PickupType::COIN });
+    }
+    pickups.push_back({ { position.x, position.y - 12.0f }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+}

@@ -290,6 +290,7 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
         }
     }
     if (!merged) pickups.push_back({ scatter, xpValue, XpTierColor(xpValue), XpTierRadius(xpValue), 15.0f, PickupType::XP });
+    extraLoot(pickups);
     if (miniboss) {
         // Miniboss: Kongens septer, en skattekiste og en haug med XP
         pickups.push_back({ { position.x, position.y - 20.0f }, 1, SKYBLUE, 16.0f, 0.0f, PickupType::SCEPTER });
@@ -1121,4 +1122,38 @@ void Cannoneer::draw3D() const {
     Vector3 hand = r.at(8.0f, -9.0f, 18.0f + bob);
     r.limb(r.at(0, -9.5f, 27.0f + bob), hand, 3.2f, 2.8f, LIVERY, 5);
     r.limb(hand, r.at(13.0f, -9.0f, 24.0f + bob), 0.7f, 0.7f, WOOD, 4);
+}
+
+// Skattmester: rund kar i karmosin frakk med gullkjede, flosshatt og en diger pengesekk på ryggen
+void Treasurer::draw3D() const {
+    const Color SACK = { 150, 110, 70, 255 };
+    Rig r(position, facing);
+    float w = walkCycle() * 1.2f;
+    float step = sinf(w);
+    float bob = fabsf(cosf(w)) * 2.5f;
+
+    for (int s = -1; s <= 1; s += 2) {
+        float st = step * 4.5f * s;
+        r.limb(r.at(st * 0.5f, s * 4.5f, 2.0f), r.at(0.0f, s * 4.5f, 11.0f + bob), 2.8f, 3.2f, NAVY);
+        r.blob(2.0f + st, s * 4.5f, 2.0f, { 4.5f, 2.2f, 2.8f }, EYE_BLACK, 4, 6);
+    }
+    r.blob(1.0f, 0.0f, 20.0f + bob, { 11.0f, 11.0f, 10.0f }, LIVERY);                                // Rund mage
+    r.blob(9.0f, 0.0f, 22.0f + bob, { 2.0f, 5.0f, 5.0f }, Color{ 240, 230, 210, 255 }, 4, 5);        // Vest
+    for (int i = -2; i <= 2; i++) r.ball(10.5f, i * 2.2f, 25.0f - i * i * 0.6f + bob, 1.0f, LIVERY_GOLD, 3, 4); // Gullkjede
+    float head = 35.0f + bob;
+    r.ball(1.0f, 0, head, 6.5f, SKIN, 5, 7);
+    r.ball(6.5f, 0, head - 0.5f, 2.0f, Color{ 235, 140, 120, 255 }, 3, 4);                             // Nese
+    r.ball(5.8f, 2.4f, head + 1.5f, 1.6f, LIVERY_GOLD, 3, 5);                                          // Monokkel
+    r.blob(5.5f, 0, head - 3.0f, { 2.0f, 1.2f, 5.0f }, Color{ 90, 60, 40, 255 }, 3, 5);              // Bart
+    r.limb(r.at(0, 0, head + 4.0f), r.at(0, 0, head + 5.0f), 8.5f, 8.5f, EYE_BLACK, 10);            // Hattebrem
+    r.limb(r.at(0, 0, head + 5.0f), r.at(-0.5f, 0, head + 15.0f), 5.5f, 6.0f, EYE_BLACK, 8);        // Flosshatt
+    r.limb(r.at(0, 0, head + 6.0f), r.at(0, 0, head + 7.5f), 5.7f, 5.8f, LIVERY_GOLD, 8);
+    // Pengesekken på ryggen, med mynter som titter opp
+    r.blob(-11.0f, 0.0f, 28.0f + bob, { 9.0f, 11.0f, 9.0f }, SACK);
+    r.limb(r.at(-11.0f, 0, 37.0f + bob), r.at(-11.0f, 0, 41.0f + bob), 3.0f, 4.5f, SACK, 6);
+    for (int i = 0; i < 3; i++) r.ball(-11.0f + (i - 1) * 2.5f, (i - 1) * 1.5f, 42.0f + bob, 2.2f, LIVERY_GOLD, 3, 5);
+    r.ball(-9.0f, -6.0f, 30.0f + bob, 2.0f, LIVERY_GOLD, 3, 5);
+    // Armene holder sekken over skulderen
+    for (int s = -1; s <= 1; s += 2)
+        r.limb(r.at(2.0f, s * 9.0f, 27.0f + bob), r.at(-6.0f, s * 7.0f, 35.0f + bob), 2.6f, 2.2f, LIVERY, 5);
 }

@@ -82,6 +82,8 @@ const char* DecreeTitle(Decree d) {
         case Decree::BLOOD_MOON: return "BLODMAANE";
         case Decree::HUNT:       return "DEN STORE JAKTEN";
         case Decree::MUSTER:     return "MOBILISERING";
+        case Decree::DARKNESS:   return "MOERKLEGGING";
+        case Decree::GOLD_RAIN:  return "GULLREGN";
         default:                 return "";
     }
 }
@@ -92,6 +94,8 @@ const char* DecreeText(Decree d) {
         case Decree::BLOOD_MOON: return "Fiendene slaar hardere, men slipper mye mer gull";
         case Decree::HUNT:       return "Kongens hunder er sluppet loes!";
         case Decree::MUSTER:     return "Dobbelt saa mange fiender, +50% XP";
+        case Decree::DARKNESS:   return "Lysene slukkes! +50% XP saa lenge det er moerkt";
+        case Decree::GOLD_RAIN:  return "Gull regner fra taket, men fiendene taaler mer";
         default:                 return "";
     }
 }
@@ -108,6 +112,8 @@ void WaveSpawner::reset(const EchelonModifiers& echelonModifiers) {
     decreeStart = -100.0f;
     decreesStarted = 0;
     lastDecree = Decree::NONE;
+    lastTreasurerTime = -100.0f;
+    treasurersSpawned = 0;
 }
 
 void WaveSpawner::spawnWave(int waveIndex) {
@@ -165,6 +171,14 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
                     spawnEnemy(EnemyType::HOUND, { c.x + (float)GetRandomValue(-60, 60), c.y + (float)GetRandomValue(-60, 60) }, enemies, enemyTexture);
             }
         }
+    }
+
+    // --- SKATTMESTEREN ---
+    if (gameTime >= TREASURER_FIRST + treasurersSpawned * TREASURER_EVERY) {
+        treasurersSpawned++;
+        lastTreasurerTime = gameTime;
+        float a = (float)GetRandomValue(0, 360) * DEG2RAD;
+        spawnEnemy(EnemyType::TREASURER, { playerPos.x + cosf(a) * 320.0f, playerPos.y + sinf(a) * 260.0f }, enemies, enemyTexture);
     }
 
     // Horde: midt i hver 4. wave kommer en ring av fiender fra alle kanter samtidig
@@ -247,15 +261,18 @@ void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::
         enemy = std::make_unique<Drummer>(spawnPos, enemyTexture);
     } else if (type == EnemyType::CANNONEER) {
         enemy = std::make_unique<Cannoneer>(spawnPos, enemyTexture);
+    } else if (type == EnemyType::TREASURER) {
+        enemy = std::make_unique<Treasurer>(spawnPos, enemyTexture);
     }
     if (!enemy) return;
 
     // Echelon-effekter og tidsskalering stacker
     float m = gameTime / 60.0f;
     if (decree == Decree::FEAST) xpMult *= 2.0f;
-    if (decree == Decree::MUSTER) xpMult *= 1.5f;
+    if (decree == Decree::MUSTER || decree == Decree::DARKNESS) xpMult *= 1.5f;
+    float decreeHp = decree == Decree::GOLD_RAIN ? 1.4f : 1.0f;
     float decreeDamage = decree == Decree::BLOOD_MOON ? 1.5f : 1.0f;
-    enemy->applyEchelonModifiers(modifiers.enemyHpMult * Difficulty::hpMult(m),
+    enemy->applyEchelonModifiers(modifiers.enemyHpMult * Difficulty::hpMult(m) * decreeHp,
                                  modifiers.enemyDamageMult * Difficulty::damageMult(m) * decreeDamage,
                                  modifiers.enemySpeedMult * Difficulty::speedMult(m));
     // Mindre XP per fiende sent i runden (det kommer så mange flere). Tilfeldig avrunding,
@@ -267,7 +284,7 @@ void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::
         if (GetRandomValue(0, 999) < (int)((xp - whole) * 1000.0f)) whole++;
         enemy->xpValue = std::max(1, whole);
     }
-    if (type != EnemyType::EXPLODER && GetRandomValue(1, 1000) <= (int)(Difficulty::eliteChance(m) * 1000.0f)) {
+    if (type != EnemyType::EXPLODER && type != EnemyType::TREASURER && GetRandomValue(1, 1000) <= (int)(Difficulty::eliteChance(m) * 1000.0f)) {
         enemy->makeElite();
     }
     // Gull skaleres ned på samme måte som XP: flere fiender betyr ikke mer gull per minutt

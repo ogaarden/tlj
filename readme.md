@@ -272,4 +272,15 @@ Notes:
    hund på fire bein med dekken, hoffprest med kjortel og røkelseskar, trommeslager med shako og tromme
    (stikkene slår i takt), og kanonér med skjegg og bronsemorter som løftes når han sikter.
 
+// 16 oktober – skattmesteren, to nye dekreter og echelon-bonus
+1) Skattmesteren: kl. 3:15 og deretter hvert 3. minutt dukker en feit skattmester med flosshatt og
+   pengesekk opp i nærheten ("SKATTMESTEREN ER HER!", gyllen pil i skjermkanten). Han løper fra deg,
+   snubler i sekken (og mister en mynt) og rømmer etter 25 sek. Tar du ham, sprekker sekken:
+   16 mynter (32 g), en skattekiste og mye XP. Han påvirkes ikke av prest, trommeslager eller Kongens fest.
+2) To nye kongelige dekreter:
+   - Mørklegging: alt utenfor en lyssirkel rundt deg blir mørkt, men +50 % XP
+   - Gullregn: mynter faller ned rundt deg, men nye fiender har +40 % HP
+   Blodmånen har fått et tydeligere rødt skjær.
+3) Echelon-bonus på gull: +15 % gull per echelon over 1 (E5 = x1.6, E10 = x2.35). Vises på game over-skjermen.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj
