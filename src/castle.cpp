@@ -4,6 +4,7 @@
 #include <rlgl.h>
 #include <raymath.h>
 #include <cmath>
+#include <vector>
 
 namespace {
 
@@ -146,6 +147,7 @@ void forEachBrazier(Vector2 center, float radius, F&& fn) {
     for (int ix = x0; ix <= x1; ix++) {
         for (int iy = y0; iy <= y1; iy++) {
             Vector2 cross = { (float)(ix * CARPET_SPACING), (float)(iy * CARPET_SPACING) };
+            if (fabsf(cross.x) >= CARPET_SPACING * 2.0f || fabsf(cross.y) >= CARPET_SPACING * 2.0f) continue; // Kryss i veggen
             for (int k = 0; k < 4; k++) {
                 Vector2 p = { cross.x + ((k & 1) ? offset : -offset), cross.y + ((k & 2) ? offset : -offset) };
                 if (fabsf(p.x - center.x) < radius && fabsf(p.y - center.y) < radius) fn(p, (float)(ix * 7 + iy * 13 + k));
@@ -155,39 +157,126 @@ void forEachBrazier(Vector2 center, float radius, F&& fn) {
 }
 
 // ---------------------------------------------------------------------
-// PYNT: lave dekorasjoner som står langs løperne – delftvase på marmorsokkel, rustning på
-// stativ og klippet hekk i steinkrukke (hvilken som står hvor, bestemmes av posisjonen).
-// De står rett opp fra gulvet som fyrfatene og er så lave at de følger gulvets perspektiv.
-// Ett par står på hver side av løperen midt mellom to kryss. De stenger veien for spilleren
-// og fiendene (prosjektiler går forbi). Står en av dem foran spilleren, blir den gjennomsiktig.
+// SLOTTET ER AVGRENSET: 4 x 4 saler (hver CARPET_SPACING stor) med murvegg rundt.
+// Hver sal har et tema med faste plasser for pynten (se ROOMS og addRoom):
+//   Storsalen (midten, der man starter), Statuegalleriet, Rustkammeret,
+//   Fanehallen, Hagegården (fontene) og Porselenssalongen.
+// Pynten står rett opp fra gulvet og stenger veien for spilleren og fiendene
+// (prosjektiler går forbi). Står noe foran spilleren, blir det gjennomsiktig.
 // (Funksjonene heter fortsatt "Pillar" for kollisjon og minimap.)
 // ---------------------------------------------------------------------
-constexpr float PILLAR_RADIUS = 30.0f;                           // Kollisjonsradius
-constexpr float DECOR_HEIGHT = 95.0f;                            // Omtrent den høyeste (rustningen)
-constexpr float COLONNADE_OFFSET = CARPET_WIDTH / 2.0f + 120.0f; // Avstand fra midten av løperen
+constexpr float MAP_HALF = CARPET_SPACING * 2.0f;   // Veggen står her (x og y fra -MAP_HALF til MAP_HALF)
+constexpr float WALL_H = 110.0f;
+constexpr float WALL_T = 70.0f;
 
-template <typename F>
-void forEachPillar(Vector2 center, float radius, F&& fn) {
-    const float CS = (float)CARPET_SPACING;
-    int x0 = (int)floorf((center.x - radius) / CS) - 1, x1 = (int)floorf((center.x + radius) / CS) + 1;
-    int y0 = (int)floorf((center.y - radius) / CS) - 1, y1 = (int)floorf((center.y + radius) / CS) + 1;
-    auto emit = [&](Vector2 p) {
-        if (fabsf(p.x - center.x) <= radius && fabsf(p.y - center.y) <= radius) fn(p);
-    };
-    for (int ix = x0; ix <= x1; ix++) {
-        for (int iy = y0; iy <= y1; iy++) {
-            float bx = ix * CS, by = iy * CS;
-            // Ett søylepar midt på hver løper (den loddrette og den vannrette)
-            for (int side = -1; side <= 1; side += 2) {
-                emit({ bx + side * COLONNADE_OFFSET, by + CS / 2.0f });
-                emit({ bx + CS / 2.0f, by + side * COLONNADE_OFFSET });
+enum class Room { GRAND, STATUES, ARMORY, BANNERS, GARDEN, PORCELAIN };
+const char* ROOM_NAMES[] = { "Storsalen", "Statuegalleriet", "Rustkammeret", "Fanehallen", "Hagegaarden", "Porselenssalongen" };
+// Kartet, rad for rad fra nord (øverst på skjermen) til sør. Midten (Storsalen) er der man starter.
+const Room ROOMS[4][4] = {
+    { Room::ARMORY,    Room::STATUES, Room::STATUES, Room::BANNERS   },
+    { Room::GARDEN,    Room::GRAND,   Room::GRAND,   Room::PORCELAIN },
+    { Room::PORCELAIN, Room::GRAND,   Room::GRAND,   Room::GARDEN    },
+    { Room::BANNERS,   Room::ARMORY,  Room::STATUES, Room::ARMORY    },
+};
+
+enum class Decor { VASE, ARMOR, TOPIARY, STATUE, BANNER, RACK, FOUNTAIN };
+struct DecorItem {
+    Vector2 pos;
+    Decor kind;
+    float radius;   // Kollisjon
+    float height;   // For gjennomsiktighet når den står foran spilleren
+    int variant;    // Litt variasjon (f.eks. hvilken statue)
+};
+constexpr float DECOR_SCALE = 1.35f;          // Alle modellene tegnes litt større enn de er bygget
+constexpr float MAX_DECOR_RADIUS = 110.0f * DECOR_SCALE;
+
+std::vector<DecorItem> decorItems;
+struct RoomInfo { Room room; Vector2 center; bool turn; };
+std::vector<RoomInfo> roomInfos;
+
+void addDecor(Vector2 c, float lx, float ly, Decor kind, int variant = 0) {
+    float r = 28.0f, h = 95.0f;
+    switch (kind) {
+        case Decor::VASE:     r = 28.0f;  h = 92.0f;  break;
+        case Decor::ARMOR:    r = 26.0f;  h = 100.0f; break;
+        case Decor::TOPIARY:  r = 28.0f;  h = 95.0f;  break;
+        case Decor::STATUE:   r = 36.0f;  h = 135.0f; break;
+        case Decor::BANNER:   r = 22.0f;  h = 155.0f; break;
+        case Decor::RACK:     r = 34.0f;  h = 90.0f;  break;
+        case Decor::FOUNTAIN: r = 105.0f; h = 70.0f;  break;
+    }
+    decorItems.push_back({ { c.x + lx, c.y + ly }, kind, r * DECOR_SCALE, h * DECOR_SCALE, variant });
+}
+
+// Fast oppsett for hver type sal (koordinater fra midten av salen, innenfor løperne)
+void addRoom(Room room, Vector2 c, int ix, int iy) {
+    bool turn = ((ix + iy) & 1) != 0; // Annenhver sal er dreid 90 grader, så de ikke er like
+    auto add = [&](float x, float y, Decor k, int v = 0) { if (turn) addDecor(c, y, x, k, v); else addDecor(c, x, y, k, v); };
+    switch (room) {
+        case Room::GRAND:
+            // Åpen sal: en statue i midten og fire fanestativer rundt
+            add(0, 0, Decor::STATUE, 2);
+            for (int k = 0; k < 4; k++) add((k & 1) ? 300.0f : -300.0f, (k & 2) ? 300.0f : -300.0f, Decor::BANNER);
+            break;
+        case Room::STATUES:
+            // To rekker statuer langs en midtgang
+            for (int i = 0; i < 4; i++) {
+                float y = -450.0f + i * 300.0f;
+                add(-240.0f, y, Decor::STATUE, i % 2);
+                add(240.0f, y, Decor::STATUE, (i + 1) % 2);
             }
-        }
+            break;
+        case Room::ARMORY:
+            // Rustninger i to rekker og våpenstativer mellom
+            for (int i = -1; i <= 1; i++) {
+                add(i * 330.0f, -360.0f, Decor::ARMOR);
+                add(i * 330.0f, 360.0f, Decor::ARMOR);
+            }
+            add(-330.0f, 0.0f, Decor::RACK);
+            add(330.0f, 0.0f, Decor::RACK);
+            break;
+        case Room::BANNERS:
+            // Lange rekker med faner som danner en gang
+            for (int i = 0; i < 5; i++) {
+                float y = -480.0f + i * 240.0f;
+                add(-190.0f, y, Decor::BANNER, i % 2);
+                add(190.0f, y, Decor::BANNER, (i + 1) % 2);
+            }
+            break;
+        case Room::GARDEN:
+            // Fontene i midten og en ring av klippede hekker
+            add(0, 0, Decor::FOUNTAIN);
+            for (int k = 0; k < 8; k++) {
+                float a = (22.5f + k * 45.0f) * DEG2RAD;
+                add(cosf(a) * 420.0f, sinf(a) * 420.0f, Decor::TOPIARY);
+            }
+            break;
+        case Room::PORCELAIN:
+            // Delftvaser i en rombe
+            add(0, -440.0f, Decor::VASE); add(0, 440.0f, Decor::VASE);
+            add(-440.0f, 0, Decor::VASE); add(440.0f, 0, Decor::VASE);
+            for (int k = 0; k < 4; k++) add((k & 1) ? 220.0f : -220.0f, (k & 2) ? 220.0f : -220.0f, Decor::VASE);
+            add(0, 0, Decor::ARMOR);
+            break;
     }
 }
 
-int decorKind(Vector2 p) {
-    return (tileHash((int)(p.x / 7.0f), (int)(p.y / 11.0f)) + 8) % 3; // 0 = vase, 1 = rustning, 2 = hekk
+void buildMap() {
+    if (!decorItems.empty()) return;
+    for (int iy = -2; iy <= 1; iy++)
+        for (int ix = -2; ix <= 1; ix++) {
+            Vector2 c = { (ix + 0.5f) * CARPET_SPACING, (iy + 0.5f) * CARPET_SPACING };
+            addRoom(ROOMS[iy + 2][ix + 2], c, ix, iy);
+            roomInfos.push_back({ ROOMS[iy + 2][ix + 2], c, ((ix + iy) & 1) != 0 });
+        }
+}
+
+// Alle ting innenfor en firkant rundt center
+template <typename F>
+void forEachDecor(Vector2 center, float radius, F&& fn) {
+    buildMap();
+    for (const DecorItem& d : decorItems)
+        if (fabsf(d.pos.x - center.x) <= radius && fabsf(d.pos.y - center.y) <= radius) fn(d);
 }
 
 // Delftvase (hvit med koboltblå bånd) på en marmorsokkel med gullkant
@@ -258,63 +347,292 @@ void drawTopiaryDecor(Vector2 p, unsigned char alpha) {
     ShadedSphere(ToWorld3D(p, 88.0f), 7.0f, LEAF, 5, 8);
 }
 
-void drawPillar(Vector2 p, unsigned char alpha = 255) {
-    switch (decorKind(p)) {
-        case 0:  drawVaseDecor(p, alpha); break;
-        case 1:  drawArmorDecor(p, alpha); break;
-        default: drawTopiaryDecor(p, alpha); break;
+// Marmorstatue på en trinnet sokkel: 0 = konge med septer, 1 = ridder med sverd, 2 = stor dronning (Storsalen)
+void drawStatueDecor(Vector2 p, int variant, unsigned char alpha) {
+    const Color STONE_C = { 150, 142, 132, alpha };
+    const Color MARBLE = { 232, 228, 222, alpha };
+    const Color MARBLE_S = { 196, 192, 188, alpha };
+    const Color GOLDC = { 225, 180, 60, alpha };
+    float big = variant == 2 ? 1.2f : 1.0f;
+    ShadedCube(ToWorld3D(p, 6.0f), { 66.0f * big, 12.0f, 66.0f * big }, 0.0f, STONE_C);                  // Nederste trinn
+    ShadedCube(ToWorld3D(p, 19.0f), { 54.0f * big, 14.0f, 54.0f * big }, 0.0f, MARBLE_S);
+    ShadedCube(ToWorld3D(p, 26.5f), { 57.0f * big, 3.0f, 57.0f * big }, 0.0f, GOLDC);                    // Gullkant
+    ShadedCube(ToWorld3D(p, 31.0f), { 50.0f * big, 6.0f, 50.0f * big }, 0.0f, MARBLE_S);
+    // Figuren (litt forenklet, ser mot kameraet): bein/kappe, kropp, hode
+    float b = 34.0f;
+    auto at = [&](float x, float y, float h) { return ToWorld3D({ p.x + x * big, p.y + y * big }, b + h * big); };
+    ShadedCylinder(at(0, 0, 0), at(0, 0, 36), 17.0f * big, 12.0f * big, MARBLE, 14);                     // Kappe
+    ShadedCylinder(at(0, 0, 36), at(0, 0, 54), 12.0f * big, 13.0f * big, MARBLE, 12);                    // Bryst
+    ShadedSphere(at(0, 0, 63), 8.0f * big, MARBLE, 6, 10);                                                // Hode
+    for (int s = -1; s <= 1; s += 2) ShadedSphere(at(s * 13.0f, 0, 52), 5.5f * big, MARBLE_S, 4, 8);     // Skuldre
+    if (variant == 1) {
+        // Ridder: hjelm med kam og et sverd holdt foran seg med spissen ned
+        ShadedCylinder(at(0, 0, 60), at(0, 0, 72), 8.5f * big, 8.0f * big, MARBLE_S, 10);
+        ShadedCube(at(0, 0, 76), { 2.0f, 8.0f, 12.0f }, 0.0f, MARBLE);
+        ShadedCylinder(at(0, 8, 40), at(0, 9, 4), 1.8f, 0.3f, MARBLE_S, 6);                               // Klinge
+        ShadedCube(at(0, 8, 42), { 14.0f, 2.5f, 3.0f }, 0.0f, MARBLE_S);                                   // Parerstang
+        for (int s = -1; s <= 1; s += 2) ShadedCylinder(at(s * 13.0f, 0, 50), at(s * 3.0f, 8, 44), 3.5f, 3.0f, MARBLE, 6);
+    } else {
+        // Konge/dronning: krone og septer løftet i høyre hånd
+        ShadedCylinder(at(0, 0, 69), at(0, 0, 74), 7.0f * big, 8.0f * big, MARBLE_S, 10);
+        for (int k = 0; k < 5; k++) {
+            float a = k * 2.0f * PI / 5.0f;
+            ShadedSphere(at(cosf(a) * 7.0f, sinf(a) * 7.0f, 76), 1.6f * big, MARBLE, 3, 4);
+        }
+        ShadedCylinder(at(13.0f, 0, 50), at(17.0f, 4, 62), 3.5f, 3.0f, MARBLE, 6);                       // Løftet arm
+        ShadedCylinder(at(17.0f, 4, 44), at(18.0f, 5, 86), 1.5f, 1.5f, MARBLE_S, 6);                      // Septer
+        ShadedSphere(at(18.0f, 5, 88), 3.5f * big, MARBLE, 4, 6);
+        ShadedCylinder(at(-13.0f, 0, 50), at(-14.0f, 3, 36), 3.5f, 3.0f, MARBLE, 6);
     }
 }
 
-// Står pynten mellom kameraet og `focus` (spilleren) på skjermen? 0 = nei, 1 = helt over.
-float pillarCover(Vector2 p, const Camera3D& cam, Vector2 focus) {
-    // Bare ting som er nærmere kameraet enn spilleren kan skjule ham
+// Fanestativ: jernstang med tverrstang og en karmosin fane (med gullkrone og frynser) som vender mot kameraet
+void drawBannerDecor(Vector2 p, int variant, unsigned char alpha) {
+    const Color IRON = { 60, 58, 66, alpha };
+    const Color GOLDC = { 225, 180, 60, alpha };
+    const Color CLOTH = variant == 0 ? Color{ 160, 25, 40, alpha } : Color{ 40, 60, 150, alpha };
+    const Color TRIM = variant == 0 ? GOLDC : Color{ 235, 235, 240, alpha };
+    for (int k = 0; k < 3; k++) {                                                                  // Trefot
+        float a = (90.0f + k * 120.0f) * DEG2RAD;
+        ShadedCylinder(ToWorld3D(p, 12.0f), ToWorld3D({ p.x + cosf(a) * 18.0f, p.y + sinf(a) * 18.0f }, 0.0f), 2.0f, 1.6f, IRON, 5);
+    }
+    ShadedCylinder(ToWorld3D(p, 0.0f), ToWorld3D(p, 150.0f), 2.6f, 2.3f, IRON, 6);                // Stang
+    ShadedSphere(ToWorld3D(p, 154.0f), 5.0f, GOLDC, 4, 6);                                         // Gullknapp
+    ShadedCube(ToWorld3D(p, 141.0f), { 56.0f, 3.5f, 3.5f }, 0.0f, IRON);                           // Tverrstang
+    Vector2 f = { p.x, p.y + 3.5f };                                                                // Fanen litt foran stanga
+    ShadedCube(ToWorld3D(f, 100.0f), { 48.0f, 78.0f, 2.0f }, 0.0f, CLOTH);
+    ShadedCube(ToWorld3D({ f.x, f.y + 1.2f }, 136.0f), { 50.0f, 4.0f, 1.0f }, 0.0f, TRIM);         // Kant oppe
+    for (int s = -1; s <= 1; s += 2)                                                               // Kanter på sidene
+        ShadedCube(ToWorld3D({ f.x + s * 23.0f, f.y + 1.2f }, 100.0f), { 3.0f, 74.0f, 1.0f }, 0.0f, TRIM);
+    for (int k = -3; k <= 3; k++)                                                                  // Frynser
+        ShadedCube(ToWorld3D({ f.x + k * 7.0f, f.y }, 58.0f), { 4.5f, 8.0f, 2.2f }, 0.0f, TRIM);
+    // Kronemerke midt på
+    ShadedCube(ToWorld3D({ f.x, f.y + 1.2f }, 96.0f), { 20.0f, 8.0f, 1.0f }, 0.0f, TRIM);
+    for (int k = -1; k <= 1; k++) ShadedCube(ToWorld3D({ f.x + k * 7.0f, f.y + 1.2f }, 103.0f), { 4.0f, 7.0f, 1.0f }, 0.0f, TRIM);
+}
+
+// Våpenstativ: treramme med spyd som lener seg mot den og et rundt skjold foran
+void drawRackDecor(Vector2 p, unsigned char alpha) {
+    const Color WOODC = { 120, 80, 45, alpha };
+    const Color WOOD_D = { 90, 60, 35, alpha };
+    const Color STEEL = { 170, 176, 190, alpha };
+    const Color RED_C = { 160, 25, 40, alpha };
+    const Color GOLDC = { 225, 180, 60, alpha };
+    ShadedCube(ToWorld3D(p, 4.0f), { 70.0f, 8.0f, 24.0f }, 0.0f, WOOD_D);                          // Bunnplanke
+    for (int s = -1; s <= 1; s += 2) ShadedCube(ToWorld3D({ p.x + s * 32.0f, p.y }, 30.0f), { 5.0f, 52.0f, 5.0f }, 0.0f, WOODC);
+    ShadedCube(ToWorld3D(p, 54.0f), { 70.0f, 5.0f, 6.0f }, 0.0f, WOODC);                           // Tverrligger
+    for (int k = 0; k < 5; k++) {                                                                  // Spyd
+        float x = -24.0f + k * 12.0f;
+        ShadedCylinder(ToWorld3D({ p.x + x, p.y + 6.0f }, 6.0f), ToWorld3D({ p.x + x * 0.9f, p.y - 3.0f }, 84.0f), 1.3f, 1.3f, WOODC, 5);
+        ShadedCylinder(ToWorld3D({ p.x + x * 0.9f, p.y - 3.0f }, 84.0f), ToWorld3D({ p.x + x * 0.88f, p.y - 4.0f }, 96.0f), 2.6f, 0.0f, STEEL, 5);
+    }
+    // Rundt skjold som står lent mot foten, vendt mot kameraet
+    Vector3 sc = ToWorld3D({ p.x, p.y + 14.0f }, 22.0f);
+    ShadedCylinder(Vector3Add(sc, { 0, 0, -1.5f }), Vector3Add(sc, { 0, 0, 1.5f }), 17.0f, 17.0f, GOLDC, 16);
+    ShadedCylinder(Vector3Add(sc, { 0, 0, 1.4f }), Vector3Add(sc, { 0, 0, 2.2f }), 14.5f, 14.5f, RED_C, 16);
+    ShadedSphere(Vector3Add(sc, { 0, 0, 2.5f }), 4.0f, GOLDC, 4, 6);
+}
+
+// Fontene: rund steinkant med vann, og en søyle med to skåler i midten
+void drawFountainDecor(Vector2 p, unsigned char alpha) {
+    const Color STONE_C = { 170, 164, 156, alpha };
+    const Color STONE_D = { 125, 120, 115, alpha };
+    const Color WATER = { 70, 130, 200, alpha };
+    const Color GOLDC = { 225, 180, 60, alpha };
+    ShadedCylinder(ToWorld3D(p, 0.0f), ToWorld3D(p, 22.0f), 100.0f, 98.0f, STONE_C, 36);          // Ytterkant
+    ShadedCylinder(ToWorld3D(p, 22.0f), ToWorld3D(p, 25.0f), 101.0f, 101.0f, STONE_D, 36);        // Kant oppe
+    ShadedCylinder(ToWorld3D(p, 25.0f), ToWorld3D(p, 25.5f), 88.0f, 88.0f, WATER, 36);            // Vann
+    ShadedCylinder(ToWorld3D(p, 25.0f), ToWorld3D(p, 55.0f), 10.0f, 7.0f, STONE_C, 14);           // Midtsøyle
+    ShadedCylinder(ToWorld3D(p, 55.0f), ToWorld3D(p, 62.0f), 8.0f, 36.0f, STONE_C, 24);           // Nedre skål
+    ShadedCylinder(ToWorld3D(p, 62.0f), ToWorld3D(p, 62.5f), 32.0f, 32.0f, WATER, 24);
+    ShadedCylinder(ToWorld3D(p, 62.0f), ToWorld3D(p, 80.0f), 5.0f, 4.0f, STONE_C, 10);
+    ShadedCylinder(ToWorld3D(p, 80.0f), ToWorld3D(p, 85.0f), 4.0f, 18.0f, STONE_C, 16);           // Øvre skål
+    ShadedCylinder(ToWorld3D(p, 85.0f), ToWorld3D(p, 85.5f), 15.0f, 15.0f, WATER, 16);
+    ShadedSphere(ToWorld3D(p, 89.0f), 4.0f, GOLDC, 4, 6);
+}
+
+void drawDecor(const DecorItem& d, unsigned char alpha = 255) {
+    rlPushMatrix();
+    rlTranslatef(d.pos.x, 0.0f, d.pos.y);
+    rlScalef(DECOR_SCALE, DECOR_SCALE, DECOR_SCALE);
+    rlTranslatef(-d.pos.x, 0.0f, -d.pos.y);
+    switch (d.kind) {
+        case Decor::VASE:     drawVaseDecor(d.pos, alpha); break;
+        case Decor::ARMOR:    drawArmorDecor(d.pos, alpha); break;
+        case Decor::TOPIARY:  drawTopiaryDecor(d.pos, alpha); break;
+        case Decor::STATUE:   drawStatueDecor(d.pos, d.variant, alpha); break;
+        case Decor::BANNER:   drawBannerDecor(d.pos, d.variant, alpha); break;
+        case Decor::RACK:     drawRackDecor(d.pos, alpha); break;
+        case Decor::FOUNTAIN: drawFountainDecor(d.pos, alpha); break;
+    }
+    rlPopMatrix();
+}
+
+// Står tingen mellom kameraet og `focus` (spilleren) på skjermen? 0 = nei, 1 = helt over.
+float decorCover(const DecorItem& d, const Camera3D& cam, Vector2 focus) {
+    if (d.kind == Decor::FOUNTAIN) return 0.0f; // Lav og bred – skjuler ingenting
     Vector3 fwd = Vector3Subtract(cam.target, cam.position);
     Vector2 fwd2 = Vector2Normalize({ fwd.x, fwd.z });
-    if (Vector2DotProduct(Vector2Subtract(p, focus), fwd2) > 0.0f) return 0.0f;
-    Vector2 b = GetWorldToScreen(ToWorld3D(p, 0.0f), cam);
-    Vector2 t = GetWorldToScreen(ToWorld3D(p, DECOR_HEIGHT), cam);
+    if (Vector2DotProduct(Vector2Subtract(d.pos, focus), fwd2) > 0.0f) return 0.0f;
+    Vector2 b = GetWorldToScreen(ToWorld3D(d.pos, 0.0f), cam);
+    Vector2 t = GetWorldToScreen(ToWorld3D(d.pos, d.height), cam);
     Vector2 f = GetWorldToScreen(ToWorld3D(focus, 35.0f), cam);
     Vector2 bt = Vector2Subtract(t, b);
     float len2 = Vector2DotProduct(bt, bt);
     float u = len2 > 0.0f ? Clamp(Vector2DotProduct(Vector2Subtract(f, b), bt) / len2, 0.0f, 1.0f) : 0.0f;
     Vector2 c = Vector2Add(b, Vector2Scale(bt, u));
     Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, { 0, 1, 0 }));
-    Vector2 edge = GetWorldToScreen(Vector3Add(ToWorld3D(p, DECOR_HEIGHT * u), Vector3Scale(right, PILLAR_RADIUS)), cam);
-    float d = Vector2Distance(f, c) - Vector2Distance(edge, c);
+    Vector2 edge = GetWorldToScreen(Vector3Add(ToWorld3D(d.pos, d.height * u), Vector3Scale(right, d.radius + 6.0f)), cam);
+    float dist = Vector2Distance(f, c) - Vector2Distance(edge, c);
     const float MARGIN = 30.0f;
-    return Clamp(1.0f - d / MARGIN, 0.0f, 1.0f);
+    return Clamp(1.0f - dist / MARGIN, 0.0f, 1.0f);
 }
+
+// --- GULVET I HVER SAL: løpere, gress, tepper og steingulv som gir salene sitt eget preg ---
+void drawRoomFloor(const RoomInfo& r) {
+    Vector2 c = r.center;
+    auto rect = [&](float w, float h, Color col) { // w langs midtgangen (dreies med salen)
+        float rw = r.turn ? h : w, rh = r.turn ? w : h;
+        DrawRectangleRec({ c.x - rw / 2.0f, c.y - rh / 2.0f, rw, rh }, col);
+    };
+    switch (r.room) {
+        case Room::STATUES:
+            // Lang løper mellom statuerekkene, med gullkant
+            rect(260.0f, 1200.0f, CARPET_GOLD);
+            rect(236.0f, 1176.0f, shade(CARPET_RED, -15));
+            rect(150.0f, 1090.0f, CARPET_RED);
+            break;
+        case Room::BANNERS:
+            // Koboltblå løper med hvit kant
+            rect(250.0f, 1250.0f, Color{ 235, 232, 225, 255 });
+            rect(226.0f, 1226.0f, Color{ 35, 60, 150, 255 });
+            break;
+        case Room::ARMORY:
+            // Mørkt skifergulv med jernkant (rustkammeret er et kaldt sted)
+            rect(1000.0f, 1000.0f, Color{ 70, 68, 78, 255 });
+            rect(980.0f, 980.0f, Color{ 92, 90, 100, 255 });
+            for (int k = -4; k <= 4; k++) {
+                float o = k * 108.0f;
+                DrawLineEx({ c.x + o, c.y - 490.0f }, { c.x + o, c.y + 490.0f }, 3.0f, Color{ 70, 68, 78, 255 });
+                DrawLineEx({ c.x - 490.0f, c.y + o }, { c.x + 490.0f, c.y + o }, 3.0f, Color{ 70, 68, 78, 255 });
+            }
+            break;
+        case Room::GARDEN:
+            // Gressplen rundt fontenen, med grusgang og steinkant
+            DrawCircleV(c, 600.0f, Color{ 150, 140, 120, 255 });
+            DrawCircleV(c, 585.0f, Color{ 86, 140, 76, 255 });
+            DrawRing(c, 250.0f, 330.0f, 0.0f, 360.0f, 72, Color{ 205, 190, 160, 255 });     // Grusring
+            DrawCircleV(c, 160.0f, Color{ 205, 190, 160, 255 });                             // Grus rundt fontenen
+            for (int k = 0; k < 4; k++) {                                                    // Grusganger ut
+                Vector2 dir = { cosf(k * PI / 2.0f), sinf(k * PI / 2.0f) };
+                DrawLineEx(Vector2Add(c, Vector2Scale(dir, 150.0f)), Vector2Add(c, Vector2Scale(dir, 590.0f)), 70.0f, Color{ 205, 190, 160, 255 });
+            }
+            break;
+        case Room::PORCELAIN:
+            // Stort rundt delftteppe: koboltblått med hvite ringer
+            DrawCircleV(c, 560.0f, Color{ 240, 238, 232, 255 });
+            DrawCircleV(c, 540.0f, Color{ 35, 60, 150, 255 });
+            DrawRing(c, 380.0f, 396.0f, 0.0f, 360.0f, 72, Color{ 240, 238, 232, 255 });
+            DrawRing(c, 150.0f, 160.0f, 0.0f, 360.0f, 48, Color{ 240, 238, 232, 255 });
+            for (int k = 0; k < 8; k++) {                                                    // Stjerne i midten
+                float a = k * PI / 4.0f;
+                DrawLineEx(c, { c.x + cosf(a) * 140.0f, c.y + sinf(a) * 140.0f }, 10.0f, Color{ 240, 238, 232, 255 });
+            }
+            break;
+        case Room::GRAND:
+            // Stor marmorplate rundt statuen i midten
+            DrawCircleV(c, 200.0f, CARPET_GOLD);
+            DrawCircleV(c, 188.0f, Color{ 225, 215, 198, 255 });
+            DrawRing(c, 120.0f, 128.0f, 0.0f, 360.0f, 48, CARPET_GOLD);
+            break;
+    }
+}
+
+// --- MURVEGGEN rundt slottet ---
+// Steinblokker i to nyanser, en lys kant oppå og pilastre med vegglykter
+constexpr float WALL_SEGMENT = 128.0f;
+constexpr float SCONCE_EVERY = 512.0f;
+
+template <typename F>
+void forEachWallSegment(Vector2 center, float radius, F&& fn) {
+    // fn(midtpunkt, lengderetning (0 = langs x), segmentnummer, side)
+    for (int side = 0; side < 4; side++) {
+        bool alongX = side < 2;
+        float fixed = (side % 2 == 0) ? -MAP_HALF - WALL_T / 2.0f : MAP_HALF + WALL_T / 2.0f;
+        float fixedCam = alongX ? center.y : center.x;
+        if (fabsf(fixed - fixedCam) > radius + WALL_T) continue;
+        float from = fmaxf(-MAP_HALF - WALL_T, (alongX ? center.x : center.y) - radius);
+        float to = fminf(MAP_HALF + WALL_T, (alongX ? center.x : center.y) + radius);
+        int i0 = (int)floorf((from + MAP_HALF + WALL_T) / WALL_SEGMENT), i1 = (int)ceilf((to + MAP_HALF + WALL_T) / WALL_SEGMENT);
+        for (int i = i0; i <= i1; i++) {
+            float along = -MAP_HALF - WALL_T + (i + 0.5f) * WALL_SEGMENT;
+            if (along > MAP_HALF + WALL_T) continue;
+            Vector2 m = alongX ? Vector2{ along, fixed } : Vector2{ fixed, along };
+            fn(m, alongX, i, side);
+        }
+    }
+}
+
+// Vegglykter på innsiden av muren
+template <typename F>
+void forEachSconce(Vector2 center, float radius, F&& fn) {
+    for (int side = 0; side < 4; side++) {
+        for (float a = -MAP_HALF + SCONCE_EVERY / 2.0f; a < MAP_HALF; a += SCONCE_EVERY) {
+            float inner = (side % 2 == 0) ? -MAP_HALF + 12.0f : MAP_HALF - 12.0f;
+            Vector2 p = side < 2 ? Vector2{ a, inner } : Vector2{ inner, a };
+            if (fabsf(p.x - center.x) < radius && fabsf(p.y - center.y) < radius) fn(p, side);
+        }
+    }
+}
+
 
 } // namespace
 
 int PillarsNear(Vector2 center, float radius, Vector2* out, int maxCount) {
     int n = 0;
-    forEachPillar(center, radius, [&](Vector2 p) { if (n < maxCount) out[n++] = p; });
+    forEachDecor(center, radius, [&](const DecorItem& d) { if (n < maxCount) out[n++] = d.pos; });
     return n;
 }
 
 bool ResolvePillarCollision(Vector2& pos, float radius, Vector2 goal, float slide) {
-    Vector2 near[16];
-    int n = PillarsNear(pos, radius + PILLAR_RADIUS + 4.0f, near, 16);
     bool hit = false;
-    for (int i = 0; i < n; i++) {
-        Vector2 d = Vector2Subtract(pos, near[i]);
-        float dist = Vector2Length(d);
-        float minDist = radius + PILLAR_RADIUS;
-        if (dist >= minDist) continue;
+    forEachDecor(pos, radius + MAX_DECOR_RADIUS + 4.0f, [&](const DecorItem& d) {
+        Vector2 dv = Vector2Subtract(pos, d.pos);
+        float dist = Vector2Length(dv);
+        float minDist = radius + d.radius;
+        if (dist >= minDist) return;
         hit = true;
-        Vector2 nrm = dist > 0.01f ? Vector2Scale(d, 1.0f / dist) : Vector2{ 1, 0 };
-        pos = Vector2Add(near[i], Vector2Scale(nrm, minDist));
-        // Gli rundt søylen på den siden som er nærmest målet (så fiender ikke setter seg fast)
+        Vector2 nrm = dist > 0.01f ? Vector2Scale(dv, 1.0f / dist) : Vector2{ 1, 0 };
+        pos = Vector2Add(d.pos, Vector2Scale(nrm, minDist));
+        // Gli rundt tingen på den siden som er nærmest målet (så fiender ikke setter seg fast)
         if (slide > 0.0f) {
             Vector2 tangent = { -nrm.y, nrm.x };
             Vector2 toGoal = Vector2Subtract(goal, pos);
             if (Vector2DotProduct(tangent, toGoal) < 0.0f) tangent = Vector2Scale(tangent, -1.0f);
             pos = Vector2Add(pos, Vector2Scale(tangent, slide));
         }
-    }
+    });
+    // Murveggen
+    pos = ClampToCastle(pos, radius);
     return hit;
+}
+
+Vector2 ClampToCastle(Vector2 pos, float margin) {
+    float m = MAP_HALF - margin;
+    return { Clamp(pos.x, -m, m), Clamp(pos.y, -m, m) };
+}
+
+bool InsideCastle(Vector2 pos, float margin) {
+    float m = MAP_HALF - margin;
+    return fabsf(pos.x) <= m && fabsf(pos.y) <= m;
+}
+
+float CastleHalfSize() { return MAP_HALF; }
+
+const char* CastleRoomName(Vector2 pos) {
+    int ix = (int)floorf(pos.x / CARPET_SPACING) + 2, iy = (int)floorf(pos.y / CARPET_SPACING) + 2;
+    if (ix < 0 || ix > 3 || iy < 0 || iy > 3) return "";
+    return ROOM_NAMES[(int)ROOMS[iy][ix]];
 }
 
 void InitCastleTextures() {
@@ -370,58 +688,108 @@ void DrawCastleFloor(Vector2 center, float viewRadius) {
     int startY = (int)floorf(minY / TILE);
     int endY = (int)floorf(maxY / TILE);
 
+    const int edge = (int)(MAP_HALF / TILE);
     for (int ty = startY; ty <= endY; ty++) {
         for (int tx = startX; tx <= endX; tx++) {
-            if (floorLoaded) drawPorcelainTile(tx, ty, 1.0f);
+            bool inside = tx >= -edge && tx < edge && ty >= -edge && ty < edge;
+            if (!inside) drawTile(tx, ty, Color{ 52, 48, 58, 255 }, Color{ 40, 37, 46, 255 }); // Mørk stein utenfor muren
+            else if (floorLoaded) drawPorcelainTile(tx, ty, 1.0f);
             else drawTile(tx, ty, MARBLE_LIGHT, MARBLE_DARK);
         }
     }
 
-    // Røde løpere i et rutenett gjennom storsalen
-    int firstCarpetX = (int)floorf(minX / CARPET_SPACING);
-    int lastCarpetX = (int)floorf(maxX / CARPET_SPACING);
-    for (int i = firstCarpetX; i <= lastCarpetX; i++) {
-        float cx = (float)(i * CARPET_SPACING);
-        drawCarpet({ cx - CARPET_WIDTH / 2.0f, minY, (float)CARPET_WIDTH, maxY - minY }, true);
-    }
-    int firstCarpetY = (int)floorf(minY / CARPET_SPACING);
-    int lastCarpetY = (int)floorf(maxY / CARPET_SPACING);
-    for (int i = firstCarpetY; i <= lastCarpetY; i++) {
-        float cy = (float)(i * CARPET_SPACING);
-        drawCarpet({ minX, cy - CARPET_WIDTH / 2.0f, maxX - minX, (float)CARPET_WIDTH }, false);
-    }
+    // Hver sal sitt gulv (løpere, gress, tepper ...)
+    buildMap();
+    for (const RoomInfo& r : roomInfos)
+        if (fabsf(r.center.x - center.x) < viewRadius + 800.0f && fabsf(r.center.y - center.y) < viewRadius + 800.0f) drawRoomFloor(r);
 
-    // Emblem der løperne krysser, og skygger under fyrfatene
-    for (int ix = firstCarpetX; ix <= lastCarpetX; ix++) {
-        for (int iy = firstCarpetY; iy <= lastCarpetY; iy++) {
-            drawEmblem({ (float)(ix * CARPET_SPACING), (float)(iy * CARPET_SPACING) }, CARPET_WIDTH * 0.62f);
-        }
+    // Røde løpere mellom salene (bare inne i slottet)
+    float inMinX = fmaxf(minX, -MAP_HALF), inMaxX = fminf(maxX, MAP_HALF);
+    float inMinY = fmaxf(minY, -MAP_HALF), inMaxY = fminf(maxY, MAP_HALF);
+    for (int i = -1; i <= 1; i++) {
+        float c = (float)(i * CARPET_SPACING);
+        if (c > minX - CARPET_WIDTH && c < maxX + CARPET_WIDTH && inMaxY > inMinY)
+            drawCarpet({ c - CARPET_WIDTH / 2.0f, inMinY, (float)CARPET_WIDTH, inMaxY - inMinY }, true);
+        if (c > minY - CARPET_WIDTH && c < maxY + CARPET_WIDTH && inMaxX > inMinX)
+            drawCarpet({ inMinX, c - CARPET_WIDTH / 2.0f, inMaxX - inMinX, (float)CARPET_WIDTH }, false);
     }
+    // Emblem der løperne krysser, og skygger under fyrfatene og pynten
+    for (int ix = -1; ix <= 1; ix++)
+        for (int iy = -1; iy <= 1; iy++)
+            drawEmblem({ (float)(ix * CARPET_SPACING), (float)(iy * CARPET_SPACING) }, CARPET_WIDTH * 0.62f);
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { DrawShadow({ p.x + 5.0f, p.y + 5.0f }, 16.0f, 11.0f); });
-    // Skygge under pynten
-    forEachPillar(center, viewRadius, [](Vector2 p) {
-        DrawShadow({ p.x + 8.0f, p.y + 9.0f }, PILLAR_RADIUS * 1.3f, PILLAR_RADIUS * 1.0f);
+    forEachDecor(center, viewRadius, [](const DecorItem& d) {
+        DrawShadow({ d.pos.x + 8.0f, d.pos.y + 9.0f }, d.radius * 1.3f, d.radius * 1.0f);
     });
+    // Skygge langs foten av muren
+    float m = MAP_HALF;
+    DrawRectangleGradientV((int)-m, (int)-m, (int)(2 * m), 40, Fade(BLACK, 0.35f), Fade(BLACK, 0.0f));
+    DrawRectangleGradientH((int)-m, (int)-m, 40, (int)(2 * m), Fade(BLACK, 0.3f), Fade(BLACK, 0.0f));
+    DrawRectangleGradientH((int)m - 40, (int)-m, 40, (int)(2 * m), Fade(BLACK, 0.0f), Fade(BLACK, 0.3f));
 }
 
 void DrawCastleProps3D(Vector2 center, float viewRadius, const Camera3D& camera) {
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { drawBrazier(p); });
     // Pynt som skjuler spilleren tegnes gjennomsiktig til slutt (DrawCastlePillarsFaded)
-    forEachPillar(center, viewRadius, [&](Vector2 p) { if (pillarCover(p, camera, center) <= 0.0f) drawPillar(p); });
+    forEachDecor(center, viewRadius, [&](const DecorItem& d) { if (decorCover(d, camera, center) <= 0.0f) drawDecor(d); });
+
+    // Murveggen: steinblokker, lys kant oppå og pilastre der vegglyktene henger
+    forEachWallSegment(center, viewRadius, [](Vector2 m, bool alongX, int i, int side) {
+        Color block = shade(STONE, (i % 2 == 0) ? 0 : -10);
+        Vector3 size = alongX ? Vector3{ WALL_SEGMENT, WALL_H, WALL_T } : Vector3{ WALL_T, WALL_H, WALL_SEGMENT };
+        ShadedCube(ToWorld3D(m, WALL_H / 2.0f), size, 0.0f, block);
+        Vector3 cap = alongX ? Vector3{ WALL_SEGMENT, 10.0f, WALL_T + 10.0f } : Vector3{ WALL_T + 10.0f, 10.0f, WALL_SEGMENT };
+        ShadedCube(ToWorld3D(m, WALL_H + 5.0f), cap, 0.0f, shade(STONE, 25));
+        // Murtinder på annenhver blokk
+        if (i % 2 == 0) {
+            Vector3 crenel = alongX ? Vector3{ WALL_SEGMENT * 0.5f, 18.0f, WALL_T } : Vector3{ WALL_T, 18.0f, WALL_SEGMENT * 0.5f };
+            ShadedCube(ToWorld3D(m, WALL_H + 19.0f), crenel, 0.0f, shade(STONE, 12));
+        }
+        (void)side;
+    });
+    forEachSconce(center, viewRadius, [](Vector2 p, int side) {
+        // Pilaster med en jernlykt
+        Vector2 in = side == 0 ? Vector2{ 0, 1 } : side == 1 ? Vector2{ 0, -1 } : side == 2 ? Vector2{ 1, 0 } : Vector2{ -1, 0 };
+        ShadedCube(ToWorld3D(p, WALL_H / 2.0f + 6.0f), { 36.0f, WALL_H + 12.0f, 36.0f }, 0.0f, shade(STONE, 18));
+        Vector2 lamp = Vector2Add(p, Vector2Scale(in, 24.0f));
+        ShadedCylinder(ToWorld3D(lamp, 58.0f), ToWorld3D(lamp, 70.0f), 5.0f, 9.0f, Color{ 50, 45, 50, 255 }, 8);
+        ShadedSphere(ToWorld3D(lamp, 70.0f), 6.0f, Color{ 255, 150, 60, 255 }, 4, 6);
+    });
 }
 
 void DrawCastlePillarsFaded(Vector2 center, float viewRadius, const Camera3D& camera) {
     // Tegnes etter figurene, så spilleren synes gjennom
     rlDrawRenderBatchActive();
-    forEachPillar(center, viewRadius, [&](Vector2 p) {
-        float cover = pillarCover(p, camera, center);
-        if (cover > 0.0f) drawPillar(p, (unsigned char)(255.0f * (1.0f - 0.65f * cover)));
+    forEachDecor(center, viewRadius, [&](const DecorItem& d) {
+        float cover = decorCover(d, camera, center);
+        if (cover > 0.0f) drawDecor(d, (unsigned char)(255.0f * (1.0f - 0.65f * cover)));
     });
     rlDrawRenderBatchActive();
 }
 
 void DrawCastlePropsVfx(Vector2 center, float viewRadius) {
     forEachBrazier(center, viewRadius, [](Vector2 p, float seed) { brazierFire(p, seed); });
+    // Vegglyktene: liten flamme og en varm lyspøl på gulvet
+    forEachSconce(center, viewRadius, [](Vector2 p, int side) {
+        Vector2 in = side == 0 ? Vector2{ 0, 1 } : side == 1 ? Vector2{ 0, -1 } : side == 2 ? Vector2{ 1, 0 } : Vector2{ -1, 0 };
+        Vector2 lamp = Vector2Add(p, Vector2Scale(in, 24.0f));
+        float t = (float)GetTime();
+        float flicker = 0.85f + 0.15f * sinf(t * 11.0f + p.x * 0.01f + p.y * 0.013f);
+        VfxDecal(VfxTex::GLOW, Vector2Add(p, Vector2Scale(in, 70.0f)), 200.0f * flicker, Color{ 70, 42, 16, 255 }, 0.0f, 0.8f);
+        VfxBillboard(VfxTex::EXPLOSION, ToWorld3D(lamp, 80.0f), 22.0f * flicker, Color{ 255, 200, 140, 255 }, t * 70.0f + p.x);
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(lamp, 76.0f), 55.0f, Color{ 150, 75, 20, 255 });
+    });
+    // Fontenene: vann som glitrer og spruter
+    forEachDecor(center, viewRadius, [](const DecorItem& d) {
+        if (d.kind != Decor::FOUNTAIN) return;
+        float t = (float)GetTime();
+        VfxBillboard(VfxTex::GLOW, ToWorld3D(d.pos, 92.0f), 40.0f, Color{ 60, 110, 160, 255 });
+        VfxDecal(VfxTex::SHOCKWAVE, d.pos, 120.0f + 20.0f * sinf(t * 2.0f), Color{ 40, 70, 110, 255 }, t * 15.0f, 26.0f);
+        if (GetRandomValue(0, 3) == 0) {
+            float a = GetRandomValue(0, 360) * DEG2RAD;
+            VfxBubble({ d.pos.x + cosf(a) * 30.0f, d.pos.y + sinf(a) * 30.0f }, 60.0f, Color{ 160, 210, 255, 255 });
+        }
+    });
 }
 
 namespace {

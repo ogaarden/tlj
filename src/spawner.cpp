@@ -1,4 +1,5 @@
 #include "spawner.hpp"
+#include "castle.hpp"
 #include <cmath>
 #include <algorithm>
 #include <random>
@@ -75,6 +76,17 @@ std::vector<WaveDefinition> BuildWaves() {
 }
 
 const std::vector<WaveDefinition> GAME_WAVES = BuildWaves();
+
+// Et spawnpunkt `dist` fra spilleren, innenfor slottsmuren. Ligger punktet utenfor muren,
+// prøves andre retninger (så fiendene kommer fra den åpne siden), ellers skyves det inn.
+static Vector2 SpawnPoint(Vector2 playerPos, float angle, float dist) {
+    for (int k = 0; k < 12; k++) {
+        float a = angle + k * 0.53f;
+        Vector2 p = { playerPos.x + cosf(a) * dist, playerPos.y + sinf(a) * dist };
+        if (InsideCastle(p, 60.0f)) return p;
+    }
+    return ClampToCastle({ playerPos.x + cosf(angle) * dist, playerPos.y + sinf(angle) * dist }, 60.0f);
+}
 
 const char* DecreeTitle(Decree d) {
     switch (d) {
@@ -166,9 +178,9 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
             float base = (float)GetRandomValue(0, 360) * DEG2RAD;
             for (int p = 0; p < 3; p++) {
                 float a = base + p * 2.0f * PI / 3.0f;
-                Vector2 c = { playerPos.x + cosf(a) * Difficulty::SPAWN_DISTANCE, playerPos.y + sinf(a) * Difficulty::SPAWN_DISTANCE };
+                Vector2 c = SpawnPoint(playerPos, a, Difficulty::SPAWN_DISTANCE);
                 for (int k = 0; k < 5; k++)
-                    spawnEnemy(EnemyType::HOUND, { c.x + (float)GetRandomValue(-60, 60), c.y + (float)GetRandomValue(-60, 60) }, enemies, enemyTexture);
+                    spawnEnemy(EnemyType::HOUND, ClampToCastle({ c.x + (float)GetRandomValue(-60, 60), c.y + (float)GetRandomValue(-60, 60) }, 40.0f), enemies, enemyTexture);
             }
         }
     }
@@ -178,7 +190,7 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
         treasurersSpawned++;
         lastTreasurerTime = gameTime;
         float a = (float)GetRandomValue(0, 360) * DEG2RAD;
-        spawnEnemy(EnemyType::TREASURER, { playerPos.x + cosf(a) * 320.0f, playerPos.y + sinf(a) * 260.0f }, enemies, enemyTexture);
+        spawnEnemy(EnemyType::TREASURER, ClampToCastle({ playerPos.x + cosf(a) * 320.0f, playerPos.y + sinf(a) * 260.0f }, 80.0f), enemies, enemyTexture);
     }
 
     // Horde: midt i hver 4. wave kommer en ring av fiender fra alle kanter samtidig
@@ -195,7 +207,7 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
             float dist = Difficulty::SPAWN_DISTANCE + ring * 220.0f;
             for (int i = 0; i < count; i++) {
                 float angle = (float)i / count * 2.0f * PI + ring * 0.13f;
-                Vector2 pos = { playerPos.x + cosf(angle) * dist, playerPos.y + sinf(angle) * dist };
+                Vector2 pos = ClampToCastle({ playerPos.x + cosf(angle) * dist, playerPos.y + sinf(angle) * dist }, 40.0f); // Mot muren hvis den er nær
                 EnemyType type = EnemyType::LACKEY;
                 if (n >= 6) type = (i % 4 == 0) ? EnemyType::GOON : EnemyType::FOOTMAN;
                 if (n >= 10 && i % 5 == 2) type = EnemyType::ARCHER;
@@ -219,15 +231,12 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
         spawnQueue.pop_back();
 
         float angle = (float)GetRandomValue(0, 360) * DEG2RAD;
-        Vector2 spawnPos = {
-            playerPos.x + cosf(angle) * Difficulty::SPAWN_DISTANCE,
-            playerPos.y + sinf(angle) * Difficulty::SPAWN_DISTANCE
-        };
+        Vector2 spawnPos = SpawnPoint(playerPos, angle, Difficulty::SPAWN_DISTANCE);
         if (nextType == EnemyType::HOUND) {
             // Hundene kommer i flokk fra samme kant
             int pack = GetRandomValue(4, 5);
             for (int k = 0; k < pack; k++) {
-                Vector2 p = { spawnPos.x + (float)GetRandomValue(-50, 50), spawnPos.y + (float)GetRandomValue(-50, 50) };
+                Vector2 p = ClampToCastle({ spawnPos.x + (float)GetRandomValue(-50, 50), spawnPos.y + (float)GetRandomValue(-50, 50) }, 40.0f);
                 spawnEnemy(EnemyType::HOUND, p, enemies, enemyTexture);
             }
         } else {

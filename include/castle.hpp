@@ -4,9 +4,10 @@
 #include <raylib.h>
 
 // Tegning av slottsmiljøet: porselensgulv, løpere, pynt og tronsalen.
-// Pynten (vaser, rustninger og hekker) er det eneste med kollisjon (se ResolvePillarCollision).
+// Slottet har faste saler med pynt (statuer, faner, rustninger ...) og en murvegg rundt.
+// Pynten og veggen er det eneste med kollisjon (se ResolvePillarCollision).
 
-// Uendelig slottsgulv. Tegner flisene innenfor viewRadius rundt center.
+// Slottsgulvet (4 x 4 saler med murvegg rundt). Tegner flisene innenfor viewRadius rundt center.
 // Porselensflisene (assets/floor). Uten dem tegnes det gamle marmorgulvet.
 void InitCastleTextures();
 void UnloadCastleTextures();
@@ -33,6 +34,12 @@ int PillarsNear(Vector2 center, float radius, Vector2* out, int maxCount);
 // Skyver en sirkel (spiller/fiende) ut av pynten. slide > 0: glir også sidelengs rundt
 // den mot `goal`, så fiender finner veien rundt. Returnerer true hvis den traff noe.
 bool ResolvePillarCollision(Vector2& pos, float radius, Vector2 goal, float slide);
+
+// Slottet er avgrenset av en murvegg (4 x 4 saler). Holder en posisjon innenfor veggen.
+Vector2 ClampToCastle(Vector2 pos, float margin);
+bool InsideCastle(Vector2 pos, float margin);
+float CastleHalfSize();                 // Veggen står i +-CastleHalfSize() på begge akser
+const char* CastleRoomName(Vector2 pos); // Navnet på salen man står i ("Rustkammeret" osv.)
 
 // Myk skygge under en figur – gir en enkel følelse av dybde
 void DrawShadow(Vector2 feet, float width, float height);

@@ -301,4 +301,20 @@ Notes:
    Hvilken som står hvor, bestemmes av posisjonen. Samme plasser som søylene (et par på hver side
    av løperne), og man kan fortsatt ikke gå gjennom dem. Står en foran spilleren, blir den gjennomsiktig.
 
+// 19 oktober – et ferdig slott med faste saler
+1) Slottet er ikke lenger uendelig: det er 4 x 4 saler (ca. 6100 x 6100) med en murvegg rundt
+   (murtinder og vegglykter). Fiender, kister, skattmesteren og miniboss-sirkler holdes innenfor
+   muren, og minimapet viser veggen. Utenfor muren er det mørk stein.
+2) Hver sal har et tema med faste plasser for pynten og sitt eget gulv:
+   - Storsalen (de fire i midten, der du starter): marmorstatue av dronningen og fire fanestativer
+   - Statuegalleriet: to rekker med konge- og ridderstatuer langs en rød løper
+   - Rustkammeret: skifergulv, rustninger på rad og våpenstativer med spyd og skjold
+   - Fanehallen: to lange rekker med karmosin og koboltblå faner langs en blå løper
+   - Hagegården: fontene med vann som glitrer, gressplen, grusganger og klippede hekker
+   - Porselenssalongen: stort rundt delftteppe med delftvaser i en rombe
+   Annenhver sal er dreid 90 grader, så like saler ikke ser helt like ut.
+   Navnet på salen vises kort når du går inn i den.
+3) Nye modeller: statuer på trinnet marmorsokkel, fanestativ med frynser og kronemerke,
+   våpenstativ og fontene. All pynt er litt større enn før.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

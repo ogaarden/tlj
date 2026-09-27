@@ -254,16 +254,19 @@ void drawMinimap(const HudState& hud, float s, float top, const Enemy* boss) {
         for (float gy = gy0; gy <= origin.y + reach; gy += cell) {
             DrawLineEx(toMap({ origin.x - reach, gy }), toMap({ origin.x + reach, gy }), 1.0f * s, Fade(WHITE, 0.06f));
         }
-        // De røde løperne i storsalen (samme mønster som castle.cpp: hver 24. flis, 3 fliser brede)
+        // De røde løperne mellom salene (samme mønster som castle.cpp: hver 24. flis, 3 fliser brede)
         const float carpetSpacing = 64.0f * 24.0f;
         const float carpetWidth = 64.0f * 3.0f;
+        const float H = CastleHalfSize();
         Color carpet = Fade(UI::ROYAL_RED, 0.55f);
-        for (float cx = std::floor((origin.x - reach) / carpetSpacing) * carpetSpacing; cx <= origin.x + reach; cx += carpetSpacing) {
-            DrawLineEx(toMap({ cx, origin.y - reach }), toMap({ cx, origin.y + reach }), carpetWidth * k, carpet);
+        for (int i = -1; i <= 1; i++) {
+            float c = i * carpetSpacing;
+            DrawLineEx(toMap({ c, -H }), toMap({ c, H }), carpetWidth * k, carpet);
+            DrawLineEx(toMap({ -H, c }), toMap({ H, c }), carpetWidth * k, carpet);
         }
-        for (float cy = std::floor((origin.y - reach) / carpetSpacing) * carpetSpacing; cy <= origin.y + reach; cy += carpetSpacing) {
-            DrawLineEx(toMap({ origin.x - reach, cy }), toMap({ origin.x + reach, cy }), carpetWidth * k, carpet);
-        }
+        // Murveggen rundt slottet
+        Vector2 corners[4] = { toMap({ -H, -H }), toMap({ H, -H }), toMap({ H, H }), toMap({ -H, H }) };
+        for (int i = 0; i < 4; i++) DrawLineEx(corners[i], corners[(i + 1) % 4], 4.0f * s, Color{ 150, 145, 160, 230 });
         // Startpunktet (midt i storsalen)
         Vector2 home = toMap({ 0.0f, 0.0f });
         if (inside(home, 10.0f)) {

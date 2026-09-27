@@ -757,7 +757,7 @@ int main() {
                     float a = GetRandomValue(0, 628) / 100.0f;
                     float d = (float)GetRandomValue(380, 620);
                     Vector2 pos = { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d };
-                    ResolvePillarCollision(pos, 40.0f, pos, 0.0f); // Ikke inni en søyle
+                    ResolvePillarCollision(pos, 40.0f, pos, 0.0f); // Ikke inni pynten eller muren
                     pickups.push_back({ pos, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
                     VfxShockwave(pos, 80.0f, GOLD);
                 }
@@ -767,7 +767,9 @@ int main() {
                     minibossesAnnounced++;
                     float a = GetRandomValue(0, 628) / 100.0f;
                     float d = (float)GetRandomValue(650, 850);
-                    summonCircles.push_back({ { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d } });
+                    Vector2 cpos = ClampToCastle({ player.position.x + cosf(a) * d, player.position.y + sinf(a) * d }, 200.0f);
+                    ResolvePillarCollision(cpos, 120.0f, cpos, 0.0f); // Ikke oppå en statue eller fontene
+                    summonCircles.push_back({ cpos });
                     minibossAnnounceTime = GetTime();
                     minibossAnnounceText = "EN MINIBOSS VENTER  -  FINN SIRKELEN!";
                     PlaySfx(Sfx::BOSS_GONG);
@@ -1603,6 +1605,21 @@ int main() {
                     UI::DrawCenteredText(label, CX, 96.0f, 18.0f, Color{ 255, 205, 90, 255 }, 2.0f);
                 }
                 UI::EndCanvas();
+            }
+
+            // --- NAVNET PÅ SALEN når man går inn i en ny ---
+            {
+                static std::string lastRoom;
+                static double roomEnteredAt = -100.0;
+                const char* room = inBossArena ? "" : CastleRoomName(player.position);
+                if (lastRoom != room) { lastRoom = room; roomEnteredAt = GetTime(); }
+                float since = (float)(GetTime() - roomEnteredAt);
+                if (currentState == GAMEPLAY && room[0] && since < 2.6f && spawner.gameTime > 1.0f) {
+                    float a = since < 0.3f ? since / 0.3f : (since < 2.0f ? 1.0f : (2.6f - since) / 0.6f);
+                    UI::BeginCanvas();
+                    UI::DrawCenteredText(room, CX, 118.0f, 20.0f, Fade(Color{ 240, 225, 190, 255 }, a), 2.0f);
+                    UI::EndCanvas();
+                }
             }
 
             // --- SKATTMESTER-VARSEL ---
