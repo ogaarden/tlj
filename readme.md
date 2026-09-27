@@ -294,4 +294,11 @@ Notes:
    Søyler som står nesten rett foran kameraet tones ut nederst på skjermen, og en søyle som skjuler
    spilleren blir gjennomsiktig.
 
+// 18 oktober – pynt i stedet for søyler
+1) De høye søylene er byttet ut med lav pynt som står rett opp fra gulvet (som fyrfatene), så den
+   følger gulvets perspektiv: delftvase (hvit med koboltblå bånd) på marmorsokkel med gullkant,
+   rustning på rund sokkel (karmosin våpenkjole, fjærbusk og hellebard) og klippet hekk i steinkrukke.
+   Hvilken som står hvor, bestemmes av posisjonen. Samme plasser som søylene (et par på hver side
+   av løperne), og man kan fortsatt ikke gå gjennom dem. Står en foran spilleren, blir den gjennomsiktig.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

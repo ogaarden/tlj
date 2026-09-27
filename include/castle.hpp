@@ -3,8 +3,8 @@
 
 #include <raylib.h>
 
-// Tegning av slottsmiljøet: porselensgulv, løpere, søyler og tronsalen.
-// Søylene er det eneste med kollisjon (se ResolvePillarCollision).
+// Tegning av slottsmiljøet: porselensgulv, løpere, pynt og tronsalen.
+// Pynten (vaser, rustninger og hekker) er det eneste med kollisjon (se ResolvePillarCollision).
 
 // Uendelig slottsgulv. Tegner flisene innenfor viewRadius rundt center.
 // Porselensflisene (assets/floor). Uten dem tegnes det gamle marmorgulvet.
@@ -19,7 +19,7 @@ void DrawCastleFloor(Vector2 center, float viewRadius);
 void DrawThroneRoomFloor(Vector2 center, float radius);
 void DrawThroneRoom3D(Vector2 center, float radius);
 
-// Fyrfat og søyler i storsalen. center = spilleren: søyler som skjuler spilleren hoppes over
+// Fyrfat og pynt i storsalen. center = spilleren: pynt som skjuler spilleren hoppes over
 // her og tegnes gjennomsiktige med DrawCastlePillarsFaded etter figurene.
 void DrawCastleProps3D(Vector2 center, float viewRadius, const Camera3D& camera);
 void DrawCastlePillarsFaded(Vector2 center, float viewRadius, const Camera3D& camera);
@@ -28,10 +28,10 @@ void DrawCastlePropsVfx(Vector2 center, float viewRadius);
 // Samme for tronsalen: fyrfat langs muren
 void DrawThroneRoomVfx(Vector2 center, float radius);
 
-// Søyler i storsalen (ikke i tronsalen). PillarsNear fyller `out` med søyler innenfor radius.
+// Pynt i storsalen (ikke i tronsalen). PillarsNear fyller `out` med pynt innenfor radius.
 int PillarsNear(Vector2 center, float radius, Vector2* out, int maxCount);
-// Skyver en sirkel (spiller/fiende) ut av søylene. slide > 0: glir også sidelengs rundt
-// søylen mot `goal`, så fiender finner veien rundt. Returnerer true hvis den traff en søyle.
+// Skyver en sirkel (spiller/fiende) ut av pynten. slide > 0: glir også sidelengs rundt
+// den mot `goal`, så fiender finner veien rundt. Returnerer true hvis den traff noe.
 bool ResolvePillarCollision(Vector2& pos, float radius, Vector2 goal, float slide);
 
 // Myk skygge under en figur – gir en enkel følelse av dybde
