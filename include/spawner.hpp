@@ -22,6 +22,11 @@ enum class Decree {
 const char* DecreeTitle(Decree d);
 const char* DecreeText(Decree d);
 
+// Hordetyper: vanlig ring hvert 30. sek, og tre ekstra farlige stormangrep hvert 2. minutt
+enum class HordeKind { RING, GUARD, HUNT, STAMPEDE };
+const char* HordeTitle(HordeKind k);
+const char* HordeText(HordeKind k);
+
 struct EnemyGroup {
     EnemyType type;
     int count;
@@ -38,6 +43,7 @@ public:
     float spawnTimer = 0.0f;
     float spawnInterval = 1.0f;
     float lastHordeTime = -100.0f; // Når siste horde kom (HUD-en viser et varsel)
+    HordeKind lastHordeKind = HordeKind::RING;
 
     // Dekretet som gjelder nå (NONE mellom dekretene), og når det startet
     static constexpr float DECREE_FIRST = 150.0f;
@@ -58,6 +64,9 @@ private:
     std::vector<EnemyType> spawnQueue;
 
     int hordeSpawnedWave = -1;
+    int assaultsSpawned = 0;
+    HordeKind assaultOrder[3] = { HordeKind::GUARD, HordeKind::HUNT, HordeKind::STAMPEDE };
+    void spawnAssault(int n, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture);
     int decreesStarted = 0;
     Decree lastDecree = Decree::NONE;
 

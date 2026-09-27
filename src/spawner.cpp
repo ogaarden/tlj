@@ -12,7 +12,8 @@
 // Starten er rolig (ca. 13 fiender den første halve minuttet), men antallet
 // vokser raskt: ~130 i wave 10 og ~750 i wave 20 (en konstant strøm sent i runden).
 // I tillegg blir hver fiende sterkere med tiden (se Difficulty under), elite-fiender
-// dukker opp etter 2 minutter, og hvert minutt fra 1:45 kommer en horde som omringer deg.
+// dukker opp etter 2 minutter, og hvert 30. sek fra 1:15 kommer en horde som omringer deg
+// (hvert 2. minutt et ekstra farlig stormangrep).
 // Fordi det kommer så mange flere fiender, gir hver fiende MINDRE XP jo senere det er
 // (xpScale), så levelingen går omtrent like fort som før.
 // Exploder-grupper tas bare med når echelon 2+ er aktiv.
@@ -36,13 +37,15 @@ namespace Difficulty {
     // Fiender blir sterkere jo lenger runden varer (m = minutter)
     float hpMult(float m)     { return 1.0f + 0.15f * m + 0.035f * m * m; }  // 10 min: x6
     float damageMult(float m) { return 1.0f + 0.10f * m; }                   // 10 min: x2
-    float speedMult(float m)  { return fminf(1.35f, 1.0f + 0.02f * m); }     // Maks +35 %
+    float speedMult(float m)  { return fminf(1.45f, 1.0f + 0.035f * m); }    // 10 min: +35 %, maks +45 %
 
     // Sjanse for elite: 0 det første 1.5 minuttet, så 3 % + 0.8 % per minutt (maks 14 %)
     float eliteChance(float m) { return m < 1.5f ? 0.0f : fminf(0.14f, 0.03f + 0.008f * (m - 1.5f)); }
 
-    // Horde hvert minutt, midt i waven (1:45, 2:45, 3:45 ...)
-    bool isHordeWave(int waveIndex) { return waveIndex >= 3 && waveIndex % 2 == 1; }
+    // Horde midt i hver wave fra 1:15 (1:15, 1:45, 2:15 ...), altså hvert 30. sekund.
+    // Hvert 2. minutt fra 2:45 (2:45, 4:45, 6:45 ...) er horden et stormangrep.
+    bool isHordeWave(int waveIndex) { return waveIndex >= 2; }
+    bool isAssaultWave(int waveIndex) { return waveIndex >= 5 && (waveIndex - 5) % 4 == 0; }
     int hordeSize(int n) { return (int)(12 + 4 * n + 0.15f * n * n); }
 }
 
@@ -112,6 +115,24 @@ const char* DecreeText(Decree d) {
     }
 }
 
+const char* HordeTitle(HordeKind k) {
+    switch (k) {
+        case HordeKind::GUARD:    return "KONGENS GARDE!";
+        case HordeKind::HUNT:     return "HUNDEJAKTEN!";
+        case HordeKind::STAMPEDE: return "STORMLOEPET!";
+        default:                  return "EN HORDE OMRINGER DEG!";
+    }
+}
+
+const char* HordeText(HordeKind k) {
+    switch (k) {
+        case HordeKind::GUARD:    return "Garden lukker ringen rundt deg - slaa deg ut!";
+        case HordeKind::HUNT:     return "Hundeflokker fra alle kanter";
+        case HordeKind::STAMPEDE: return "En vegg av fiender stormer mot deg fra en kant - kom deg rundt!";
+        default:                  return "";
+    }
+}
+
 void WaveSpawner::reset(const EchelonModifiers& echelonModifiers) {
     modifiers = echelonModifiers;
     gameTime = 0.0f;
@@ -119,6 +140,8 @@ void WaveSpawner::reset(const EchelonModifiers& echelonModifiers) {
     currentWaveIndex = -1;
     hordeSpawnedWave = -1;
     lastHordeTime = -100.0f;
+    lastHordeKind = HordeKind::RING;
+    assaultsSpawned = 0;
     spawnQueue.clear();
     decree = Decree::NONE;
     decreeStart = -100.0f;
@@ -193,32 +216,35 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
         spawnEnemy(EnemyType::TREASURER, ClampToCastle({ playerPos.x + cosf(a) * 320.0f, playerPos.y + sinf(a) * 260.0f }, 80.0f), enemies, enemyTexture);
     }
 
-    // Horde: midt i hver 4. wave kommer en ring av fiender fra alle kanter samtidig
+    // Horde: midt i HVER wave fra 1:15 (hvert 30. sek) kommer en ring av fiender fra alle kanter.
+    // Hvert 2. minutt fra 2:45 er det i stedet et STORMANGREP (se spawnAssault) – de skal være
+    // skikkelig farlige. Bare stormangrepene har en kaptein med skattekiste.
     bool hordeDue = Difficulty::isHordeWave(currentWaveIndex) && fmodf(gameTime, 30.0f) >= 15.0f;
     if (hordeDue && hordeSpawnedWave != currentWaveIndex) {
         hordeSpawnedWave = currentWaveIndex;
         lastHordeTime = gameTime;
         int n = currentWaveIndex + 1;
-        int count = Difficulty::hordeSize(n);
-        // Blanding som blir tøffere: lakeier først, så soldater og troll, så armbrøstskyttere.
-        // Etter 7 min kommer hordene i to ringer, den ytre litt lenger ute.
-        int rings = n >= 14 ? 2 : 1;
-        for (int ring = 0; ring < rings; ring++) {
-            float dist = Difficulty::SPAWN_DISTANCE + ring * 220.0f;
-            for (int i = 0; i < count; i++) {
-                float angle = (float)i / count * 2.0f * PI + ring * 0.13f;
-                Vector2 pos = ClampToCastle({ playerPos.x + cosf(angle) * dist, playerPos.y + sinf(angle) * dist }, 40.0f); // Mot muren hvis den er nær
-                EnemyType type = EnemyType::LACKEY;
-                if (n >= 6) type = (i % 4 == 0) ? EnemyType::GOON : EnemyType::FOOTMAN;
-                if (n >= 10 && i % 5 == 2) type = EnemyType::ARCHER;
-                if (n >= 12 && i % 11 == 6) type = EnemyType::DRUMMER; // Hele hordens ring går fortere
-                if (ring == 1) type = (i % 2 == 0) ? EnemyType::FOOTMAN : EnemyType::ARCHER;
-                spawnEnemy(type, pos, enemies, enemyTexture, 0.5f); // Hordefiender gir halv XP
-                // Den første er hordens kaptein: en elite. Bare annenhver horde (ca. hvert 2. minutt)
-                // har kapteinen en skattekiste, så items forblir sjeldne.
-                if (ring == 0 && i == 0 && !enemies.empty()) {
-                    if (!enemies.back()->elite) enemies.back()->makeElite();
-                    if (currentWaveIndex % 4 == 3) enemies.back()->chestCarrier = true;
+        if (Difficulty::isAssaultWave(currentWaveIndex)) {
+            spawnAssault(n, playerPos, enemies, enemyTexture);
+        } else {
+            lastHordeKind = HordeKind::RING;
+            int count = Difficulty::hordeSize(n);
+            // Blanding som blir tøffere: lakeier først, så soldater og troll, så armbrøstskyttere.
+            // Etter 7 min kommer hordene i to ringer, den ytre litt lenger ute.
+            int rings = n >= 14 ? 2 : 1;
+            for (int ring = 0; ring < rings; ring++) {
+                float dist = Difficulty::SPAWN_DISTANCE + ring * 220.0f;
+                for (int i = 0; i < count; i++) {
+                    float angle = (float)i / count * 2.0f * PI + ring * 0.13f;
+                    Vector2 pos = ClampToCastle({ playerPos.x + cosf(angle) * dist, playerPos.y + sinf(angle) * dist }, 40.0f); // Mot muren hvis den er nær
+                    EnemyType type = EnemyType::LACKEY;
+                    if (n >= 6) type = (i % 4 == 0) ? EnemyType::GOON : EnemyType::FOOTMAN;
+                    if (n >= 10 && i % 5 == 2) type = EnemyType::ARCHER;
+                    if (n >= 12 && i % 11 == 6) type = EnemyType::DRUMMER; // Hele hordens ring går fortere
+                    if (ring == 1) type = (i % 2 == 0) ? EnemyType::FOOTMAN : EnemyType::ARCHER;
+                    spawnEnemy(type, pos, enemies, enemyTexture, 0.4f); // Hordefiender gir mindre XP
+                    // Den første er hordens kaptein: en elite (uten kiste)
+                    if (ring == 0 && i == 0 && !enemies.empty() && !enemies.back()->elite) enemies.back()->makeElite();
                 }
             }
         }
@@ -248,6 +274,90 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
     }
     // Når taket er nådd skal det ikke hope seg opp et stort rykk som kommer med én gang
     spawnTimer = std::min(spawnTimer, spawnInterval * 4.0f);
+}
+
+// =====================================================================
+// STORMANGREP – de farlige hordene. Tre typer som går på rundgang (i tilfeldig rekkefølge
+// innenfor hver runde på tre), og alle blir større og tøffere utover i runden.
+//  - Kongens garde: to tette ringer som starter NÆR deg. Indre ring er troll med mange elites,
+//    ytre ring soldater og armbrøstskyttere. Du må slå deg ut før ringen lukker seg.
+//  - Hundejakten: hundeflokker fra alle kanter samtidig, pluss en ring med lakeier
+//  - Stormløpet: en tykk vegg av lakeier og kamikaze-fiender (med trommeslagere) som stormer
+//    mot deg fra én kant. Den er for tykk til å løpe gjennom – kom deg rundt kanten!
+// Kapteinen (en elite) bærer alltid en skattekiste.
+// =====================================================================
+void WaveSpawner::spawnAssault(int n, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture) {
+    // Ny tilfeldig rekkefølge for hver runde på tre, så man ikke vet hva som kommer
+    if (assaultsSpawned % 3 == 0) {
+        for (int i = 0; i < 3; i++) assaultOrder[i] = (HordeKind)((int)HordeKind::GUARD + i);
+        for (int i = 2; i > 0; i--) std::swap(assaultOrder[i], assaultOrder[GetRandomValue(0, i)]);
+    }
+    HordeKind kind = assaultOrder[assaultsSpawned % 3];
+    assaultsSpawned++;
+    lastHordeKind = kind;
+    float power = 1.0f + 0.25f * assaultsSpawned; // Hvert stormangrep er større enn det forrige
+    size_t first = enemies.size();
+    // Stormangrep kan gå over det vanlige taket, men ikke uendelig (ytelse)
+    auto full = [&]() { return (int)enemies.size() >= Difficulty::MAX_ALIVE + 350; };
+
+    if (kind == HordeKind::GUARD) {
+        int inner = (int)((10 + 1.2f * n) * power);
+        int outer = (int)((16 + 2.0f * n) * power);
+        for (int i = 0; i < inner && !full(); i++) {
+            float a = (float)i / inner * 2.0f * PI;
+            Vector2 pos = ClampToCastle({ playerPos.x + cosf(a) * 520.0f, playerPos.y + sinf(a) * 520.0f }, 40.0f);
+            spawnEnemy(EnemyType::GOON, pos, enemies, enemyTexture, 0.5f);
+            if (i % 4 == 0 && !enemies.empty() && !enemies.back()->elite) enemies.back()->makeElite();
+        }
+        for (int i = 0; i < outer && !full(); i++) {
+            float a = (float)i / outer * 2.0f * PI + 0.1f;
+            Vector2 pos = ClampToCastle({ playerPos.x + cosf(a) * 720.0f, playerPos.y + sinf(a) * 720.0f }, 40.0f);
+            EnemyType type = (i % 3 == 0) ? EnemyType::ARCHER : EnemyType::FOOTMAN;
+            if (i % 12 == 5) type = EnemyType::DRUMMER;
+            if (n >= 10 && i % 12 == 11) type = EnemyType::PRIEST;
+            spawnEnemy(type, pos, enemies, enemyTexture, 0.5f);
+        }
+    } else if (kind == HordeKind::HUNT) {
+        int packs = (int)((3 + n / 4) * power);
+        for (int p = 0; p < packs && !full(); p++) {
+            float a = (float)p / packs * 2.0f * PI;
+            Vector2 c = SpawnPoint(playerPos, a, 800.0f);
+            for (int k = 0; k < 5; k++)
+                spawnEnemy(EnemyType::HOUND, ClampToCastle({ c.x + (float)GetRandomValue(-60, 60), c.y + (float)GetRandomValue(-60, 60) }, 40.0f), enemies, enemyTexture, 0.5f);
+        }
+        int ring = (int)((14 + 2 * n) * power);
+        for (int i = 0; i < ring && !full(); i++) {
+            float a = (float)i / ring * 2.0f * PI;
+            Vector2 pos = ClampToCastle({ playerPos.x + cosf(a) * 900.0f, playerPos.y + sinf(a) * 900.0f }, 40.0f);
+            spawnEnemy(n >= 10 && i % 3 == 0 ? EnemyType::FOOTMAN : EnemyType::LACKEY, pos, enemies, enemyTexture, 0.4f);
+        }
+    } else {
+        // Stormløpet: en vegg vinkelrett på en tilfeldig retning, 7-9 rader dyp
+        float a = (float)GetRandomValue(0, 628) / 100.0f;
+        Vector2 dir = { cosf(a), sinf(a) }, side = { -dir.y, dir.x };
+        int rows = std::min(8, 4 + assaultsSpawned);
+        int perRow = std::min(40, (int)((18 + n) * std::sqrt(power)));
+        float width = 1900.0f;
+        for (int r = 0; r < rows; r++) {
+            for (int i = 0; i < perRow && !full(); i++) {
+                float t = ((float)i / (perRow - 1) - 0.5f) * width + (r % 2) * 25.0f;
+                float d = 850.0f + r * 55.0f;
+                Vector2 pos = ClampToCastle({ playerPos.x + dir.x * d + side.x * t, playerPos.y + dir.y * d + side.y * t }, 40.0f);
+                EnemyType type = EnemyType::LACKEY;
+                if (modifiers.exploders && (r + i) % 4 == 0) type = EnemyType::EXPLODER;
+                if (r == rows - 1 && i % 6 == 3) type = EnemyType::DRUMMER; // Bakerste rad: hele veggen går fortere
+                if (n >= 12 && r % 3 == 1 && i % 3 == 0) type = EnemyType::FOOTMAN;
+                spawnEnemy(type, pos, enemies, enemyTexture, 0.3f);
+            }
+        }
+    }
+
+    // Kapteinen: den første som ble laget blir en elite med skattekiste
+    if (enemies.size() > first) {
+        Enemy& captain = *enemies[first];
+        if (!captain.elite) captain.makeElite();
+        captain.chestCarrier = true;
+    }
 }
 
 void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::unique_ptr<Enemy>>& enemies, Texture2D enemyTexture, float xpMult) {

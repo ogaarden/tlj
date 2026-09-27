@@ -523,7 +523,7 @@ int main() {
             const RoomBonus roomBonus = inBossArena ? RoomBonus::NONE : CastleRoomBonus(player.position);
             {
                 float normalSpeed = player.speed;
-                if (roomBonus == RoomBonus::SPEED) player.speed *= 1.15f;
+                if (roomBonus == RoomBonus::SPEED) player.speed *= 1.08f;
                 player.update(camera.rotation);
                 player.speed = normalSpeed;
             }
@@ -1682,11 +1682,15 @@ int main() {
 
             // --- HORDE-VARSEL ---
             float sinceHorde = spawner.gameTime - spawner.lastHordeTime;
-            if (!inBossArena && sinceHorde >= 0.0f && sinceHorde < 2.5f) {
-                float a = sinceHorde < 2.0f ? 1.0f : (2.5f - sinceHorde) / 0.5f;
+            // Stormangrep vises lenger og større, med en forklaring under
+            bool assault = spawner.lastHordeKind != HordeKind::RING;
+            float hordeShow = assault ? 3.5f : 2.0f;
+            if (!inBossArena && sinceHorde >= 0.0f && sinceHorde < hordeShow) {
+                float a = sinceHorde < hordeShow - 0.5f ? 1.0f : (hordeShow - sinceHorde) / 0.5f;
                 float pulse = 0.7f + 0.3f * sinf(uiTime * 12.0f);
                 UI::BeginCanvas();
-                UI::DrawCenteredText("EN HORDE OMRINGER DEG!", CX, 190.0f, 40.0f, Fade(Color{ 255, (unsigned char)(80 * pulse), 60, 255 }, a), 3.0f);
+                UI::DrawCenteredText(HordeTitle(spawner.lastHordeKind), CX, 190.0f, assault ? 50.0f : 34.0f, Fade(Color{ 255, (unsigned char)(80 * pulse), 60, 255 }, a), 3.0f);
+                if (assault) UI::DrawCenteredText(HordeText(spawner.lastHordeKind), CX, 248.0f, 20.0f, Fade(WHITE, a), 2.0f);
                 UI::EndCanvas();
             }
 

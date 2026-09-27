@@ -760,7 +760,7 @@ const char* RoomBonusText(RoomBonus bonus) {
         case RoomBonus::PICKUP: return "+50% plukkeradius";
         case RoomBonus::CRIT:   return "+10% kritisk treff";
         case RoomBonus::DAMAGE: return "+15% skade";
-        case RoomBonus::SPEED:  return "+15% fart";
+        case RoomBonus::SPEED:  return "+8% fart";
         case RoomBonus::REGEN:  return "+2 HP per sekund";
         case RoomBonus::XP:     return "+25% XP";
         default:                return "";

@@ -357,3 +357,18 @@ Notes:
    (+40 % gull, +15 % XP, +1 reroll)
 
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj
+// 23 oktober – flere horder, stormangrep og tregere klovner
+1) Horde hvert 30. sekund fra 1:15 (før hvert minutt fra 1:45). Hordefiender gir 40 % XP.
+2) Stormangrep hvert 2. minutt fra 2:45 (2:45, 4:45, 6:45 ...), med stort varsel og forklaring.
+   Tre typer i tilfeldig rekkefølge, og hvert angrep er større enn det forrige:
+   - Kongens garde: to tette ringer som dukker opp NÆR deg: troll (hver 4. er elite) innerst,
+     soldater, armbrøstskyttere og trommeslagere ytterst. Slå deg ut før ringen lukker seg
+   - Hundejakten: hundeflokker fra alle kanter samtidig + en ring med lakeier
+   - Stormløpet: en tykk vegg (5-8 rader) av lakeier og kamikaze-fiender med trommeslagere bakerst,
+     som stormer mot deg fra én kant
+   Bare stormangrepets kaptein har skattekiste (så items er like sjeldne som før).
+3) Klovnene er ca. 20 % tregere: Jester 170, Wester 130, tok geek 200, Pierrot 160.
+   Fart fra alt annet er halvert: Swift Boots +3 %/nivå, Narreskoene +4 %, Krigstromme +3 %,
+   Skyggedanser +7 %, Kavaleriets marsj +5 %, Fanehallen +8 %.
+   Fiendene blir raskere fortere: +3.5 % per minutt (maks +45 %), så etter ca. 10 min er vanlige
+   soldater like raske som en Jester uten fart-items. Man kan ikke lenger bare løpe fra alt.

@@ -30,7 +30,7 @@ Shop::Shop() {
     items.push_back({ ShopUpgrade::ARMOR,        "armor",      "Reinforced Armor",       "+3 armor",                      75,  5 });
     items.push_back({ ShopUpgrade::REGEN,        "regen",      "Regeneration",           "+0.4 HP per sekund",            90,  5 });
     items.push_back({ ShopUpgrade::EVASION,      "evasion",    "Float like a butterfly", "+4% evasion",                   90,  5 });
-    items.push_back({ ShopUpgrade::SPEED,        "speed",      "Swift Boots",            "+5% fart",                      75,  5 });
+    items.push_back({ ShopUpgrade::SPEED,        "speed",      "Swift Boots",            "+3% fart",                      75,  5 });
     items.push_back({ ShopUpgrade::MIGHT,        "might",      "Might",                  "+10% skade",                   120,  5 });
     items.push_back({ ShopUpgrade::HASTE,        "haste",      "Haste",                  "-5% cooldown",                 120,  5 });
     items.push_back({ ShopUpgrade::AREA,         "area",       "Area",                   "+10% radius og treffomraade",   90,  5 });
@@ -50,7 +50,7 @@ int Shop::level(ShopUpgrade upgrade) const {
 }
 
 float Shop::hpMult() const { return 1.0f + 0.10f * level(ShopUpgrade::VITALITY); }
-float Shop::speedMult() const { return 1.0f + 0.05f * level(ShopUpgrade::SPEED); }
+float Shop::speedMult() const { return 1.0f + 0.03f * level(ShopUpgrade::SPEED); }
 float Shop::armorBonus() const { return 3.0f * level(ShopUpgrade::ARMOR); }
 int Shop::aegisBonus() const { return level(ShopUpgrade::AEGIS); }
 

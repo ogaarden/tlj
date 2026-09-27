@@ -9,7 +9,7 @@ const ItemDef& GetItemDef(ItemId id) {
     static const ItemDef defs[(int)ItemId::COUNT] = {
         { "Sjonglorball",   "+1 prosjektil paa nivaa 1, 3 og 5 (ellers +5% skade)", Color{ 255, 120, 80, 255 } },
         { "Kongens kappe",  "+12% radius og treffomraade",                           Color{ 200, 40, 60, 255 } },
-        { "Narreskoene",    "+8% fart",                                              Color{ 190, 130, 70, 255 } },
+        { "Narreskoene",    "+4% fart",                                              Color{ 190, 130, 70, 255 } },
         { "Slipestein",     "+10% skade",                                            Color{ 210, 215, 230, 255 } },
         { "Timeglass",      "-7% cooldown",                                          Color{ 150, 200, 255, 255 } },
         { "Hjerteamulett",  "+15% maks HP og +0.3 HP/s regen",                       Color{ 230, 60, 80, 255 } },
@@ -27,7 +27,7 @@ const ItemDef& GetItemDef(ItemId id) {
         { "Firklover",      "+15% flaks: oftere kister, mat og magneter",            Color{ 90, 200, 80, 255 } },
         { "Helgenrelikvie", "+0.4 HP/s regen og +2 armor",                           Color{ 240, 225, 170, 255 } },
         { "Rosenkrans",     "-4% cooldown og +6% varighet",                          Color{ 200, 120, 160, 255 } },
-        { "Krigstromme",    "+5% fart og +5% skade",                                 Color{ 200, 60, 50, 255 } },
+        { "Krigstromme",    "+3% fart og +6% skade",                                 Color{ 200, 60, 50, 255 } },
         { "Fekthanske",     "+3% krit og +6% prosjektilfart",                        Color{ 230, 225, 215, 255 } },
         { "Tiggerskaal",    "+20% gull",                                             Color{ 170, 120, 70, 255 } },
         { "Narremaske",     "+7% XP og +5% omraade",                                 Color{ 240, 200, 60, 255 } },
@@ -281,14 +281,14 @@ const ItemCombo& GetCombo(ComboId id) {
         { ItemId::WHETSTONE,     ItemId::LUCKY_DIE,    "Boedelens oeks",      "Kritiske treff gjoer 3x skade (i stedet for 2x) og +10% krit",  Color{ 220, 60, 50, 255 } },
         { ItemId::JUGGLING_BALL, ItemId::SPYGLASS,     "Sjonglorens kikkert",  "+1 prosjektil og +20% prosjektilfart",                          Color{ 255, 170, 80, 255 } },
         { ItemId::ROYAL_CAPE,    ItemId::CROWN_JEWEL,  "Kongens regalier",     "+20% omraade og +30% gull",                                     Color{ 230, 50, 90, 255 } },
-        { ItemId::JESTER_SHOES,  ItemId::SHADOW_CLOAK, "Skyggedanser",         "+15% fart og +8% unnvikelse",                                   Color{ 140, 90, 200, 255 } },
+        { ItemId::JESTER_SHOES,  ItemId::SHADOW_CLOAK, "Skyggedanser",         "+7% fart og +8% unnvikelse",                                   Color{ 140, 90, 200, 255 } },
         { ItemId::HOURGLASS,     ItemId::CANDLE,       "Evighetens timeglass", "-12% cooldown og +25% varighet",                                Color{ 255, 220, 140, 255 } },
         { ItemId::HEART_AMULET,  ItemId::VAMPIRE_FANG, "Blodhjerte",           "+25% maks HP og +0.3 HP per drap",                              Color{ 200, 20, 50, 255 } },
         { ItemId::CHAINMAIL,     ItemId::THORN_COLLAR, "Piggrustning",         "+10 armor og dobbel skade fra piggkragen",                      Color{ 170, 175, 190, 255 } },
         { ItemId::LODESTONE,     ItemId::OWL_FEATHER,  "Visdommens magnet",    "+100 pickup-radius og +20% XP",                                 Color{ 120, 140, 255, 255 } },
         { ItemId::MAGIC_MIRROR,  ItemId::CLOVER,       "Lykkespeilet",         "+2 rerolls, +30% flaks og +1 valg i level-up",                  Color{ 120, 230, 160, 255 } },
         { ItemId::HOLY_RELIC,    ItemId::ROSARY,       "Katedralens velsignelse", "+1 ekstra liv (aegis) og +1 HP/s regen",                     Color{ 250, 240, 200, 255 } },
-        { ItemId::WAR_DRUM,      ItemId::FENCING_GLOVE, "Kavaleriets marsj",   "+10% fart, +12% skade og +5% krit",                             Color{ 220, 80, 70, 255 } },
+        { ItemId::WAR_DRUM,      ItemId::FENCING_GLOVE, "Kavaleriets marsj",   "+5% fart, +15% skade og +5% krit",                             Color{ 220, 80, 70, 255 } },
         { ItemId::BEGGAR_BOWL,   ItemId::JESTER_MASK,  "Gatekunstnerens hatt", "+40% gull, +15% XP og +1 reroll",                               Color{ 240, 180, 80, 255 } },
     };
     return combos[(int)id];
@@ -322,7 +322,7 @@ void ApplyCombo(Player& player, ComboId id) {
         case ComboId::EXECUTIONER_AXE: player.critMultiplier = 3.0f; player.critChance += 0.10f; break;
         case ComboId::JUGGLER_SCOPE:   player.projectileCount += 1; player.projectileSpeedMult *= 1.20f; break;
         case ComboId::ROYAL_REGALIA:   player.areaMult *= 1.20f; player.goldMultiplier *= 1.30f; break;
-        case ComboId::SHADOW_DANCER:   player.speed *= 1.15f; player.evasion += 0.08f; break;
+        case ComboId::SHADOW_DANCER:   player.speed *= 1.07f; player.evasion += 0.08f; break;
         case ComboId::ETERNAL_GLASS:   player.cooldownMult *= 0.88f; player.durationMult *= 1.25f; break;
         case ComboId::BLOOD_HEART: {
             float gain = player.maxHp * 0.25f;
@@ -334,7 +334,7 @@ void ApplyCombo(Player& player, ComboId id) {
         case ComboId::SAGE_MAGNET:     player.lootRadius += 100.0f; player.xpMultiplier *= 1.20f; break;
         case ComboId::LUCKY_MIRROR:    player.bonusRerolls += 2; player.luck *= 1.30f; player.levelUpChoices += 1; break;
         case ComboId::CATHEDRAL:       player.aegis += 1; player.hpRegen += 1.0f; break;
-        case ComboId::CAVALRY_MARCH:   player.speed *= 1.10f; player.damageMult *= 1.12f; player.critChance += 0.05f; break;
+        case ComboId::CAVALRY_MARCH:   player.speed *= 1.05f; player.damageMult *= 1.15f; player.critChance += 0.05f; break;
         case ComboId::STREET_PERFORMER: player.goldMultiplier *= 1.40f; player.xpMultiplier *= 1.15f; player.bonusRerolls += 1; break;
         default: break;
     }
@@ -364,7 +364,7 @@ void ApplyItemLevel(Player& player, ItemId id) {
             else player.damageMult *= 1.05f;
             break;
         case ItemId::ROYAL_CAPE:   player.areaMult *= 1.12f; break;
-        case ItemId::JESTER_SHOES: player.speed *= 1.08f; break;
+        case ItemId::JESTER_SHOES: player.speed *= 1.04f; break;
         case ItemId::WHETSTONE:    player.damageMult *= 1.10f; break;
         case ItemId::HOURGLASS:    player.cooldownMult *= 0.93f; break;
         case ItemId::HEART_AMULET: {
@@ -387,7 +387,7 @@ void ApplyItemLevel(Player& player, ItemId id) {
         case ItemId::CLOVER:       player.luck *= 1.15f; break;
         case ItemId::HOLY_RELIC:   player.hpRegen += 0.4f; player.armor += 2.0f; break;
         case ItemId::ROSARY:       player.cooldownMult *= 0.96f; player.durationMult *= 1.06f; break;
-        case ItemId::WAR_DRUM:     player.speed *= 1.05f; player.damageMult *= 1.05f; break;
+        case ItemId::WAR_DRUM:     player.speed *= 1.03f; player.damageMult *= 1.06f; break;
         case ItemId::FENCING_GLOVE: player.critChance += 0.03f; player.projectileSpeedMult *= 1.06f; break;
         case ItemId::BEGGAR_BOWL:  player.goldMultiplier *= 1.20f; break;
         case ItemId::JESTER_MASK:  player.xpMultiplier *= 1.07f; player.areaMult *= 1.05f; break;
