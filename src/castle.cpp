@@ -741,6 +741,32 @@ bool InsideCastle(Vector2 pos, float margin) {
 
 float CastleHalfSize() { return MAP_HALF; }
 
+RoomBonus CastleRoomBonus(Vector2 pos) {
+    int ix = (int)floorf(pos.x / CARPET_SPACING) + 2, iy = (int)floorf(pos.y / CARPET_SPACING) + 2;
+    if (ix < 0 || ix > 3 || iy < 0 || iy > 3) return RoomBonus::NONE;
+    switch (ROOMS[iy][ix]) {
+        case Room::GRAND:     return RoomBonus::PICKUP;
+        case Room::STATUES:   return RoomBonus::CRIT;
+        case Room::ARMORY:    return RoomBonus::DAMAGE;
+        case Room::BANNERS:   return RoomBonus::SPEED;
+        case Room::GARDEN:    return RoomBonus::REGEN;
+        case Room::PORCELAIN: return RoomBonus::XP;
+    }
+    return RoomBonus::NONE;
+}
+
+const char* RoomBonusText(RoomBonus bonus) {
+    switch (bonus) {
+        case RoomBonus::PICKUP: return "+50% plukkeradius";
+        case RoomBonus::CRIT:   return "+10% kritisk treff";
+        case RoomBonus::DAMAGE: return "+15% skade";
+        case RoomBonus::SPEED:  return "+15% fart";
+        case RoomBonus::REGEN:  return "+2 HP per sekund";
+        case RoomBonus::XP:     return "+25% XP";
+        default:                return "";
+    }
+}
+
 const char* CastleRoomName(Vector2 pos) {
     int ix = (int)floorf(pos.x / CARPET_SPACING) + 2, iy = (int)floorf(pos.y / CARPET_SPACING) + 2;
     if (ix < 0 || ix > 3 || iy < 0 || iy > 3) return "";
@@ -839,6 +865,11 @@ void DrawCastleFloor(Vector2 center, float viewRadius) {
             drawEmblem({ (float)(ix * CARPET_SPACING), (float)(iy * CARPET_SPACING) }, CARPET_WIDTH * 0.62f);
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { DrawShadow({ p.x + 5.0f, p.y + 5.0f }, 16.0f, 11.0f); });
     forEachDecor(center, viewRadius, [](const DecorItem& d) {
+        if (d.kind == Decor::FOUNTAIN) {
+            // Fontenen er rund og lav: en jevn skygge rett under kanten (ikke forskjøvet)
+            DrawRing(d.pos, 100.0f * DECOR_SCALE, 100.0f * DECOR_SCALE + 7.0f, 0.0f, 360.0f, 72, Fade(BLACK, 0.22f));
+            return;
+        }
         DrawShadow({ d.pos.x + 8.0f, d.pos.y + 9.0f }, d.radius * 1.3f, d.radius * 1.0f);
     });
     // Skygge langs foten av muren

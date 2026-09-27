@@ -199,7 +199,12 @@ int main() {
     int pauseOption = 0;        // 0 = Fortsett, 1 = Gi opp
     bool giveUpRequested = false;
     double levelUpStart = 0.0; // For animasjonen når level-up-kortene kommer inn
-    int chestsPending = 0;     // Skattekister som er plukket opp, men ikke åpnet ennå
+    // Skattekister som er plukket opp, men ikke åpnet ennå. Verdien er kistens nivå:
+    // 1 = trekiste (1 skatt), 2 = sølvkiste (2 skatter), 3 = gullkiste (3 skatter på rad)
+    std::vector<int> pendingChests;
+    int chestTier = 1;         // Kista som åpnes nå
+    int chestPicksLeft = 0;    // Skatter igjen i kista som åpnes nå
+    int chestPickIndex = 0;
     int rerollsLeft = 3;       // [R] i level-up gir nye valg (begrenset per runde)
     float vacuumTimer = 0.0f;  // > 0: magnet-pickup suger inn all XP
     int xpCombo = 0;           // XP plukket opp rett etter hverandre (tonen stiger)
@@ -280,7 +285,8 @@ int main() {
         bossId = -1;
         arenaIntroTimer = 0.0f;
         activeCurses.clear();
-        chestsPending = 0;
+        pendingChests.clear();
+        chestPicksLeft = 0;
 
         // 2. La shoppen påføre arvede basestats + shop-bonuser, deretter echelon-effekter
         shop.applyToPlayer(choice, player);
@@ -484,13 +490,23 @@ int main() {
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateScepterChoices(player);
-            } else if (chestsPending > 0) {
-                // Skattekiste: item-kombinasjon hvis mulig, ellers items
-                chestsPending--;
+            } else if (chestPicksLeft > 0 || !pendingChests.empty()) {
+                // Skattekiste: item-kombinasjon hvis mulig, ellers items. Større kister gir flere valg på rad.
+                if (chestPicksLeft == 0) {
+                    chestTier = pendingChests.front();
+                    pendingChests.erase(pendingChests.begin());
+                    chestPicksLeft = chestTier;
+                    chestPickIndex = 0;
+                    PlaySfx(Sfx::VICTORY);
+                    VfxShockwave(player.position, 90.0f + 50.0f * chestTier, chestTier == 3 ? GOLD : (chestTier == 2 ? Color{ 210, 220, 240, 255 } : Color{ 200, 150, 80, 255 }));
+                    if (chestTier == 3) { VfxExplosion(player.position, 70.0f); AddCameraShake(0.4f); }
+                } else {
+                    PlaySfxPitch(Sfx::COIN, 1.2f);
+                }
+                chestPicksLeft--;
+                chestPickIndex++;
                 currentState = LEVEL_UP;
                 choiceSource = ChoiceSource::CHEST;
-                PlaySfx(Sfx::VICTORY);
-                VfxShockwave(player.position, 110.0f, GOLD);
                 selectedUpgradeOption = 0;
                 levelUpStart = GetTime();
                 activeUpgradeChoices = GenerateChestChoices(player, player.levelUpChoices);
@@ -503,7 +519,15 @@ int main() {
             if (IsKeyPressed(KEY_M)) showMinimap = !showMinimap;
 
             // Oppdater spilleren (sender inn gjeldende kamerarotasjon så WASD matcher skjermen)
-            player.update(camera.rotation);
+            // Salbonus (se castle.hpp): gjelder så lenge spilleren står i salen
+            const RoomBonus roomBonus = inBossArena ? RoomBonus::NONE : CastleRoomBonus(player.position);
+            {
+                float normalSpeed = player.speed;
+                if (roomBonus == RoomBonus::SPEED) player.speed *= 1.15f;
+                player.update(camera.rotation);
+                player.speed = normalSpeed;
+            }
+            if (roomBonus == RoomBonus::REGEN && player.hp > 0.0f) player.hp = std::min(player.maxHp, player.hp + 2.0f * deltaTime);
             if (!inBossArena) ResolvePillarCollision(player.position, 16.0f, player.position, 0.0f); // Søylene stenger veien
 
             // --- TIMEREN ER FERDIG: TELEPORTER TIL BOSS-ARENAEN ---
@@ -516,7 +540,7 @@ int main() {
                 // Alt som ligger igjen på bakken suges opp automatisk
                 for (const auto& p : pickups) {
                     if (p.type == PickupType::COIN) runCoins += p.value;
-                    else if (p.type == PickupType::CHEST) chestsPending++;
+                    else if (p.type == PickupType::CHEST) pendingChests.push_back(std::max(1, p.value));
                     else if (p.type == PickupType::SCEPTER) sceptersPending++;
                     else player.addXP(static_cast<int>(p.value * player.xpMultiplier));
                 }
@@ -678,7 +702,8 @@ int main() {
 
                 // Innenfor lootRadius (eller magnet-pickup aktiv for XP): trekkes mot deg, raskere og raskere
                 bool vacuumed = vacuumTimer > 0.0f && it->type == PickupType::XP;
-                if (distance < player.lootRadius || vacuumed || it->pull > 0.0f) {
+                float lootRadius = player.lootRadius * (roomBonus == RoomBonus::PICKUP ? 1.5f : 1.0f);
+                if (distance < lootRadius || vacuumed || it->pull > 0.0f) {
                     it->pull += deltaTime;
                     float magnetSpeed = 220.0f + 1400.0f * it->pull * it->pull;
                     it->position = Vector2MoveTowards(it->position, player.position, magnetSpeed * deltaTime);
@@ -692,7 +717,7 @@ int main() {
                             PlaySfx(Sfx::COIN);
                             break;
                         case PickupType::CHEST:
-                            chestsPending++;
+                            pendingChests.push_back(std::max(1, it->value));
                             break;
                         case PickupType::SCEPTER:
                             sceptersPending++;
@@ -709,7 +734,7 @@ int main() {
                             SpawnDamageNumber(player.position, (int)(player.maxHp * 0.3f), Color{ 120, 255, 120, 255 });
                             break;
                         case PickupType::XP:
-                            player.addXP(static_cast<int>(it->value * player.xpMultiplier));
+                            player.addXP(static_cast<int>(it->value * player.xpMultiplier * (roomBonus == RoomBonus::XP ? 1.25f : 1.0f)));
                             // Tonen stiger når man plukker mange på rad
                             xpCombo = std::min(xpCombo + 1, 24);
                             xpComboTimer = 0.5f;
@@ -724,11 +749,12 @@ int main() {
             }
 
             // Oppdater alle abilities
-            Enemy::critChance = player.critChance;
+            Enemy::critChance = player.critChance + (roomBonus == RoomBonus::CRIT ? 0.10f : 0.0f);
             Enemy::critMultiplier = player.critMultiplier;
             Enemy::luck = player.luck;
             Enemy::chestCooldown -= deltaTime;
             CombatModifiers mods = player.combatModifiers();
+            if (roomBonus == RoomBonus::DAMAGE) mods.damageMult *= 1.15f;
             for (auto& w : player.weapons) {
                 w->update(deltaTime, player.position, enemies, pickups, mods);
             }
@@ -758,7 +784,8 @@ int main() {
                     float d = (float)GetRandomValue(380, 620);
                     Vector2 pos = { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d };
                     ResolvePillarCollision(pos, 40.0f, pos, 0.0f); // Ikke inni pynten eller muren
-                    pickups.push_back({ pos, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+                    int tier = GetRandomValue(1, 100) <= (int)(20.0f * player.luck) ? 2 : 1; // Av og til en sølvkiste
+                    pickups.push_back({ pos, tier, GOLD, 14.0f, 0.0f, PickupType::CHEST });
                     VfxShockwave(pos, 80.0f, GOLD);
                 }
 
@@ -1242,12 +1269,18 @@ int main() {
                     float h = 8.0f + 3.0f * sinf(bob + pickup.position.x * 0.05f);
                     if (pickup.type == PickupType::CHEST) {
                         // Skattekiste som snurrer sakte på gulvet
+                        // Nivå: tre (brun med gull), sølv (blågrå med sølv) og gull (karmosin med gull, større)
                         float yaw = (float)GetTime() * 40.0f;
-                        Color wood = { 120, 70, 35, 255 }, gold = { 235, 190, 60, 255 };
-                        ShadedCube(ToWorld3D(pickup.position, 7.0f), { 24.0f, 14.0f, 16.0f }, yaw, wood);
-                        ShadedCube(ToWorld3D(pickup.position, 16.0f), { 25.0f, 5.0f, 17.0f }, yaw, Color{ 140, 85, 40, 255 });
-                        ShadedCube(ToWorld3D(pickup.position, 10.0f), { 26.0f, 3.0f, 18.0f }, yaw, gold);
-                        ShadedCube(ToWorld3D(pickup.position, 12.0f), { 5.0f, 6.0f, 18.5f }, yaw, gold);
+                        int tier = std::clamp(pickup.value, 1, 3);
+                        float k = tier == 3 ? 1.35f : (tier == 2 ? 1.15f : 1.0f);
+                        Color body = tier == 3 ? Color{ 150, 30, 45, 255 } : tier == 2 ? Color{ 70, 80, 105, 255 } : Color{ 120, 70, 35, 255 };
+                        Color lid = tier == 3 ? Color{ 175, 40, 55, 255 } : tier == 2 ? Color{ 90, 100, 128, 255 } : Color{ 140, 85, 40, 255 };
+                        Color trim = tier == 2 ? Color{ 215, 222, 235, 255 } : Color{ 235, 190, 60, 255 };
+                        ShadedCube(ToWorld3D(pickup.position, 7.0f * k), { 24.0f * k, 14.0f * k, 16.0f * k }, yaw, body);
+                        ShadedCube(ToWorld3D(pickup.position, 16.0f * k), { 25.0f * k, 5.0f * k, 17.0f * k }, yaw, lid);
+                        ShadedCube(ToWorld3D(pickup.position, 10.0f * k), { 26.0f * k, 3.0f * k, 18.0f * k }, yaw, trim);
+                        ShadedCube(ToWorld3D(pickup.position, 12.0f * k), { 5.0f * k, 6.0f * k, 18.5f * k }, yaw, trim);
+                        if (tier == 3) ShadedSphere(ToWorld3D(pickup.position, 21.0f * k), 3.0f, Color{ 90, 200, 255, 255 }, 4, 6); // Juvel
                     } else if (pickup.type == PickupType::SCEPTER) {
                         // Kongens septer: gullstav med blå krystall og krone, snurrer og svever høyt
                         float yaw = (float)GetTime() * 90.0f * DEG2RAD;
@@ -1404,8 +1437,12 @@ int main() {
                         if (pickup.type == PickupType::CHEST) {
                             // Lyssøyle så kista synes på avstand
                             float pulse = 0.7f + 0.3f * sinf(uiTime * 4.0f);
-                            Color beam = { (unsigned char)(180 * pulse), (unsigned char)(140 * pulse), 40, 255 };
-                            VfxBeam(VfxTex::GLOW, ToWorld3D(pickup.position, 0.0f), ToWorld3D(pickup.position, 260.0f), 50.0f, beam);
+                            int tier = std::clamp(pickup.value, 1, 3);
+                            Color beam = tier == 2 ? Color{ (unsigned char)(150 * pulse), (unsigned char)(165 * pulse), (unsigned char)(200 * pulse), 255 }
+                                                   : Color{ (unsigned char)(180 * pulse), (unsigned char)(140 * pulse), 40, 255 };
+                            VfxBeam(VfxTex::GLOW, ToWorld3D(pickup.position, 0.0f), ToWorld3D(pickup.position, 260.0f + 80.0f * (tier - 1)), 50.0f + 15.0f * (tier - 1), beam);
+                            if (tier == 3 && GetRandomValue(0, 2) == 0)
+                                VfxBillboard(VfxTex::SPARK, ToWorld3D({ pickup.position.x + GetRandomValue(-20, 20), pickup.position.y + GetRandomValue(-20, 20) }, 20.0f + GetRandomValue(0, 60)), 26.0f, Color{ 255, 220, 120, 255 }, uiTime * 200.0f);
                             VfxBillboard(VfxTex::GLOW, ToWorld3D(pickup.position, 14.0f), 70.0f, Color{ 200, 160, 60, 255 });
                             VfxBillboard(VfxTex::SPARK, ToWorld3D(pickup.position, 22.0f), 40.0f, Color{ 255, 230, 150, 255 }, uiTime * 90.0f);
                             continue;
@@ -1614,10 +1651,19 @@ int main() {
                 const char* room = inBossArena ? "" : CastleRoomName(player.position);
                 if (lastRoom != room) { lastRoom = room; roomEnteredAt = GetTime(); }
                 float since = (float)(GetTime() - roomEnteredAt);
-                if (currentState == GAMEPLAY && room[0] && since < 2.6f && spawner.gameTime > 1.0f) {
-                    float a = since < 0.3f ? since / 0.3f : (since < 2.0f ? 1.0f : (2.6f - since) / 0.6f);
+                if (currentState == GAMEPLAY && room[0]) {
+                    // Rett etter man går inn: stort og tydelig. Etterpå: lite skilt med salbonusen.
+                    float fresh = since < 0.3f ? since / 0.3f : (since < 2.2f ? 1.0f : std::max(0.0f, 1.0f - (since - 2.2f) / 0.6f));
+                    const char* bonus = RoomBonusText(CastleRoomBonus(player.position));
                     UI::BeginCanvas();
-                    UI::DrawCenteredText(room, CX, 118.0f, 20.0f, Fade(Color{ 240, 225, 190, 255 }, a), 2.0f);
+                    {
+                        const char* label = TextFormat("%s  -  %s", room, bonus);
+                        float size = 14.0f + 6.0f * fresh;
+                        float w = MeasureText(label, (int)size) + 28.0f;
+                        DrawRectangleRounded({ CX - w / 2.0f, 116.0f + 10.0f * fresh, w, size + 10.0f }, 0.5f, 8, Fade(Color{ 20, 16, 24, 255 }, 0.7f));
+                    }
+                    UI::DrawCenteredText(TextFormat("%s  -  %s", room, bonus), CX, 120.0f + 10.0f * fresh, 14.0f + 6.0f * fresh,
+                                         Fade(Color{ 240, 225, 190, 255 }, 0.6f + 0.4f * fresh), 2.0f);
                     UI::EndCanvas();
                 }
             }
@@ -1785,14 +1831,20 @@ int main() {
                 bool scepterScreen = choiceSource == ChoiceSource::SCEPTER;
                 bool chestScreen = choiceSource == ChoiceSource::CHEST;
                 ChoiceType firstType = activeUpgradeChoices.empty() ? ChoiceType::HEAL : activeUpgradeChoices[0].type;
-                UI::DrawCenteredText(scepterScreen ? "KONGENS SEPTER!" : (chestScreen ? "SKATTEKISTE!" : "LEVEL UP!"), CX, 88.0f - titleSize * 0.45f, titleSize,
-                                     scepterScreen ? Color{ 120, 200, 255, 255 } : UI::GOLD_LIGHT, 4.0f);
+                const char* chestTitle = chestTier == 3 ? "GULLKISTE!" : (chestTier == 2 ? "STOR SKATTEKISTE!" : "SKATTEKISTE!");
+                Color chestColor = chestTier == 2 ? Color{ 215, 225, 245, 255 } : UI::GOLD_LIGHT;
+                UI::DrawCenteredText(scepterScreen ? "KONGENS SEPTER!" : (chestScreen ? chestTitle : "LEVEL UP!"), CX, 88.0f - titleSize * 0.45f, titleSize,
+                                     scepterScreen ? Color{ 120, 200, 255, 255 } : (chestScreen ? chestColor : UI::GOLD_LIGHT), 4.0f);
                 const char* sub = scepterScreen ? "Velg hvilken ability som faar septer-oppgraderingen"
                                 : chestScreen ? (firstType == ChoiceType::COMBINE ? "To items kan smeltes sammen!  -  eller velg et nytt item"
                                                  : firstType == ChoiceType::ITEM ? "Du fant en skattekiste  -  velg et item"
                                                                                  : "Alle items er fulle  -  velg en gratis oppgradering")
                                                    : TextFormat("Du er naa level %d  -  velg en belonning", lastPlayerLevel);
                 UI::DrawCenteredText(sub, CX, 134.0f, 20.0f, Color{ 230, 220, 200, 255 });
+                if (chestScreen && chestTier > 1) {
+                    // Hvilken skatt i kista (store kister gir flere valg på rad)
+                    UI::DrawCenteredText(TextFormat("Skatt %d av %d", chestPickIndex, chestTier), CX, 158.0f, 18.0f, chestColor);
+                }
 
                 // --- Kortene ---
                 const int count = (int)activeUpgradeChoices.size();

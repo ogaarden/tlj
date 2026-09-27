@@ -294,7 +294,7 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
     if (miniboss) {
         // Miniboss: Kongens septer, en skattekiste og en haug med XP
         pickups.push_back({ { position.x, position.y - 20.0f }, 1, SKYBLUE, 16.0f, 0.0f, PickupType::SCEPTER });
-        pickups.push_back({ { position.x + 30.0f, position.y + 10.0f }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+        pickups.push_back({ { position.x + 30.0f, position.y + 10.0f }, 3, GOLD, 14.0f, 0.0f, PickupType::CHEST }); // Gullkiste
         for (int i = 0; i < 12; i++) {
             float a = i * PI / 6.0f;
             int v = xpValue / 12;
@@ -306,7 +306,7 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
         // Skattekiste, men elites deler en nedkjøling (Firkløver gjør den kortere).
         // Uten kiste slipper eliten en ekstra stor krystall i stedet.
         if (chestCarrier || chestCooldown <= 0.0f) {
-            pickups.push_back({ { position.x + 12.0f, position.y }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+            pickups.push_back({ { position.x + 12.0f, position.y }, chestCarrier ? 2 : 1, GOLD, 14.0f, 0.0f, PickupType::CHEST }); // Hordekaptein: sølvkiste
             chestCooldown = 22.0f / luck;
         } else {
             int bonus = xpValue * 2;

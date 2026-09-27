@@ -191,20 +191,17 @@ def runner(name, field, field_dark, border, accent, motif):
             cx, cy = x0 + 42, k + 16
             d.polygon([(cx, cy - 13), (cx + 13, cy), (cx, cy + 13), (cx - 13, cy)], fill=border)
             d.polygon([(cx, cy - 7), (cx + 7, cy), (cx, cy + 7), (cx - 7, cy)], fill=accent)
-    # Medaljong midt i feltet
+    # Geometrisk mønster midt i feltet (ingen figurer): ruter i ruter og en liten rosett
     cx, cy = W // 2, H // 2
     d.polygon([(cx, cy - 150), (cx + 110, cy), (cx, cy + 150), (cx - 110, cy)], fill=border)
-    d.polygon([(cx, cy - 136), (cx + 98, cy), (cx, cy + 136), (cx - 98, cy)], fill=field_dark)
-    d.polygon([(cx, cy - 100), (cx + 70, cy), (cx, cy + 100), (cx - 70, cy)], fill=accent)
-    d.ellipse([cx - 44, cy - 44, cx + 44, cy + 44], fill=border)
-    d.ellipse([cx - 34, cy - 34, cx + 34, cy + 34], fill=field)
-    if motif == "crown":                         # Liten krone
-        d.polygon([(cx - 22, cy + 12), (cx - 22, cy - 10), (cx - 11, cy + 2), (cx, cy - 18), (cx + 11, cy + 2), (cx + 22, cy - 10), (cx + 22, cy + 12)], fill=border)
-    else:                                        # Fleur-de-lis-aktig lilje
-        d.ellipse([cx - 6, cy - 22, cx + 6, cy + 4], fill=border)
-        d.ellipse([cx - 22, cy - 8, cx - 6, cy + 4], fill=border)
-        d.ellipse([cx + 6, cy - 8, cx + 22, cy + 4], fill=border)
-        d.rectangle([cx - 14, cy + 6, cx + 14, cy + 11], fill=border)
+    d.polygon([(cx, cy - 138), (cx + 100, cy), (cx, cy + 138), (cx - 100, cy)], fill=field_dark)
+    d.polygon([(cx, cy - 104), (cx + 76, cy), (cx, cy + 104), (cx - 76, cy)], fill=border)
+    d.polygon([(cx, cy - 94), (cx + 68, cy), (cx, cy + 94), (cx - 68, cy)], fill=field)
+    for k in range(4):                           # Fire små ruter som en rosett
+        a = k * math.pi / 2
+        px, py = cx + math.cos(a) * 34, cy + math.sin(a) * 46
+        d.polygon([(px, py - 16), (px + 12, py), (px, py + 16), (px - 12, py)], fill=accent)
+    d.polygon([(cx, cy - 14), (cx + 10, cy), (cx, cy + 14), (cx - 10, cy)], fill=border)
     # Små prikker i hjørnene av feltet (ved skjøten, så de møtes på neste flis)
     for (px, py) in [(cx - 150, 0), (cx + 150, 0), (cx - 150, H), (cx + 150, H), (cx, 0), (cx, H)]:
         d.ellipse([px - 10, py - 10, px + 10, py + 10], fill=border)

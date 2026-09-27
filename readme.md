@@ -329,4 +329,17 @@ Notes:
    - Storsalen: innlagt marmormedaljong med kompassrose og marmorårer
 2) Teksturene ligger fast på gulvet (verdenskoordinater), så de henger sammen på tvers av formene.
 
+// 21 oktober – kistenivåer og salbonuser
+1) Tre nivåer skattekister:
+   - Trekiste (vanlig): 1 skatt
+   - Sølvkiste (hordekapteiner, og 20 % av kistene som dukker opp i slottet – mer med Firkløver): 2 skatter på rad
+   - Gullkiste (minibosser og skattmesteren): 3 skatter på rad, større med juvel og gnister
+   Større kister har høyere lyssøyle. Valgskjermen viser "Skatt 2 av 3" osv.
+2) Salbonuser: hver sal gir en fordel så lenge du står i den, så det lønner seg å flytte seg rundt:
+   Storsalen +50 % plukkeradius, Statuegalleriet +10 % krit, Rustkammeret +15 % skade,
+   Fanehallen +15 % fart, Hagegården +2 HP/sek, Porselenssalongen +25 % XP.
+   Salen og bonusen vises alltid under klokka.
+3) Løperne har et rolig geometrisk mønster i stedet for kroner/liljer.
+4) Skyggen under fontenen ligger nå konsentrisk med kanten.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

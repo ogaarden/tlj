@@ -266,5 +266,5 @@ void Treasurer::extraLoot(std::vector<Pickup>& pickups) const {
         float d = 30.0f + (i % 2) * 22.0f;
         pickups.push_back({ { position.x + cosf(a) * d, position.y + sinf(a) * d }, 2, GOLD, 5.0f, 30.0f, PickupType::COIN });
     }
-    pickups.push_back({ { position.x, position.y - 12.0f }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST });
+    pickups.push_back({ { position.x, position.y - 12.0f }, 3, GOLD, 14.0f, 0.0f, PickupType::CHEST }); // Gullkiste
 }

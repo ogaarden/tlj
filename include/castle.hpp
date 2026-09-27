@@ -41,6 +41,11 @@ bool InsideCastle(Vector2 pos, float margin);
 float CastleHalfSize();                 // Veggen står i +-CastleHalfSize() på begge akser
 const char* CastleRoomName(Vector2 pos); // Navnet på salen man står i ("Rustkammeret" osv.)
 
+// Salbonus: hver sal gir en liten fordel så lenge man står i den (så det lønner seg å flytte seg)
+enum class RoomBonus { NONE, PICKUP, CRIT, DAMAGE, SPEED, REGEN, XP };
+RoomBonus CastleRoomBonus(Vector2 pos);
+const char* RoomBonusText(RoomBonus bonus);
+
 // Myk skygge under en figur – gir en enkel følelse av dybde
 void DrawShadow(Vector2 feet, float width, float height);
 
