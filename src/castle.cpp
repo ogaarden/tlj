@@ -185,6 +185,36 @@ void forEachPillar(Vector2 center, float radius, F&& fn) {
     }
 }
 
+// Søylenes akse. Med perspektivkameraet ville en helt loddrett søyle vippe kraftig utover mot
+// kanten av skjermen (og se ut som den ligger på gulvet). Derfor vippes hver søyle litt SIDELENGS,
+// inn mot planet gjennom kameraet og skjermens loddrette linje der søylen står. Da står den fortsatt
+// rett opp fra gulvet (ingen vipping fremover/bakover), men ser helt loddrett ut på skjermen –
+// fra gulvet og opp mot taket, ut av bildet. Settes hver frame fra kameraet (se DrawCastleProps3D).
+Vector3 pillarCamPos = { 0.0f, 1000.0f, 0.0f };
+Vector3 pillarCamUp = { 0.0f, 0.0f, -1.0f };
+
+void setPillarAxis(const Camera3D& cam) {
+    Vector3 fwd = Vector3Normalize(Vector3Subtract(cam.target, cam.position));
+    Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, { 0.0f, 1.0f, 0.0f }));
+    pillarCamUp = Vector3Normalize(Vector3CrossProduct(right, fwd));
+    pillarCamPos = cam.position;
+}
+
+Vector3 pillarAxis(Vector2 p) {
+    // Planet som inneholder kameraet, strålen til søylefoten og kameraets opp-retning
+    Vector3 ray = Vector3Subtract({ p.x, 0.0f, p.y }, pillarCamPos);
+    Vector3 n = Vector3Normalize(Vector3CrossProduct(ray, pillarCamUp));
+    // Verdens "opp" projisert inn i planet
+    Vector3 up = { 0.0f, 1.0f, 0.0f };
+    return Vector3Normalize(Vector3Subtract(up, Vector3Scale(n, n.y)));
+}
+
+// Punkt `h` enheter opp langs søylen som står på gulvpunktet `foot`, forskjøvet `off` på gulvet
+Vector3 pillarAt(Vector2 foot, float h, Vector2 off = { 0.0f, 0.0f }) {
+    Vector3 a = pillarAxis(foot);
+    return { foot.x + off.x + a.x * h, a.y * h, foot.y + off.y + a.z * h };
+}
+
 // Marmorsøyle med gullringer (3D) som fortsetter opp til taket.
 // alpha < 255: gjennomsiktig (når den skjuler spilleren).
 void drawPillar(Vector2 p, unsigned char alpha = 255) {
@@ -194,18 +224,20 @@ void drawPillar(Vector2 p, unsigned char alpha = 255) {
     const float H = PILLAR_HEIGHT_HALL;
     const float R = PILLAR_RADIUS;
     ShadedCube(ToWorld3D(p, 7.0f), { R * 2.6f, 14.0f, R * 2.6f }, 45.0f, MARBLE_SHADE);             // Sokkel (rombe)
-    ShadedCylinder(ToWorld3D(p, 14.0f), ToWorld3D(p, 26.0f), R * 1.3f, R * 1.12f, MARBLE, 24);       // Fot
-    ShadedCylinder(ToWorld3D(p, 26.0f), ToWorld3D(p, 32.0f), R * 1.14f, R * 1.14f, RING, 24);        // Gullring
-    ShadedCylinder(ToWorld3D(p, 32.0f), ToWorld3D(p, H), R, R * 0.92f, MARBLE, 24);                  // Skaft
-    for (int i = 0; i < (alpha == 255 ? 12 : 0); i++) {                                               // Riller (ikke når gjennomsiktig)
+    ShadedCylinder(pillarAt(p, 0.0f), pillarAt(p, 26.0f), R * 1.3f, R * 1.12f, MARBLE, 24);       // Fot
+    ShadedCylinder(pillarAt(p, 26.0f), pillarAt(p, 32.0f), R * 1.14f, R * 1.14f, RING, 24);        // Gullring
+    ShadedCylinder(pillarAt(p, 32.0f), pillarAt(p, H), R, R * 0.92f, MARBLE, 24);                  // Skaft
+    for (int i = 0; i < (alpha >= 200 ? 12 : 0); i++) {                                               // Riller (ikke når svært gjennomsiktig)
         float a = i * PI / 6.0f;
-        Vector2 o = { p.x + cosf(a) * R * 0.95f, p.y + sinf(a) * R * 0.95f };
-        ShadedCylinder(ToWorld3D(o, 38.0f), ToWorld3D(o, H), 2.4f, 2.2f, MARBLE_SHADE, 4);
+        Vector2 o = { cosf(a) * R * 0.95f, sinf(a) * R * 0.95f };
+        ShadedCylinder(pillarAt(p, 38.0f, o), pillarAt(p, H, o), 2.4f, 2.2f, MARBLE_SHADE, 4);
     }
-    // Gullbånd oppover skaftet: gjør høyden (og perspektivet) tydelig
+    // Gullbånd oppover skaftet: gjør høyden (og perspektivet) tydelig.
+    // Ikke på svært gjennomsiktige søyler.
+    if (alpha < 200) return;
     for (float y = 260.0f; y < H; y += 260.0f) {
         float r = R * (1.0f - 0.08f * y / H) + 1.5f;
-        ShadedCylinder(ToWorld3D(p, y), ToWorld3D(p, y + 8.0f), r, r, RING, 24);
+        ShadedCylinder(pillarAt(p, y), pillarAt(p, y + 8.0f), r, r, RING, 24);
     }
 }
 
@@ -215,8 +247,8 @@ float pillarCover(Vector2 p, const Camera3D& cam, Vector2 focus) {
     Vector3 fwd = Vector3Subtract(cam.target, cam.position);
     Vector2 fwd2 = Vector2Normalize({ fwd.x, fwd.z });
     if (Vector2DotProduct(Vector2Subtract(p, focus), fwd2) > 0.0f) return 0.0f;
-    Vector2 b = GetWorldToScreen(ToWorld3D(p, 0.0f), cam);
-    Vector2 t = GetWorldToScreen(ToWorld3D(p, PILLAR_HEIGHT_HALL * 0.7f), cam);
+    Vector2 b = GetWorldToScreen(pillarAt(p, 0.0f), cam);
+    Vector2 t = GetWorldToScreen(pillarAt(p, PILLAR_HEIGHT_HALL * 0.7f), cam);
     Vector2 f = GetWorldToScreen(ToWorld3D(focus, 45.0f), cam);
     // Nærmeste punkt på søylens midtlinje (på skjermen)
     Vector2 bt = Vector2Subtract(t, b);
@@ -224,7 +256,7 @@ float pillarCover(Vector2 p, const Camera3D& cam, Vector2 focus) {
     float u = len2 > 0.0f ? Clamp(Vector2DotProduct(Vector2Subtract(f, b), bt) / len2, 0.0f, 1.0f) : 0.0f;
     Vector2 c = Vector2Add(b, Vector2Scale(bt, u));
     // Søylens halve bredde på skjermen ved det punktet
-    Vector3 cw = ToWorld3D(p, PILLAR_HEIGHT_HALL * 0.7f * u);
+    Vector3 cw = pillarAt(p, PILLAR_HEIGHT_HALL * 0.7f * u);
     Vector3 right = Vector3Normalize(Vector3CrossProduct(fwd, { 0, 1, 0 }));
     Vector2 edge = GetWorldToScreen(Vector3Add(cw, Vector3Scale(right, PILLAR_RADIUS)), cam);
     float halfW = Vector2Distance(edge, c);
@@ -352,21 +384,34 @@ void DrawCastleFloor(Vector2 center, float viewRadius) {
     });
 }
 
+// Hvor synlig en søyle skal være (0..1): gjennomsiktig når den skjuler spilleren, og tones ut
+// når foten nærmer seg nederste skjermkant (da står den nesten rett foran kameraet og ville
+// fylt halve skjermen). Foten under skjermkanten = usynlig.
+static float pillarAlpha(Vector2 p, const Camera3D& camera, Vector2 focus) {
+    float sh = (float)GetScreenHeight();
+    float by = GetWorldToScreen(pillarAt(p, 0.0f), camera).y;
+    if (by > sh) return 0.0f;
+    float nearCam = Clamp((by - 0.78f * sh) / (0.22f * sh), 0.0f, 1.0f);
+    float cover = pillarCover(p, camera, focus);
+    return (1.0f - 0.72f * cover) * (1.0f - nearCam);
+}
+
 void DrawCastleProps3D(Vector2 center, float viewRadius, const Camera3D& camera) {
+    setPillarAxis(camera);
     forEachBrazier(center, viewRadius, [](Vector2 p, float) { drawBrazier(p); });
-    // Søyler som skjuler spilleren tegnes gjennomsiktige til slutt (DrawCastlePillarsFaded)
-    forEachPillar(center, viewRadius, [&](Vector2 p) { if (pillarCover(p, camera, center) <= 0.0f) drawPillar(p); });
+    // Helt synlige søyler nå; gjennomsiktige til slutt (DrawCastlePillarsFaded)
+    forEachPillar(center, viewRadius, [&](Vector2 p) { if (pillarAlpha(p, camera, center) >= 0.999f) drawPillar(p); });
 }
 
 void DrawCastlePillarsFaded(Vector2 center, float viewRadius, const Camera3D& camera) {
+    // Tegnes etter figurene, så de synes gjennom. Dybden skrives fortsatt, så søylens egne
+    // detaljer (gullbånd inni skaftet) ikke skinner gjennom som gule skiver.
     rlDrawRenderBatchActive();
-    rlDisableDepthMask(); // Gjennomsiktig: ikke skjul det som tegnes etterpå
     forEachPillar(center, viewRadius, [&](Vector2 p) {
-        float cover = pillarCover(p, camera, center);
-        if (cover > 0.0f) drawPillar(p, (unsigned char)(255.0f * (1.0f - 0.72f * cover)));
+        float a = pillarAlpha(p, camera, center);
+        if (a > 0.02f && a < 0.999f) drawPillar(p, (unsigned char)(255.0f * a));
     });
     rlDrawRenderBatchActive();
-    rlEnableDepthMask();
 }
 
 void DrawCastlePropsVfx(Vector2 center, float viewRadius) {

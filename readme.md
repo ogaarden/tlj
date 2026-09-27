@@ -283,4 +283,15 @@ Notes:
    Blodmånen har fått et tydeligere rødt skjær.
 3) Echelon-bonus på gull: +15 % gull per echelon over 1 (E5 = x1.6, E10 = x2.35). Vises på game over-skjermen.
 
+// 17 oktober – dyr shop og bærende søyler
+1) Shoppen blir veldig dyr mot toppen: pris = grunnpris * 1.55^nivå * (1 + 0.18 * nivå²).
+   En oppgradering til 90 g koster 90, 165, 372, 878 og 2016 g. Alt til sammen: ca. 43 000 g
+   (før ca. 16 000). De første nivåene er rimelige, men å kjøpe ALT tar veldig mange runder –
+   og da skal spillet også være ganske enkelt.
+2) Søylene står nå rett opp fra gulvet og går opp mot taket. Før vippet de kraftig utover mot kanten
+   av skjermen (perspektivet), så de så ut som de lå på gulvet. Nå vippes hver søyle litt sidelengs
+   inn mot kameraet, så den ser loddrett ut på skjermen (og blir bredere oppover, mot kameraet).
+   Søyler som står nesten rett foran kameraet tones ut nederst på skjermen, og en søyle som skjuler
+   spilleren blir gjennomsiktig.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

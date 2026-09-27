@@ -9,15 +9,19 @@
 
 // =====================================================================
 // BALANSE
-// Gull er metaprogresjon: målet er at det tar ~60+ gode runs å kjøpe alt,
-// og at spillet da er ganske enkelt. Prisen øker med COST_GROWTH per nivå.
+// Gull er metaprogresjon: har man kjøpt ALT, skal spillet være ganske enkelt, så det skal ta
+// veldig lang tid (100+ gode runder). De første nivåene er rimelige, men prisen stiger bratt mot
+// toppen: pris = grunnpris * 1.55^nivå * (1 + 0.18 * nivå²).
+// For en oppgradering til 90 g: 90, 165, 372, 878, 2016 (sum ca. 3500 g). Alt til sammen: ca. 43 000 g.
 // =====================================================================
 namespace {
-    constexpr float COST_GROWTH = 1.5f;
+    constexpr float COST_GROWTH = 1.55f;
+    constexpr float COST_STEEPNESS = 0.18f;
 }
 
 int ShopItem::cost() const {
-    return (int)std::round(baseCost * std::pow(COST_GROWTH, (float)currentLevel));
+    float L = (float)currentLevel;
+    return (int)std::round(baseCost * std::pow(COST_GROWTH, L) * (1.0f + COST_STEEPNESS * L * L));
 }
 
 Shop::Shop() {
