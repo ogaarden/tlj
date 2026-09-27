@@ -249,7 +249,7 @@ void drawWester(const ClownPose& pose) {
 }
 
 // =====================================================================
-// TOK GEEK – lang og tynn nerde-klovn: briller, sløyfe, strikkevest og propellcaps
+// TOP GEEK – lang og tynn nerde-klovn: briller, sløyfe, strikkevest og propellcaps
 // =====================================================================
 void drawGeek(const ClownPose& pose) {
     Rig r = makeRig(pose);
@@ -286,17 +286,25 @@ void drawGeek(const ClownPose& pose) {
     }
     r.sphere(6.8f, 0.0f, 44.0f + up, 1.2f, BOWTIE, 4, 6);
 
-    // Lange tynne armer. Høyre arm kaster sprettballen (Ricochet) og holder en ny når den er klar.
+    // Lange tynne armer. Høyre hånd holder laserpistolen og rykker opp når den skyter.
     float throwT = pose.attack;
     for (int side = -1; side <= 1; side += 2) {
         float swing = -g.step * 4.0f * side;
         Vector3 shoulder = r.at(0.0f, side * 7.0f, 43.0f + up);
-        Vector3 hand = side > 0 ? r.at(4.0f + 12.0f * throwT, 9.5f, 27.0f + up + 16.0f * throwT)
+        Vector3 hand = side > 0 ? r.at(7.0f + 3.0f * throwT, 8.5f, 30.0f + up + 5.0f * throwT)
                                 : r.at(2.5f + swing, side * 9.0f, 25.0f + up);
         r.limb(shoulder, hand, 2.0f, 1.8f, SHIRT);
         ShadedSphere(hand, 2.8f, r.c(GLOVE), 5, 7);
-        if (side > 0 && throwT < 0.2f) {
-            ShadedSphere(Vector3Add(hand, { r.f.x * 3.0f, 2.5f, r.f.y * 3.0f }), 3.2f, r.c(Color{ 90, 170, 255, 255 }), 6, 8);
+        if (side > 0) {
+            // Retro strålepistol: sølvkropp, ribber og en grønn emitter som lyser foran
+            Vector3 fwd = { r.f.x, 0.0f, r.f.y };
+            auto ahead = [&](float d, float h) { return Vector3Add(hand, { fwd.x * d, h, fwd.z * d }); };
+            ShadedCylinder(ahead(-1.0f, 2.0f), ahead(-1.5f, -3.5f), 1.3f, 1.2f, r.c(Color{ 60, 60, 70, 255 }), 6); // Skjefte
+            ShadedCylinder(ahead(-3.0f, 2.2f), ahead(5.0f, 2.2f), 2.6f, 1.6f, r.c(Color{ 205, 210, 225, 255 }), 8);  // Kropp
+            for (int k = 0; k < 2; k++)
+                ShadedCylinder(ahead(-1.0f + k * 2.2f, 2.2f), ahead(-0.2f + k * 2.2f, 2.2f), 3.1f, 3.1f, r.c(Color{ 230, 60, 60, 255 }), 8); // Ribber
+            ShadedCylinder(ahead(5.0f, 2.2f), ahead(9.0f, 2.2f), 1.0f, 1.0f, r.c(Color{ 150, 155, 170, 255 }), 6); // Løp
+            ShadedSphere(ahead(9.5f, 2.2f), 1.7f, r.c(Color{ 90, 255, 200, 255 }), 5, 7);                           // Emitter
         }
     }
 

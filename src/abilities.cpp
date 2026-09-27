@@ -62,14 +62,14 @@ std::vector<AbilityDefinition> buildDefinitions() {
     });
 
     defs.push_back({
-        AbilityId::RICOCHET, "Ricochet", "Kule som spretter videre, svakere for hvert sprett.", SKYBLUE,
-        { .damage = 85.0f, .cooldown = 1.5f, .speed = 550.0f, .projectiles = 1,
-          .bounces = 3, .bounceRange = 250.0f, .bounceFalloff = 0.7f },
+        AbilityId::RICOCHET, "Laserpistol", "Laserstraale som spretter mellom fiender, svakere for hvert sprett.", Color{ 90, 255, 200, 255 },
+        { .damage = 85.0f, .cooldown = 1.5f, .projectiles = 1,
+          .bounces = 3, .bounceRange = 250.0f, .bounceFalloff = 0.7f, .radius = 520.0f /* rekkevidde */ },
         {
             addBounces(1, "+1 sprett"),
             damageMult(1.3f, "+30% skade"),
             { "Sprett mister mindre skade (-20% i stedet for -30%)", [](AbilityStats& s) { s.bounceFalloff = 0.8f; } },
-            addProjectiles(1, "+1 kule"),
+            addProjectiles(1, "+1 laserstraale"),
             addBounces(2, "+2 sprett"),
             damageMult(2.0f, "2x skade"),
             cooldownMult(0.75f, "-25% cooldown"),
@@ -330,7 +330,7 @@ std::unique_ptr<Weapon> CreateAbility(AbilityId id) {
         case AbilityId::TREFORK:       ability = std::make_unique<ProjectileWeapon>(true); break;
         case AbilityId::DAGGER:        ability = std::make_unique<ProjectileWeapon>(false); break;
         case AbilityId::GROUND_SLAM:   ability = std::make_unique<MeleeWeapon>(); break;
-        case AbilityId::RICOCHET:      ability = std::make_unique<BouncingProjectileWeapon>(false); break;
+        case AbilityId::RICOCHET:      ability = std::make_unique<LaserWeapon>(); break; // Laserpistol
         case AbilityId::MAGIC_MISSILE: ability = std::make_unique<BouncingProjectileWeapon>(true); break;
         case AbilityId::ROT:           ability = std::make_unique<RotWeapon>(); break;
         case AbilityId::ORBIT_BLADES:  ability = std::make_unique<OrbitWeapon>(); break;
@@ -403,7 +403,7 @@ const std::vector<ScepterData>& scepterUpgrades() {
           [](AbilityStats& s) { s.projectiles += 4; s.pierce += 3; s.damage *= 1.5f; } },
         { { AbilityId::GROUND_SLAM, "Jordskjelv", "+80 radius, 2x skade og -20% cooldown", Color{ 255, 110, 40, 255 } },
           [](AbilityStats& s) { s.radius += 80.0f; s.damage *= 2.0f; s.cooldown *= 0.8f; } },
-        { { AbilityId::RICOCHET, "Kaoskule", "+2 kuler, +6 sprett og ingen svekkelse per sprett", Color{ 255, 80, 220, 255 } },
+        { { AbilityId::RICOCHET, "Prismelaser", "+2 straaler, +6 sprett og ingen svekkelse per sprett", Color{ 255, 80, 220, 255 } },
           [](AbilityStats& s) { s.projectiles += 2; s.bounces += 6; s.bounceFalloff = 1.0f; } },
         { { AbilityId::PIE, "Bryllupskake", "+3 kaker, +45 sprut-radius og +50% skade", Color{ 255, 235, 245, 255 } },
           [](AbilityStats& s) { s.projectiles += 3; s.radius += 45.0f; s.damage *= 1.5f; } },

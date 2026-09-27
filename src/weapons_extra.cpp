@@ -1,6 +1,7 @@
 #include "weapon.hpp"
 #include "weapon_helpers.hpp"
 #include <cmath>
+#include <algorithm>
 
 // =====================================================================
 // De nye abilitiene: Ildsluker, Bumerang, Kortstokk, Frostnova, Katapult,
@@ -694,5 +695,99 @@ void TornadoWeapon::drawVfx() const {
             if (k == 2 || k == 5) VfxDecal(VfxTex::SLASH, wob, size * 0.8f, Color{ (unsigned char)(v * 0.6f), (unsigned char)(v * 0.6f), (unsigned char)(v * 0.6f), 255 }, -t.spin * 1.3f, h + 2.0f);
         }
         VfxBillboard(VfxTex::GLOW, ToWorld3D(t.position, 30.0f), radius() * 2.2f, Color{ (unsigned char)(30 * fade), (unsigned char)(40 * fade), (unsigned char)(40 * fade), 255 });
+    }
+}
+
+// =====================================================================
+// Laserpistol (Top Geek)
+// Hitscan: strålen treffer med én gang, og spretter så videre til nærmeste fiende som ikke
+// er truffet (litt forsinket per sprett, så man ser den hoppe). Svakere for hvert sprett.
+// =====================================================================
+namespace {
+    constexpr float LASER_HOP_DELAY = 0.06f;
+    constexpr float LASER_SEGMENT_TIME = 0.22f;
+    constexpr float LASER_HEIGHT = 26.0f; // Pistolhøyde
+}
+
+void LaserWeapon::fireHop(Hop hop, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) {
+    Enemy* target = findEnemyById(enemies, hop.targetId);
+    if (!target) target = nearestUnhitEnemy(hop.from, stats.bounceRange, hop.hitIds, enemies);
+    if (!target) return;
+
+    Vector2 hitPos = target->position;
+    bool first = hop.hitIds.empty();
+    segments.push_back({ ToWorld3D(hop.from, first ? LASER_HEIGHT : PROJECTILE_HEIGHT), ToWorld3D(hitPos, PROJECTILE_HEIGHT),
+                         LASER_SEGMENT_TIME, LASER_SEGMENT_TIME, (int)hop.hitIds.size() });
+    VfxHit(hitPos, color);
+
+    int id = target->id;
+    target->takeDamage((int)hop.damage, color);
+    hop.hitIds.push_back(id);
+    for (size_t j = 0; j < enemies.size(); j++) {
+        if (enemies[j]->id == id && enemies[j]->isDead()) { removeDeadEnemy(enemies, j, pickups); break; }
+    }
+
+    if (hop.bouncesLeft <= 0) return;
+    Enemy* next = nearestUnhitEnemy(hitPos, stats.bounceRange, hop.hitIds, enemies);
+    if (!next) return;
+    float dmg = hop.damage * stats.bounceFalloff;
+    if ((int)dmg <= 0) return;
+    hops.push_back({ hitPos, next->id, LASER_HOP_DELAY, dmg, hop.bouncesLeft - 1, hop.hitIds });
+}
+
+void LaserWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) {
+    lastPlayerPos = playerPos;
+    fireTimer += deltaTime;
+
+    for (auto& s : segments) s.timer -= deltaTime;
+    segments.erase(std::remove_if(segments.begin(), segments.end(), [](const Segment& s) { return s.timer <= 0.0f; }), segments.end());
+
+    // Sprett som venter
+    for (auto& h : hops) h.delay -= deltaTime;
+    std::vector<Hop> ready;
+    for (size_t i = 0; i < hops.size(); ) {
+        if (hops[i].delay <= 0.0f) { ready.push_back(hops[i]); hops[i] = hops.back(); hops.pop_back(); }
+        else i++;
+    }
+    for (Hop& h : ready) fireHop(h, enemies, pickups);
+
+    if (fireTimer < cooldown() || enemies.empty()) return;
+
+    // Skyt mot de nærmeste fiendene innenfor rekkevidde (én stråle per "prosjektil")
+    int count = stats.projectiles + mods.extraProjectiles;
+    std::vector<Enemy*> targets = nearestEnemies(playerPos, enemies, count);
+    std::vector<int> ids;
+    for (Enemy* e : targets)
+        if (Vector2Distance(playerPos, e->position) <= stats.radius * mods.speedMult) ids.push_back(e->id);
+    if (ids.empty()) return; // Hold skuddet klart til noen kommer nær nok
+
+    for (int i = 0; i < count; i++) {
+        int id = ids[i % ids.size()];
+        fireHop({ playerPos, id, 0.0f, (float)scaledDamage(), stats.bounces, {} }, enemies, pickups);
+    }
+    if (Enemy* e = findEnemyById(enemies, ids[0])) VfxMuzzle(playerPos, Vector2Normalize(Vector2Subtract(e->position, playerPos)), color);
+    PlaySfxPitch(Sfx::ZAP, 1.7f);
+    fireTimer = 0.0f;
+}
+
+void LaserWeapon::draw() const {
+    // Svidd strek på gulvet under strålen
+    for (const auto& s : segments) {
+        float a = s.timer / s.maxTimer;
+        DrawLineEx({ s.a.x, s.a.z }, { s.b.x, s.b.z }, 6.0f, Fade(Color{ 10, 60, 50, 255 }, 0.45f * a));
+    }
+}
+
+void LaserWeapon::drawVfx() const {
+    for (const auto& s : segments) {
+        float a = s.timer / s.maxTimer;
+        // Tynnere for hvert sprett
+        float w = std::max(0.45f, 1.0f - s.hop * 0.12f);
+        Color glow = { (unsigned char)(color.r * a), (unsigned char)(color.g * a), (unsigned char)(color.b * a), 255 };
+        unsigned char c = (unsigned char)(255 * a);
+        VfxBeam(VfxTex::GLOW, s.a, s.b, 48.0f * w, glow);
+        VfxBeam(VfxTex::GLOW, s.a, s.b, 20.0f * w, glow);                  // Dobbel glød, så den synes på lyst gulv
+        VfxBeam(VfxTex::GLOW, s.a, s.b, 12.0f * w, Color{ c, c, c, 255 }); // Hvit kjerne
+        VfxBillboard(VfxTex::GLOW, s.b, 34.0f * w * (0.5f + a), glow);
     }
 }

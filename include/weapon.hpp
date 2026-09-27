@@ -237,6 +237,36 @@ public:
     void drawVfx() const override;
 };
 
+// --- Laserpistol (Top Geek): øyeblikkelig laserstråle som spretter fra fiende til fiende ---
+//  radius      = rekkevidde for første skudd
+//  bounces     = antall sprett, bounceRange = hvor langt et sprett kan gå
+//  bounceFalloff = skade-multiplikator per sprett
+class LaserWeapon : public Weapon {
+private:
+    struct Hop {            // Et sprett som venter (litt forsinket, så man ser strålen hoppe)
+        Vector2 from;
+        int targetId;
+        float delay;
+        float damage;
+        int bouncesLeft;
+        std::vector<int> hitIds;
+    };
+    struct Segment {        // En synlig stråle som tones ut
+        Vector3 a, b;
+        float timer, maxTimer;
+        int hop;
+    };
+    std::vector<Hop> hops;
+    std::vector<Segment> segments;
+    Vector2 lastPlayerPos = { 0, 0 };
+    void fireHop(Hop hop, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups);
+public:
+    void tick(float deltaTime, Vector2 playerPos, std::vector<std::unique_ptr<Enemy>>& enemies, std::vector<Pickup>& pickups) override;
+    void draw() const override;
+    void draw3D() const override {}
+    void drawVfx() const override;
+};
+
 // =====================================================================
 // NYE ABILITIES
 // =====================================================================

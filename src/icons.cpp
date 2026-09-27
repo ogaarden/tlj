@@ -119,14 +119,24 @@ void DrawAbilityIcon(AbilityId id, Vector2 c, float s) {
             inkLine(h0, h1, s * 0.5f, STEEL_D);
             DrawLineEx(h0, h1, s * 0.3f, STEEL);
         } break;
-        case AbilityId::RICOCHET: { // Kule som spretter i sikksakk
-            Vector2 pts[4] = { P(c, s, -0.9f, -0.6f), P(c, s, -0.35f, 0.6f), P(c, s, 0.2f, -0.45f), P(c, s, 0.65f, 0.35f) };
-            for (int i = 0; i < 3; i++) {
-                DrawLineEx(pts[i], pts[i + 1], s * 0.12f, INK);
-                DrawLineEx(pts[i], pts[i + 1], s * 0.06f, Fade(BLUE_L, 0.6f + i * 0.13f));
+        case AbilityId::RICOCHET: { // Laserpistol: strålepistol og en laser som spretter
+            const Color LASER = { 90, 255, 200, 255 };
+            Vector2 pts[3] = { P(c, s, 0.05f, -0.35f), P(c, s, 0.45f, -0.85f), P(c, s, 0.9f, -0.3f) };
+            for (int i = 0; i < 2; i++) {
+                DrawLineEx(pts[i], pts[i + 1], s * 0.2f, Fade(LASER, 0.35f));
+                DrawLineEx(pts[i], pts[i + 1], s * 0.08f, WHITE);
             }
-            for (int i = 1; i < 3; i++) DrawCircleV(pts[i], s * 0.1f, Fade(WHITE, 0.7f));
-            inkCircle(pts[3], s * 0.3f, BLUE_L);
+            DrawCircleV(pts[1], s * 0.12f, WHITE);
+            // Pistolen: rund kropp med røde ribber, løp og grønn emitter
+            quad(P(c, s, -0.75f, 0.0f), P(c, s, -0.45f, 0.0f), P(c, s, -0.35f, 0.75f), P(c, s, -0.7f, 0.75f), INK);
+            quad(P(c, s, -0.68f, 0.05f), P(c, s, -0.5f, 0.05f), P(c, s, -0.42f, 0.68f), P(c, s, -0.63f, 0.68f), Color{ 70, 70, 80, 255 });
+            inkLine(P(c, s, -0.85f, -0.1f), P(c, s, -0.15f, -0.2f), s * 0.42f, STEEL);
+            inkLine(P(c, s, -0.15f, -0.2f), P(c, s, 0.1f, -0.3f), s * 0.12f, STEEL_D);
+            for (int k = 0; k < 2; k++) {
+                float x = -0.6f + k * 0.22f;
+                DrawLineEx(P(c, s, x, -0.38f), P(c, s, x + 0.02f, 0.08f), s * 0.1f, Color{ 230, 60, 60, 255 });
+            }
+            inkCircle(P(c, s, 0.08f, -0.32f), s * 0.13f, LASER);
         } break;
         case AbilityId::MAGIC_MISSILE: { // Komet med hale
             for (int i = 5; i >= 1; i--) {

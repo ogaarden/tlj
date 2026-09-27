@@ -410,3 +410,12 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
    troll ca. 2500. Skattmesteren er unntatt (han rømmer, så han må kunne tas).
 2) HP stiger raskere med tiden: x1.7 ved 2 min, x3.4 ved 5 min, x8 ved 10 min (før x6.8).
 3) Minibosser 26 000 / 60 000 / 110 000 HP, Kongen 250 000 (før 150 000).
+
+// 28 oktober – Top Geek og laserpistolen
+1) "tok geek" heter nå Top Geek (det var en skrivefeil).
+2) Top Geek sitt startvåpen er en laserpistol i stedet for Ricochet-kula: en øyeblikkelig laserstråle
+   (grønn-turkis med hvit kjerne) mot nærmeste fiende innen 520, som så spretter videre fra fiende til
+   fiende (3 sprett, -30 % per sprett, litt forsinket så man ser den hoppe). Samme level-oppgraderinger
+   som før. Septeret heter nå Prismelaser (+2 stråler, +6 sprett, ingen svekkelse).
+3) Top Geek holder en retro strålepistol (sølv med røde ribber og grønn emitter) i 3D-modellen,
+   og ability-ikonet er en strålepistol med en laser som spretter.

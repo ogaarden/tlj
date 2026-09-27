@@ -11,7 +11,7 @@ enum class AbilityId {
     // Innate (unike for hver karakter)
     TREFORK,
     GROUND_SLAM,
-    RICOCHET,
+    RICOCHET,     // Laserpistol (Top Geek): laserstråle som spretter mellom fiender
     PIE,        // Pierrot: kremkaker som lobbes og spruter
 
     // Felles pool

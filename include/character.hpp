@@ -69,9 +69,9 @@ inline std::vector<CharacterData> GetAvailableCharacters() {
             .clown = ClownStyle::WESTER,
         },
 
-        // --- TOK GEEK ---
+        // --- TOP GEEK ---
         CharacterData{
-            .name         = "tok geek",
+            .name         = "Top Geek",
             .description  = "Høyere XP rate",
             .texturePath  = "assets/jester_real.png",
             .speed        = 200.0f,
