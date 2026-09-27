@@ -383,3 +383,15 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
    Minibosser og Kongen er uendret.
 4) Mørk, rødlig skygge under fiendene, og en rød fare-glød på gulvet under fiender som er nær deg
    (sterkere jo nærmere de kommer).
+
+// 25 oktober – tøffere fiender, tyngre abilities og mindre XP
+1) Fiendene tåler mye mer (ingen one-shots lenger), mest for de som skal være tanky:
+   Lakei 10 -> 40, Kamikaze 30 -> 70, Armbrøst 70 -> 170, Hund 45 -> 120, Soldat 110 -> 260,
+   Kanonér 120 -> 360, Trommeslager 130 -> 400, Prest 150 -> 480, Troll 320 -> 1100,
+   Skattmester 900 -> 2400. Minibosser 16 000 / 38 000 / 70 000 (før 12k / 28k / 50k).
+   Skalering over tid: HP x6.8 ved 10 min (før x6), skade x2.4 (før x2).
+2) Abilities slår sjeldnere og hardere (ca. 1.6-2.3x lengre cooldown, mer skade per treff):
+   Lyn 2.5 -> 6 sek (240 skade), Katapult 3 -> 7 sek (340), Frostnova 3.2 -> 6, Virvelvind 4.5 -> 8,
+   Narrebjeller 2.6 -> 4.5, Ildsluker 2.4 -> 4.2, Trefork 1 -> 1.6, Ground Slam 2 -> 3.2,
+   Dolk 0.4 -> 0.8, osv. Cooldown-reduksjon fra items og shop er begrenset til maks -35 %.
+3) Mindre XP: hvert level krever ca. 40 % mer XP, og hordefiender gir 30 % XP (før 40 %).

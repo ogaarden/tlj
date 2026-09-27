@@ -108,7 +108,7 @@ CombatModifiers Player::combatModifiers() const {
     CombatModifiers mods;
     mods.extraProjectiles = projectileCount - 1;
     mods.damageMult = spellAmp * damageMult;
-    mods.cooldownMult = cooldownMult;
+    mods.cooldownMult = fmaxf(0.65f, cooldownMult); // Maks -35 % fra items og shop, så abilities aldri blir maskingevær
     mods.areaMult = areaMult;
     mods.speedMult = projectileSpeedMult;
     mods.durationMult = durationMult;
@@ -135,8 +135,8 @@ Weapon* Player::findAbility(AbilityId id) const {
 // Et fullt build (5 abilities på level 9 + 6 items på nivå 5) krever over 70 level-ups,
 // så man må velge hva man satser på.
 int Player::xpForLevel(int lvl) {
-    // Brattere sent: ca. level 24 ved 10 min med et vanlig build, ~35-40 i de lengste rundene
-    return (int)(40 + 45 * lvl + 6 * lvl * lvl + 0.12f * lvl * lvl * lvl);
+    // Mye XP per level (ca. +40 % mot før): rundt level 18-20 ved 10 min med et vanlig build
+    return (int)(60 + 65 * lvl + 8.5f * lvl * lvl + 0.17f * lvl * lvl * lvl); // ca. +40 % mot før
 }
 
 void Player::addXP(int amount)

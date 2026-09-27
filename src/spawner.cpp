@@ -35,8 +35,8 @@ namespace Difficulty {
     }
 
     // Fiender blir sterkere jo lenger runden varer (m = minutter)
-    float hpMult(float m)     { return 1.0f + 0.15f * m + 0.035f * m * m; }  // 10 min: x6
-    float damageMult(float m) { return 1.0f + 0.10f * m; }                   // 10 min: x2
+    float hpMult(float m)     { return 1.0f + 0.18f * m + 0.04f * m * m; }   // 10 min: x6.8
+    float damageMult(float m) { return 1.0f + 0.14f * m; }                   // 10 min: x2.4
     float speedMult(float m)  { return fminf(1.45f, 1.0f + 0.035f * m); }    // 10 min: +35 %, maks +45 %
 
     // Sjanse for elite: 0 det første 1.5 minuttet, så 3 % + 0.8 % per minutt (maks 14 %)
@@ -242,7 +242,7 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
                     if (n >= 10 && i % 5 == 2) type = EnemyType::ARCHER;
                     if (n >= 12 && i % 11 == 6) type = EnemyType::DRUMMER; // Hele hordens ring går fortere
                     if (ring == 1) type = (i % 2 == 0) ? EnemyType::FOOTMAN : EnemyType::ARCHER;
-                    spawnEnemy(type, pos, enemies, enemyTexture, 0.4f); // Hordefiender gir mindre XP
+                    spawnEnemy(type, pos, enemies, enemyTexture, 0.3f); // Hordefiender gir mindre XP
                     // Den første er hordens kaptein: en elite (uten kiste)
                     if (ring == 0 && i == 0 && !enemies.empty() && !enemies.back()->elite) enemies.back()->makeElite();
                 }

@@ -17,7 +17,7 @@ constexpr float KNIGHT_DASH_SPEED = 720.0f;
 
 // Felles oppsett: stor, tåler mye, dyttes nesten ikke og gir mye XP
 void setupMiniboss(Enemy& e, const char* title, int index, float hpMult, float damageMult, int baseDamage) {
-    const float hpByIndex[3] = { 12000.0f, 28000.0f, 50000.0f }; // Ca. 20-40 sek med et normalt build
+    const float hpByIndex[3] = { 16000.0f, 38000.0f, 70000.0f }; // Ca. 30-50 sek med et normalt build
     e.miniboss = true;
     e.title = title;
     e.hp = e.maxHp = (int)(hpByIndex[index < 3 ? index : 2] * hpMult);

@@ -38,7 +38,7 @@ namespace {
 Hound::Hound(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 235.0f;
-    hp = maxHp = 45;
+    hp = maxHp = 120;
     damage = 9;
     xpValue = 9;
     orbColor = Color{ 90, 90, 100, 255 };
@@ -91,7 +91,7 @@ Color Hound::spriteTint() const {
 Priest::Priest(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 95.0f;
-    hp = maxHp = 150;
+    hp = maxHp = 480;
     damage = 8;
     xpValue = 32;
     orbColor = Color{ 235, 225, 200, 255 };
@@ -125,7 +125,7 @@ void Priest::drawVfx() const {
 Drummer::Drummer(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 115.0f;
-    hp = maxHp = 130;
+    hp = maxHp = 400;
     damage = 10;
     xpValue = 28;
     orbColor = Color{ 60, 80, 170, 255 };
@@ -152,7 +152,7 @@ void Drummer::drawVfx() const {
 Cannoneer::Cannoneer(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 85.0f;
-    hp = maxHp = 120;
+    hp = maxHp = 360;
     damage = 30;          // Granaten gjør full skade, berøring en tredjedel
     xpValue = 30;
     orbColor = Color{ 150, 100, 60, 255 };
@@ -199,7 +199,7 @@ void Cannoneer::drawVfx() const {
 Treasurer::Treasurer(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 135.0f;
-    hp = maxHp = 900;     // Tåler en del: man må jage ham en stund
+    hp = maxHp = 2400;     // Tåler en del: man må jage ham en stund
     damage = 0;
     xpValue = 120;
     orbColor = GOLD;

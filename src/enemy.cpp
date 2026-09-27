@@ -336,8 +336,8 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
 Footman::Footman(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 140.0f;
-    hp = 110;       // Middels: vanlig fotsoldat
-    maxHp = 110;
+    hp = 260;       // Middels: vanlig fotsoldat
+    maxHp = 260;
     damage = 10;
     xpValue = 15;
     orbColor = BLUE;
@@ -358,8 +358,8 @@ void Footman::update(Vector2 playerPosition) {
 Goon::Goon(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 70.0f;
-    hp = 320;       // Tank: treg, men tåler mye og slår hardt
-    maxHp = 320;
+    hp = 1100;      // Tank: treg, men tåler MYE og slår hardt
+    maxHp = 1100;
     damage = 25;
     xpValue = 40;
     hitRadius = 22.0f;
@@ -381,8 +381,8 @@ void Goon::update(Vector2 playerPosition) {
 Lackey::Lackey(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 180.0f;
-    hp = 10;
-    maxHp = 10;
+    hp = 40;
+    maxHp = 40;
     damage = 5;
     xpValue = 8;
     orbColor = YELLOW;
@@ -734,8 +734,8 @@ namespace {
 Exploder::Exploder(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 200.0f;
-    hp = 30;
-    maxHp = 30;
+    hp = 70;
+    maxHp = 70;
     damage = 25;
     xpValue = 12;
     orbColor = ORANGE;
@@ -891,8 +891,8 @@ void ClearEnemyShots() { enemyShots.clear(); }
 Archer::Archer(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 120.0f;
-    hp = 70;
-    maxHp = 70;
+    hp = 170;
+    maxHp = 170;
     damage = 14;         // Pilene gjør full skade, berøring halv
     xpValue = 22;
     orbColor = Color{ 60, 150, 70, 255 };

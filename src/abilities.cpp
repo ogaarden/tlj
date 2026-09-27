@@ -11,6 +11,8 @@
 // =====================================================================
 // ABILITY-DEFINISJONER
 // Her bestemmes basestats og hva som skjer på HVERT level (2-9).
+// Filosofi: abilities skal slå SJELDEN og HARDT. Et lyn eller en katapultstein skal føles
+// som en hendelse, ikke som støy – derfor lange cooldowns og høy skade per treff.
 // Vil du endre balansen, er det bare å endre tallene her.
 // =====================================================================
 
@@ -31,7 +33,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::TREFORK, "Trefork", "Skyter en vifte av prongs mot naermeste fiende.", GOLD,
-        { .damage = 100.0f, .cooldown = 1.0f, .speed = 500.0f, .projectiles = 3 },
+        { .damage = 130.0f, .cooldown = 1.6f, .speed = 500.0f, .projectiles = 3 },
         {
             addPierce(1, "+1 gjennomboring"),
             damageMult(1.3f, "+30% skade"),
@@ -46,7 +48,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::GROUND_SLAM, "Ground Slam", "Slaar i bakken og skader alt rundt deg.", ORANGE,
-        { .damage = 80.0f, .cooldown = 2.0f, .radius = 130.0f },
+        { .damage = 125.0f, .cooldown = 3.2f, .radius = 130.0f },
         {
             addRadius(20.0f, "+20 radius"),
             damageMult(1.4f, "+40% skade"),
@@ -61,7 +63,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::RICOCHET, "Ricochet", "Kule som spretter videre, svakere for hvert sprett.", SKYBLUE,
-        { .damage = 60.0f, .cooldown = 0.9f, .speed = 550.0f, .projectiles = 1,
+        { .damage = 85.0f, .cooldown = 1.5f, .speed = 550.0f, .projectiles = 1,
           .bounces = 3, .bounceRange = 250.0f, .bounceFalloff = 0.7f },
         {
             addBounces(1, "+1 sprett"),
@@ -77,7 +79,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::PIE, "Kakekast", "Lobber kremkaker som spruter og lar krem ligge igjen.", Color{ 255, 180, 200, 255 },
-        { .damage = 70.0f, .cooldown = 1.3f, .projectiles = 2, .radius = 55.0f },
+        { .damage = 100.0f, .cooldown = 2.2f, .projectiles = 2, .radius = 55.0f },
         {
             addProjectiles(1, "+1 kake"),
             damageMult(1.3f, "+30% skade"),
@@ -94,7 +96,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::MAGIC_MISSILE, "Magic Missile", "Maalsoekende missil som spretter videre ved treff.", VIOLET,
-        { .damage = 45.0f, .cooldown = 1.2f, .speed = 350.0f, .projectiles = 1,
+        { .damage = 65.0f, .cooldown = 2.0f, .speed = 350.0f, .projectiles = 1,
           .bounces = 1, .bounceRange = 300.0f, .bounceFalloff = 1.0f },
         {
             addBounces(1, "+1 sprett"),
@@ -125,7 +127,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::DAGGER, "Dagger", "Kaster raske dolker mot de naermeste fiendene.", LIGHTGRAY,
-        { .damage = 30.0f, .cooldown = 0.4f, .speed = 700.0f, .projectiles = 1 },
+        { .damage = 45.0f, .cooldown = 0.8f, .speed = 700.0f, .projectiles = 1 },
         {
             addProjectiles(1, "+1 dolk"),
             damageMult(1.4f, "+40% skade"),
@@ -155,7 +157,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::LIGHTNING, "Lightning", "Lyn slaar ned og kjeder videre til fiender, svakere for hvert hopp.", YELLOW,
-        { .damage = 120.0f, .cooldown = 2.5f, .projectiles = 1,
+        { .damage = 240.0f, .cooldown = 6.0f, .projectiles = 1,
           .bounces = 3 /* kjede-hopp */, .bounceRange = 200.0f, .bounceFalloff = 0.7f,
           .radius = 450.0f /* rekkevidde */, .area = 50.0f },
         {
@@ -165,14 +167,14 @@ std::vector<AbilityDefinition> buildDefinitions() {
             { "Kjeden mister mindre skade (-20% per hopp)", [](AbilityStats& s) { s.bounceFalloff = 0.8f; } },
             addBounces(2, "+2 kjede-hopp"),
             damageMult(2.0f, "2x skade"),
-            { "-25% cooldown og +1 lyn", [](AbilityStats& s) { s.cooldown *= 0.75f; s.projectiles += 1; } },
+            { "-15% cooldown og +1 lyn", [](AbilityStats& s) { s.cooldown *= 0.85f; s.projectiles += 1; } },
             { "+2 kjede-hopp og lengre hopp", [](AbilityStats& s) { s.bounces += 2; s.bounceRange += 60.0f; } },
         }
     });
 
     defs.push_back({
         AbilityId::FIRE_BREATH, "Ildsluker", "Spruter en ildkjegle mot naermeste fiende.", Color{ 255, 120, 40, 255 },
-        { .damage = 22.0f /* per tikk */, .cooldown = 2.4f, .projectiles = 1, .radius = 150.0f, .area = 26.0f, .duration = 0.8f },
+        { .damage = 28.0f /* per tikk */, .cooldown = 4.2f, .projectiles = 1, .radius = 150.0f, .area = 26.0f, .duration = 0.8f },
         {
             addRadius(25.0f, "+25 rekkevidde"),
             damageMult(1.3f, "+30% skade"),
@@ -187,7 +189,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::BOOMERANG, "Bumerang", "Flyr ut og kommer tilbake. Treffer paa vei ut og inn.", Color{ 230, 170, 80, 255 },
-        { .damage = 55.0f, .cooldown = 1.5f, .speed = 430.0f, .projectiles = 1, .radius = 240.0f },
+        { .damage = 80.0f, .cooldown = 2.6f, .speed = 430.0f, .projectiles = 1, .radius = 240.0f },
         {
             addProjectiles(1, "+1 bumerang"),
             damageMult(1.3f, "+30% skade"),
@@ -202,7 +204,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::CARDS, "Kortstokk", "Kaster spillkort i alle retninger rundt deg.", Color{ 240, 240, 250, 255 },
-        { .damage = 35.0f, .cooldown = 1.6f, .speed = 420.0f, .projectiles = 6, .pierce = 0 },
+        { .damage = 50.0f, .cooldown = 2.8f, .speed = 420.0f, .projectiles = 6, .pierce = 0 },
         {
             addProjectiles(2, "+2 kort"),
             damageMult(1.3f, "+30% skade"),
@@ -217,7 +219,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::FROST_NOVA, "Frostnova", "Isboelge som skader og bremser alle fiender rundt deg.", Color{ 140, 210, 255, 255 },
-        { .damage = 45.0f, .cooldown = 3.2f, .radius = 150.0f, .duration = 1.8f, .effect = 0.45f },
+        { .damage = 85.0f, .cooldown = 6.0f, .radius = 150.0f, .duration = 1.8f, .effect = 0.45f },
         {
             addRadius(20.0f, "+20 radius"),
             damageMult(1.4f, "+40% skade"),
@@ -232,7 +234,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::CATAPULT, "Katapult", "Steinblokker faller ned fra himmelen paa fiendene.", Color{ 200, 170, 130, 255 },
-        { .damage = 160.0f, .cooldown = 3.0f, .projectiles = 1, .radius = 520.0f /* rekkevidde */, .area = 70.0f },
+        { .damage = 340.0f, .cooldown = 7.0f, .projectiles = 1, .radius = 520.0f /* rekkevidde */, .area = 70.0f },
         {
             addProjectiles(1, "+1 stein"),
             damageMult(1.3f, "+30% skade"),
@@ -247,7 +249,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::BELLS, "Narrebjeller", "Bjelleklang i ringer som skader og dytter fiender bort.", Color{ 255, 210, 80, 255 },
-        { .damage = 40.0f, .cooldown = 2.6f, .speed = 330.0f, .projectiles = 1, .radius = 210.0f, .effect = 260.0f },
+        { .damage = 65.0f, .cooldown = 4.5f, .speed = 330.0f, .projectiles = 1, .radius = 210.0f, .effect = 260.0f },
         {
             addRadius(30.0f, "+30 rekkevidde"),
             damageMult(1.4f, "+40% skade"),
@@ -277,7 +279,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::SABRE, "Sabelhugg", "Brede sabelhugg mot naermeste fiende.", Color{ 255, 140, 140, 255 },
-        { .damage = 85.0f, .cooldown = 1.4f, .projectiles = 1, .radius = 110.0f, .area = 140.0f /* buens vinkel */ },
+        { .damage = 125.0f, .cooldown = 2.4f, .projectiles = 1, .radius = 110.0f, .area = 140.0f /* buens vinkel */ },
         {
             addProjectiles(1, "+1 hugg (bakover)"),
             damageMult(1.3f, "+30% skade"),
@@ -292,7 +294,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::TORNADO, "Virvelvind", "Vandrende virvelvinder som suger inn og maler fiender.", Color{ 180, 235, 215, 255 },
-        { .damage = 22.0f /* per 0.25 sek */, .cooldown = 4.5f, .speed = 95.0f, .projectiles = 1, .radius = 40.0f, .duration = 4.0f, .effect = 90.0f },
+        { .damage = 22.0f /* per 0.25 sek */, .cooldown = 8.0f, .speed = 95.0f, .projectiles = 1, .radius = 40.0f, .duration = 4.0f, .effect = 90.0f },
         {
             damageMult(1.3f, "+30% skade"),
             addProjectiles(1, "+1 virvel"),
