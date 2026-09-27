@@ -15,7 +15,7 @@ void SaveGame(const std::string& path, const SaveData& data, const Shop& shop) {
     file << "echelon " << data.unlockedEchelon << "\n";
     file << "volume " << data.volume << "\n";
     file << "music " << data.musicVolume << "\n";
-    file << "figures " << data.drawnFigures << "\n";
+    file << "drawn " << data.drawnFigures << "\n";
     shop.writeLevels(file);
 }
 
@@ -34,7 +34,7 @@ void LoadGame(const std::string& path, SaveData& data, Shop& shop) {
         else if (key == "echelon") data.unlockedEchelon = std::clamp(value, 1, MAX_ECHELON);
         else if (key == "volume") data.volume = std::clamp(value, 0, 100);
         else if (key == "music") data.musicVolume = std::clamp(value, 0, 100);
-        else if (key == "figures") data.drawnFigures = value ? 1 : 0;
+        else if (key == "drawn") data.drawnFigures = value ? 1 : 0; // (gamle "figures" ignoreres: 3D er standard)
         else shop.readLevel(key, value);
     }
 }

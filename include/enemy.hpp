@@ -253,6 +253,7 @@ public:
     Hound(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
     void draw() const override;
+    void draw3D() const override;
     SpriteId spriteId() const override { return SpriteId::HOUND; }
     Color spriteTint() const override;
 };
@@ -263,6 +264,8 @@ class Priest : public Enemy {
 public:
     Priest(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
+    void draw3D() const override;
+    float modelHeight() const override { return 46.0f * modelScale; }
     void drawVfx() const override;
     Aura aura() const override { return Aura::HEAL; }
     float auraRadius() const override { return 190.0f; }
@@ -274,6 +277,8 @@ class Drummer : public Enemy {
 public:
     Drummer(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
+    void draw3D() const override;
+    float modelHeight() const override { return 52.0f * modelScale; }
     void drawVfx() const override;
     Aura aura() const override { return Aura::HASTE; }
     float auraRadius() const override { return 210.0f; }
@@ -287,6 +292,8 @@ class Cannoneer : public Enemy {
 public:
     Cannoneer(Vector2 spawnPos, Texture2D tex);
     void update(Vector2 playerPosition) override;
+    void draw3D() const override;
+    float modelHeight() const override { return 44.0f * modelScale; }
     void drawVfx() const override;
     int contactDamage() const override { return damage / 3; }
     SpriteId spriteId() const override { return SpriteId::CANNONEER; }

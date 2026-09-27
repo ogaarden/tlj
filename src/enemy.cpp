@@ -971,3 +971,154 @@ void Archer::drawVfx() const {
         VfxBillboard(VfxTex::SPARK, r.at(15.0f, 1.0f, 24.0f), 10.0f + 26.0f * t, Color{ 255, 80, 60, 255 }, t * 180.0f);
     }
 }
+
+// =====================================================================
+// 3D-MODELLER FOR KONGENS TJENERE (hund, prest, trommeslager, kanonér)
+// Oppførselen ligger i servants.cpp. Samme livré som vaktene: karmosin og gull.
+// =====================================================================
+namespace {
+    const Color LIVERY = { 165, 30, 45, 255 };
+    const Color LIVERY_GOLD = { 225, 180, 60, 255 };
+    const Color NAVY = { 40, 50, 95, 255 };
+}
+
+// Hund: lang, slank kropp på fire bein, spiss snute, livré-dekken på ryggen
+void Hound::draw3D() const {
+    const Color FUR = { 78, 78, 90, 255 };
+    const Color FUR_DARK = { 55, 55, 66, 255 };
+    Rig r(position, facing);
+    float w = walkCycle() * 1.3f;
+    bool crouch = state == State::CROUCH;
+    bool lunge = state == State::LUNGE;
+    float gait = crouch ? 0.0f : sinf(w) * (lunge ? 1.6f : 1.0f);
+    float low = crouch ? -5.0f : 0.0f;                        // Kryper sammen før hoppet
+    float bob = crouch ? 0.0f : fabsf(cosf(w)) * 1.5f;
+    float body = 15.0f + bob + low + (lunge ? 4.0f : 0.0f);
+
+    // Fire bein: venstre foran går sammen med høyre bak (trav)
+    for (int k = 0; k < 4; k++) {
+        float fwd = (k < 2) ? 8.0f : -8.0f;
+        float side = (k % 2 == 0) ? -3.5f : 3.5f;
+        float phase = ((k == 0 || k == 3) ? 1.0f : -1.0f) * gait;
+        Vector3 hip = r.at(fwd, side, body - 2.0f);
+        Vector3 paw = r.at(fwd + phase * 5.0f, side, 1.5f + fmaxf(0.0f, phase) * 2.0f);
+        r.limb(hip, paw, 2.0f, 1.4f, k < 2 ? FUR : FUR_DARK, 5);
+        ShadedSphere(paw, 1.8f, FUR_DARK, 3, 4);
+    }
+    // Kropp, bryst og dekken
+    r.blob(0.0f, 0.0f, body, { 13.0f, 5.5f, 5.0f }, FUR);
+    r.blob(8.0f, 0.0f, body - 1.0f, { 5.5f, 6.0f, 5.0f }, FUR);
+    r.blob(-1.0f, 0.0f, body + 3.0f, { 8.0f, 2.5f, 6.0f }, LIVERY, 4, 6);
+    r.blob(-1.0f, 0.0f, body + 5.2f, { 3.0f, 0.8f, 3.0f }, LIVERY_GOLD, 3, 5);
+    // Hode med snute, ører og halsbånd
+    float head = body + 5.0f + (crouch ? -3.0f : 0.0f);
+    r.limb(r.at(10.0f, 0, body + 1.0f), r.at(15.0f, 0, head), 3.2f, 2.8f, FUR, 6);
+    r.limb(r.at(12.0f, 0, body + 3.0f), r.at(13.0f, 0, body + 4.0f), 3.6f, 3.6f, LIVERY, 6);         // Halsbånd
+    r.ball(16.0f, 0, head, 4.2f, FUR, 5, 7);
+    r.blob(21.0f, 0, head - 1.2f, { 4.5f, 2.2f, 2.2f }, FUR_DARK, 4, 6);                          // Snute
+    r.ball(25.0f, 0, head - 0.8f, 1.2f, EYE_BLACK, 3, 4);                                          // Nese
+    for (int s = -1; s <= 1; s += 2) {
+        r.ball(18.5f, s * 2.4f, head + 1.4f, 1.0f, Color{ 255, 70, 50, 255 }, 3, 4);              // Sinte øyne
+        r.limb(r.at(15.0f, s * 2.5f, head + 3.0f), r.at(13.0f, s * 3.5f, head + 7.5f), 1.6f, 0.2f, FUR_DARK, 4);
+    }
+    // Hale
+    r.limb(r.at(-12.0f, 0, body + 1.0f), r.at(-19.0f, sinf(w * 2.0f) * 2.0f, body + 6.0f), 1.4f, 0.5f, FUR, 4);
+}
+
+// Hoffprest: lang kremhvit kjortel med karmosin stola, skallet hode og gyllent røkelseskar
+void Priest::draw3D() const {
+    const Color ROBE = { 236, 228, 205, 255 };
+    Rig r(position, facing);
+    float w = walkCycle() * 0.8f;
+    float bob = fabsf(cosf(w)) * 1.2f;
+    float sway = sinf(w) * 1.0f;
+
+    r.limb(r.at(0, sway * 0.3f, 0.5f), r.at(0, sway, 30.0f + bob), 12.0f, 7.5f, ROBE, 10);            // Kjortel
+    for (int s = -1; s <= 1; s += 2)                                                                    // Stola
+        r.limb(r.at(7.0f, sway + s * 3.0f, 4.0f), r.at(5.5f, sway + s * 3.2f, 30.0f + bob), 1.4f, 1.4f, LIVERY, 4);
+    r.limb(r.at(0, sway, 29.0f + bob), r.at(0, sway, 31.0f + bob), 8.0f, 8.0f, LIVERY_GOLD, 8);        // Gullkant
+    // Rundt, skallet hode med grå krans
+    float head = 37.0f + bob;
+    r.ball(0.5f, sway, head, 6.8f, SKIN, 6, 8);
+    r.blob(-2.0f, sway, head - 0.5f, { 4.0f, 3.0f, 7.2f }, Color{ 170, 170, 175, 255 }, 4, 6);
+    for (int s = -1; s <= 1; s += 2) r.ball(6.0f, sway + s * 2.3f, head + 0.5f, 1.0f, EYE_BLACK, 3, 4);
+    // Arm og røkelseskar som svinger i kjedet
+    Vector3 hand = r.at(8.0f, sway + 9.0f, 24.0f + bob);
+    r.limb(r.at(1.0f, sway + 7.0f, 28.0f + bob), hand, 2.8f, 2.4f, ROBE, 5);
+    ShadedSphere(hand, 2.2f, SKIN, 3, 5);
+    float swing = sinf((float)GetTime() * 3.0f + id) * 4.0f;
+    Vector3 censer = r.at(10.0f + swing, sway + 10.0f, 13.0f + bob);
+    r.limb(hand, censer, 0.4f, 0.4f, LIVERY_GOLD, 3);
+    ShadedSphere(censer, 3.4f, LIVERY_GOLD, 4, 6);
+}
+
+// Trommeslager: høy karmosin shako, snorer på jakka, stor tromme på magen
+void Drummer::draw3D() const {
+    Rig r(position, facing);
+    float w = walkCycle();
+    float step = sinf(w);
+    float bob = fabsf(cosf(w)) * 2.0f;
+
+    for (int s = -1; s <= 1; s += 2) {
+        float st = step * 4.0f * s;
+        r.limb(r.at(st * 0.5f, s * 3.8f, 2.0f), r.at(0.0f, s * 3.8f, 13.0f + bob), 2.6f, 3.0f, NAVY);
+        r.blob(2.0f + st, s * 3.8f, 2.0f, { 4.2f, 2.0f, 2.6f }, EYE_BLACK, 4, 6);
+    }
+    r.limb(r.at(0, 0, 12.0f + bob), r.at(0, 0, 29.0f + bob), 8.0f, 7.5f, LIVERY, 8);                  // Jakke
+    for (int i = 0; i < 3; i++) r.blob(7.2f, 0.0f, 19.0f + i * 3.5f + bob, { 0.8f, 0.8f, 4.5f }, LIVERY_GOLD, 3, 4); // Snorer
+    // Hode og shako
+    float head = 34.0f + bob;
+    r.ball(0.5f, 0, head, 5.8f, SKIN, 5, 7);
+    for (int s = -1; s <= 1; s += 2) r.ball(5.2f, s * 2.0f, head + 0.8f, 0.9f, EYE_BLACK, 3, 4);
+    r.limb(r.at(0, 0, head + 3.0f), r.at(-0.5f, 0, head + 16.0f), 5.8f, 6.8f, LIVERY, 8);
+    r.limb(r.at(0, 0, head + 3.0f), r.at(0, 0, head + 5.0f), 6.3f, 6.3f, NAVY, 8);                    // Skygge
+    r.limb(r.at(-0.4f, 0, head + 12.0f), r.at(-0.5f, 0, head + 13.5f), 6.7f, 6.8f, LIVERY_GOLD, 8);
+    // Trommen foran magen (liggende sylinder på tvers)
+    Vector3 drumL = r.at(10.0f, -6.5f, 17.0f + bob), drumR = r.at(10.0f, 6.5f, 17.0f + bob);
+    ShadedCylinder(drumL, drumR, 8.0f, 8.0f, Color{ 45, 75, 170, 255 }, 12);
+    ShadedCylinder(r.at(10.0f, -7.2f, 17.0f + bob), r.at(10.0f, -6.0f, 17.0f + bob), 8.6f, 8.6f, LIVERY_GOLD, 12);
+    ShadedCylinder(r.at(10.0f, 6.0f, 17.0f + bob), r.at(10.0f, 7.2f, 17.0f + bob), 8.6f, 8.6f, LIVERY_GOLD, 12);
+    // Stikkene slår i takt (to slag i sekundet)
+    float beat = fabsf(sinf((float)GetTime() * PI * 2.0f + id));
+    for (int s = -1; s <= 1; s += 2) {
+        float lift = (s < 0 ? beat : 1.0f - beat) * 9.0f;
+        Vector3 hand = r.at(8.0f, s * 8.0f, 26.0f + bob + lift * 0.4f);
+        r.limb(r.at(0, s * 7.5f, 27.0f + bob), hand, 2.2f, 2.0f, LIVERY, 5);
+        r.limb(hand, r.at(15.0f, s * 3.0f, 24.0f + bob + lift), 0.8f, 0.8f, WOOD, 4);
+    }
+}
+
+// Kanonér: kraftig kar med skjegg, alpelue, lærforkle og en bronsemorter på skulderen
+void Cannoneer::draw3D() const {
+    const Color BRONZE = { 190, 140, 70, 255 };
+    Rig r(position, facing);
+    bool aiming = windup > 0.0f;
+    float w = walkCycle() * 0.8f;
+    float step = aiming ? 0.0f : sinf(w);
+    float bob = aiming ? 0.0f : fabsf(cosf(w)) * 2.0f;
+
+    for (int s = -1; s <= 1; s += 2) {
+        float st = step * 4.0f * s;
+        r.limb(r.at(st * 0.5f, s * 5.0f, 2.0f), r.at(0.0f, s * 5.0f, 12.0f + bob), 3.2f, 3.6f, NAVY);
+        r.blob(2.0f + st, s * 5.0f, 2.5f, { 5.0f, 2.8f, 3.4f }, LEATHER, 4, 6);
+    }
+    r.blob(0.0f, 0.0f, 21.0f + bob, { 10.0f, 11.0f, 10.5f }, LIVERY);                                // Kraftig kropp
+    r.blob(5.0f, 0.0f, 18.0f + bob, { 6.0f, 9.0f, 8.0f }, LEATHER);                                  // Forkle
+    float head = 35.0f + bob;
+    r.ball(0.5f, 0, head, 6.2f, SKIN, 5, 7);
+    r.blob(4.5f, 0, head - 4.0f, { 4.0f, 5.0f, 5.0f }, Color{ 110, 70, 40, 255 }, 4, 6);             // Skjegg
+    r.ball(6.0f, 0, head + 0.5f, 1.8f, Color{ 230, 120, 110, 255 }, 3, 4);                            // Rød nese
+    r.blob(-1.0f, 0, head + 5.0f, { 7.5f, 2.5f, 7.5f }, LIVERY, 4, 7);                               // Alpelue
+    // Morteren på høyre skulder: løftes og siktes når han fyrer
+    float angle = aiming ? 38.0f : 12.0f;
+    float a = angle * DEG2RAD;
+    Vector3 back = r.at(-6.0f, 9.0f, 30.0f + bob);
+    Vector3 muzzle = r.at(-6.0f + cosf(a) * 20.0f, 9.0f, 30.0f + bob + sinf(a) * 20.0f);
+    ShadedCylinder(back, muzzle, 4.5f, 5.5f, BRONZE, 10);
+    ShadedSphere(back, 4.8f, BRONZE, 4, 6);
+    r.limb(r.at(0, 10.0f, 28.0f + bob), r.at(5.0f, 11.0f, 32.0f + bob), 3.2f, 2.8f, LIVERY, 5);    // Arm som holder
+    // Lunte i venstre hånd
+    Vector3 hand = r.at(8.0f, -9.0f, 18.0f + bob);
+    r.limb(r.at(0, -9.5f, 27.0f + bob), hand, 3.2f, 2.8f, LIVERY, 5);
+    r.limb(hand, r.at(13.0f, -9.0f, 24.0f + bob), 0.7f, 0.7f, WOOD, 4);
+}

@@ -265,4 +265,11 @@ Notes:
    Kongens fest (raskere fiender, dobbel XP), Blodmåne (fiendene slår hardere, mye mer gull),
    Den store jakten (tre hundeflokker) og Mobilisering (dobbelt så mange fiender, +50 % XP).
 
+// 15 oktober – tilbake til 3D-modellene
+1) 3D-modellene (klovnene og fiendene bygget i kode) er standard igjen. De tegnede papirfigurene
+   finnes fortsatt under Innstillinger -> Figurer (TEGNET). Gamle lagringer starter også med 3D.
+2) De fire nye fiendene har fått egne 3D-modeller i samme stil som de andre:
+   hund på fire bein med dekken, hoffprest med kjortel og røkelseskar, trommeslager med shako og tromme
+   (stikkene slår i takt), og kanonér med skjegg og bronsemorter som løftes når han sikter.
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

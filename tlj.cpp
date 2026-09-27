@@ -1158,7 +1158,7 @@ int main() {
                 bool sel = settingsRow == 2;
                 if (sel) DrawRectangleLinesEx({ CX - 270.0f, (float)y - 10, 540.0f, 44.0f }, 2.0f, UI::GOLD_LIGHT);
                 DrawText("Figurer", (int)CX - 250, y, 24, sel ? UI::GOLD_LIGHT : WHITE);
-                DrawText(saveData.drawnFigures ? "< PIKSELKUNST >" : "< 3D-MODELLER >", (int)CX - 120, y + 2, 22, UI::GOLD_LIGHT);
+                DrawText(saveData.drawnFigures ? "< TEGNET >" : "< 3D-MODELLER >", (int)CX - 120, y + 2, 22, UI::GOLD_LIGHT);
             }
             DrawText("[W/S] velg   [A/D] juster", (int)CX - 250, 365, 18, GRAY);
             DrawText("Fullskjerm", (int)CX - 250, 395, 24, WHITE);

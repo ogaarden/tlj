@@ -114,9 +114,11 @@ void Priest::drawVfx() const {
     // Gyllen ring på gulvet som viser hvor langt helbredelsen når, og glød i røkelseskaret
     float t = (float)GetTime();
     float beat = 1.0f - fmodf(t * 0.625f + id * 0.37f, 1.0f);
-    VfxDecal(VfxTex::SHOCKWAVE, position, auraRadius() * 2.0f * (1.05f - 0.1f * beat), Color{ 70, 60, 28, 255 }, t * 20.0f, 1.0f);
+    VfxDecal(VfxTex::SHOCKWAVE, position, auraRadius() * 2.0f * (1.05f - 0.1f * beat), Color{ 42, 36, 16, 255 }, t * 20.0f, 1.0f);
     VfxDecal(VfxTex::GLOW, position, auraRadius() * 1.2f, Color{ 22, 20, 8, 255 }, 0.0f, 0.8f);
-    VfxBillboard(VfxTex::GLOW, ToWorld3D(Vector2Add(position, Vector2Scale(facing, 22.0f)), 45.0f), 40.0f, Color{ 255, 210, 110, 255 });
+    // Gløden i røkelseskaret (lavere på 3D-modellen, der karet henger i kjedet)
+    float censerHeight = HasSprite(spriteId()) ? 45.0f : 13.0f;
+    VfxBillboard(VfxTex::GLOW, ToWorld3D(Vector2Add(position, Vector2Scale(facing, HasSprite(spriteId()) ? 22.0f : 11.0f)), censerHeight), 40.0f, Color{ 255, 210, 110, 255 });
 }
 
 // --- Trommeslager ---
@@ -186,7 +188,9 @@ void Cannoneer::drawVfx() const {
     // Lunta gløder, og blusser opp rett før skuddet
     float t = (float)GetTime();
     float k = windup > 0.0f ? 1.0f - windup / CANNON_WINDUP : 0.0f;
-    Vector3 fuse = ToWorld3D(Vector2Add(position, Vector2Scale(facing, -14.0f)), 62.0f);
+    Vector3 fuse = HasSprite(spriteId())
+        ? ToWorld3D(Vector2Add(position, Vector2Scale(facing, -14.0f)), 62.0f)
+        : ToWorld3D(Vector2Add(position, Vector2Add(Vector2Scale(facing, 13.0f), Vector2Scale({ facing.y, -facing.x }, 9.0f))), 24.0f);
     VfxBillboard(VfxTex::SPARK, fuse, 14.0f + 30.0f * k, Color{ 255, 190, 90, 255 }, t * 400.0f);
     VfxBillboard(VfxTex::GLOW, fuse, 18.0f + 40.0f * k, Color{ 255, 120, 40, 255 });
 }
