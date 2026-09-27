@@ -25,6 +25,12 @@ const ItemDef& GetItemDef(ItemId id) {
         { "Evighetslys",    "+12% varighet paa flekker, virvler og effekter",        Color{ 255, 220, 150, 255 } },
         { "Trollspeil",     "+1 reroll i level-up og kister",                        Color{ 170, 220, 255, 255 } },
         { "Firklover",      "+15% flaks: oftere kister, mat og magneter",            Color{ 90, 200, 80, 255 } },
+        { "Helgenrelikvie", "+0.4 HP/s regen og +2 armor",                           Color{ 240, 225, 170, 255 } },
+        { "Rosenkrans",     "-4% cooldown og +6% varighet",                          Color{ 200, 120, 160, 255 } },
+        { "Krigstromme",    "+5% fart og +5% skade",                                 Color{ 200, 60, 50, 255 } },
+        { "Fekthanske",     "+3% krit og +6% prosjektilfart",                        Color{ 230, 225, 215, 255 } },
+        { "Tiggerskaal",    "+20% gull",                                             Color{ 170, 120, 70, 255 } },
+        { "Narremaske",     "+7% XP og +5% omraade",                                 Color{ 240, 200, 60, 255 } },
     };
     return defs[(int)id];
 }
@@ -153,6 +159,79 @@ namespace {
             DrawCircleV({ p.x - s * 0.08f, p.y - s * 0.08f }, s * 0.08f, { 200, 255, 190, 150 });
         }
     }
+
+    // Helgenrelikvie: lite gullskrin med kors og glorie
+    void relic(Vector2 c, float s) {
+        DrawRing(P(c, s, 0.0f, -0.55f), s * 0.3f, s * 0.4f, 0, 360, 20, { 255, 240, 170, 200 });
+        DrawRectangleRounded({ c.x - s * 0.72f, c.y - s * 0.2f, s * 1.44f, s * 0.95f }, 0.25f, 6, INK);
+        DrawRectangleRounded({ c.x - s * 0.62f, c.y - s * 0.12f, s * 1.24f, s * 0.8f }, 0.25f, 6, { 230, 180, 60, 255 });
+        DrawRectangleRec({ c.x - s * 0.07f, c.y - s * 0.05f, s * 0.14f, s * 0.6f }, { 250, 240, 210, 255 });
+        DrawRectangleRec({ c.x - s * 0.25f, c.y + s * 0.1f, s * 0.5f, s * 0.13f }, { 250, 240, 210, 255 });
+    }
+
+    // Rosenkrans: ring av perler med et lite kors
+    void rosary(Vector2 c, float s) {
+        for (int i = 0; i < 12; i++) {
+            float a = i * PI / 6.0f;
+            Vector2 p = { c.x + cosf(a) * s * 0.6f, c.y + sinf(a) * s * 0.5f - s * 0.15f };
+            DrawCircleV(p, s * 0.17f, INK);
+            DrawCircleV(p, s * 0.12f, { 200, 120, 160, 255 });
+        }
+        DrawRectangleRec({ c.x - s * 0.09f, c.y + s * 0.3f, s * 0.18f, s * 0.65f }, INK);
+        DrawRectangleRec({ c.x - s * 0.28f, c.y + s * 0.48f, s * 0.56f, s * 0.16f }, INK);
+        DrawRectangleRec({ c.x - s * 0.05f, c.y + s * 0.34f, s * 0.1f, s * 0.57f }, { 230, 190, 80, 255 });
+        DrawRectangleRec({ c.x - s * 0.24f, c.y + s * 0.51f, s * 0.48f, s * 0.1f }, { 230, 190, 80, 255 });
+    }
+
+    // Krigstromme: rød tromme med gullsnorer og stikker
+    void drum(Vector2 c, float s) {
+        DrawLineEx(P(c, s, -0.7f, -0.95f), P(c, s, -0.1f, -0.35f), s * 0.14f, INK);
+        DrawLineEx(P(c, s, 0.7f, -0.95f), P(c, s, 0.1f, -0.35f), s * 0.14f, INK);
+        DrawRectangleRec({ c.x - s * 0.72f, c.y - s * 0.3f, s * 1.44f, s * 1.0f }, INK);
+        DrawRectangleRec({ c.x - s * 0.64f, c.y - s * 0.22f, s * 1.28f, s * 0.84f }, { 200, 50, 45, 255 });
+        for (int i = 0; i < 3; i++) {
+            float x = -0.5f + i * 0.5f;
+            DrawLineEx(P(c, s, x - 0.2f, -0.2f), P(c, s, x + 0.2f, 0.6f), s * 0.08f, { 240, 200, 80, 255 });
+        }
+        DrawEllipse((int)c.x, (int)(c.y - s * 0.3f), s * 0.72f, s * 0.2f, INK);
+        DrawEllipse((int)c.x, (int)(c.y - s * 0.3f), s * 0.64f, s * 0.14f, { 240, 230, 210, 255 });
+    }
+
+    // Fekthanske: hvit hanske med en slank kårde
+    void glove(Vector2 c, float s) {
+        DrawLineEx(P(c, s, -0.85f, 0.85f), P(c, s, 0.9f, -0.9f), s * 0.12f, INK);
+        DrawLineEx(P(c, s, -0.85f, 0.85f), P(c, s, 0.9f, -0.9f), s * 0.06f, { 220, 225, 235, 255 });
+        DrawCircleV(P(c, s, -0.15f, 0.15f), s * 0.48f, INK);
+        DrawCircleV(P(c, s, -0.15f, 0.15f), s * 0.4f, { 240, 235, 225, 255 });
+        DrawRectangleRec({ c.x - s * 0.55f, c.y + s * 0.35f, s * 0.8f, s * 0.45f }, INK);
+        DrawRectangleRec({ c.x - s * 0.48f, c.y + s * 0.42f, s * 0.66f, s * 0.32f }, { 120, 70, 40, 255 });
+    }
+
+    // Tiggerskål: trebolle med noen mynter
+    void bowl(Vector2 c, float s) {
+        tri(P(c, s, -0.9f, -0.05f), P(c, s, 0.9f, -0.05f), P(c, s, 0.0f, 0.85f), INK);
+        DrawCircleV(P(c, s, 0.0f, 0.1f), s * 0.72f, INK);
+        DrawCircleV(P(c, s, 0.0f, 0.1f), s * 0.64f, { 150, 100, 55, 255 });
+        for (int i = 0; i < 3; i++) {
+            Vector2 p = P(c, s, -0.32f + i * 0.32f, -0.12f - (i == 1 ? 0.2f : 0.0f));
+            DrawCircleV(p, s * 0.22f, INK);
+            DrawCircleV(p, s * 0.17f, { 255, 205, 60, 255 });
+        }
+        DrawEllipse((int)c.x, (int)(c.y + s * 0.02f), s * 0.85f, s * 0.18f, INK);
+        DrawEllipse((int)c.x, (int)(c.y + s * 0.02f), s * 0.77f, s * 0.12f, { 185, 130, 75, 255 });
+    }
+
+    // Narremaske: gul halvmaske med øyehull og bjeller
+    void mask(Vector2 c, float s) {
+        DrawEllipse((int)c.x, (int)c.y, s * 0.95f + 2, s * 0.55f + 2, INK);
+        DrawEllipse((int)c.x, (int)c.y, s * 0.95f, s * 0.55f, { 240, 200, 60, 255 });
+        DrawEllipse((int)(c.x - s * 0.38f), (int)(c.y - s * 0.05f), s * 0.22f, s * 0.14f, INK);
+        DrawEllipse((int)(c.x + s * 0.38f), (int)(c.y - s * 0.05f), s * 0.22f, s * 0.14f, INK);
+        DrawCircleV(P(c, s, -0.95f, -0.45f), s * 0.16f, INK);
+        DrawCircleV(P(c, s, -0.95f, -0.45f), s * 0.11f, { 200, 40, 60, 255 });
+        DrawCircleV(P(c, s, 0.95f, -0.45f), s * 0.16f, INK);
+        DrawCircleV(P(c, s, 0.95f, -0.45f), s * 0.11f, { 60, 90, 200, 255 });
+    }
 }
 
 void DrawItemIcon(ItemId id, Vector2 c, float s) {
@@ -175,6 +254,12 @@ void DrawItemIcon(ItemId id, Vector2 c, float s) {
         case ItemId::CANDLE:        candle(c, s); break;
         case ItemId::MAGIC_MIRROR:  mirror(c, s); break;
         case ItemId::CLOVER:        clover(c, s); break;
+        case ItemId::HOLY_RELIC:    relic(c, s); break;
+        case ItemId::ROSARY:        rosary(c, s); break;
+        case ItemId::WAR_DRUM:      drum(c, s); break;
+        case ItemId::FENCING_GLOVE: glove(c, s); break;
+        case ItemId::BEGGAR_BOWL:   bowl(c, s); break;
+        case ItemId::JESTER_MASK:   mask(c, s); break;
         default: break;
     }
 }
@@ -202,6 +287,9 @@ const ItemCombo& GetCombo(ComboId id) {
         { ItemId::CHAINMAIL,     ItemId::THORN_COLLAR, "Piggrustning",         "+10 armor og dobbel skade fra piggkragen",                      Color{ 170, 175, 190, 255 } },
         { ItemId::LODESTONE,     ItemId::OWL_FEATHER,  "Visdommens magnet",    "+100 pickup-radius og +20% XP",                                 Color{ 120, 140, 255, 255 } },
         { ItemId::MAGIC_MIRROR,  ItemId::CLOVER,       "Lykkespeilet",         "+2 rerolls, +30% flaks og +1 valg i level-up",                  Color{ 120, 230, 160, 255 } },
+        { ItemId::HOLY_RELIC,    ItemId::ROSARY,       "Katedralens velsignelse", "+1 ekstra liv (aegis) og +1 HP/s regen",                     Color{ 250, 240, 200, 255 } },
+        { ItemId::WAR_DRUM,      ItemId::FENCING_GLOVE, "Kavaleriets marsj",   "+10% fart, +12% skade og +5% krit",                             Color{ 220, 80, 70, 255 } },
+        { ItemId::BEGGAR_BOWL,   ItemId::JESTER_MASK,  "Gatekunstnerens hatt", "+40% gull, +15% XP og +1 reroll",                               Color{ 240, 180, 80, 255 } },
     };
     return combos[(int)id];
 }
@@ -245,6 +333,9 @@ void ApplyCombo(Player& player, ComboId id) {
         case ComboId::SPIKED_ARMOR:    player.armor += 10.0f; player.thorns *= 2.0f; break;
         case ComboId::SAGE_MAGNET:     player.lootRadius += 100.0f; player.xpMultiplier *= 1.20f; break;
         case ComboId::LUCKY_MIRROR:    player.bonusRerolls += 2; player.luck *= 1.30f; player.levelUpChoices += 1; break;
+        case ComboId::CATHEDRAL:       player.aegis += 1; player.hpRegen += 1.0f; break;
+        case ComboId::CAVALRY_MARCH:   player.speed *= 1.10f; player.damageMult *= 1.12f; player.critChance += 0.05f; break;
+        case ComboId::STREET_PERFORMER: player.goldMultiplier *= 1.40f; player.xpMultiplier *= 1.15f; player.bonusRerolls += 1; break;
         default: break;
     }
 }
@@ -294,6 +385,12 @@ void ApplyItemLevel(Player& player, ItemId id) {
         case ItemId::CANDLE:       player.durationMult *= 1.12f; break;
         case ItemId::MAGIC_MIRROR: player.bonusRerolls += 1; break;
         case ItemId::CLOVER:       player.luck *= 1.15f; break;
+        case ItemId::HOLY_RELIC:   player.hpRegen += 0.4f; player.armor += 2.0f; break;
+        case ItemId::ROSARY:       player.cooldownMult *= 0.96f; player.durationMult *= 1.06f; break;
+        case ItemId::WAR_DRUM:     player.speed *= 1.05f; player.damageMult *= 1.05f; break;
+        case ItemId::FENCING_GLOVE: player.critChance += 0.03f; player.projectileSpeedMult *= 1.06f; break;
+        case ItemId::BEGGAR_BOWL:  player.goldMultiplier *= 1.20f; break;
+        case ItemId::JESTER_MASK:  player.xpMultiplier *= 1.07f; player.areaMult *= 1.05f; break;
         default: break;
     }
 }

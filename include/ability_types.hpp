@@ -35,6 +35,8 @@ enum class AbilityId {
 
 // Items: passive gjenstander man finner i skattekister. Nullstilles hver runde.
 // Hver har 5 nivåer, og man kan bare bære MAX_ITEM_SLOTS forskjellige – så man må velge.
+// Kister er sjeldne (ca. 20 skatter i en hel runde), og en kombinasjon koster 11 skatter,
+// så man må bestemme seg tidlig for hvilke par man satser på.
 // To items på maks nivå kan kombineres til et sterkere item (se items.cpp).
 enum class ItemId {
     JUGGLING_BALL,  // Sjonglørball: +1 prosjektil
@@ -55,6 +57,12 @@ enum class ItemId {
     CANDLE,         // Evighetslys: +varighet
     MAGIC_MIRROR,   // Trollspeil: +1 reroll
     CLOVER,         // Firkløver: +flaks (oftere kister og sjeldne drops)
+    HOLY_RELIC,     // Helgenrelikvie: +regen og armor
+    ROSARY,         // Rosenkrans: -cooldown og +varighet
+    WAR_DRUM,       // Krigstromme: +fart og skade
+    FENCING_GLOVE,  // Fekthanske: +krit og prosjektilfart
+    BEGGAR_BOWL,    // Tiggerskål: +gull
+    JESTER_MASK,    // Narremaske: +XP og område
     COUNT
 };
 // Item-kombinasjoner: to items på maks nivå smeltes sammen til ett sterkere item
@@ -69,6 +77,9 @@ enum class ComboId {
     SPIKED_ARMOR,      // Ringbrynje + Piggkrage
     SAGE_MAGNET,       // Magnetstein + Uglefjær
     LUCKY_MIRROR,      // Trollspeil + Firkløver
+    CATHEDRAL,         // Helgenrelikvie + Rosenkrans
+    CAVALRY_MARCH,     // Krigstromme + Fekthanske
+    STREET_PERFORMER,  // Tiggerskål + Narremaske
     COUNT
 };
 

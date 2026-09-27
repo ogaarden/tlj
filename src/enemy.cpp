@@ -292,9 +292,9 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
     if (!merged) pickups.push_back({ scatter, xpValue, XpTierColor(xpValue), XpTierRadius(xpValue), 15.0f, PickupType::XP });
     extraLoot(pickups);
     if (miniboss) {
-        // Miniboss: Kongens septer, en skattekiste og en haug med XP
+        // Miniboss: Kongens septer, en sølvkiste og en haug med XP
         pickups.push_back({ { position.x, position.y - 20.0f }, 1, SKYBLUE, 16.0f, 0.0f, PickupType::SCEPTER });
-        pickups.push_back({ { position.x + 30.0f, position.y + 10.0f }, 3, GOLD, 14.0f, 0.0f, PickupType::CHEST }); // Gullkiste
+        pickups.push_back({ { position.x + 30.0f, position.y + 10.0f }, 2, GOLD, 14.0f, 0.0f, PickupType::CHEST }); // Sølvkiste
         for (int i = 0; i < 12; i++) {
             float a = i * PI / 6.0f;
             int v = xpValue / 12;
@@ -303,11 +303,13 @@ void Enemy::dropLoot(std::vector<Pickup>& pickups) const {
         return;
     }
     if (elite || chestCarrier) {
-        // Skattekiste, men elites deler en nedkjøling (Firkløver gjør den kortere).
+        // Items skal være sjeldne: en vanlig elite har bare 8 % sjanse for en trekiste,
+        // og elites deler en lang nedkjøling (Firkløver gjør begge deler bedre).
         // Uten kiste slipper eliten en ekstra stor krystall i stedet.
-        if (chestCarrier || chestCooldown <= 0.0f) {
-            pickups.push_back({ { position.x + 12.0f, position.y }, chestCarrier ? 2 : 1, GOLD, 14.0f, 0.0f, PickupType::CHEST }); // Hordekaptein: sølvkiste
-            chestCooldown = 22.0f / luck;
+        bool eliteChest = chestCooldown <= 0.0f && GetRandomValue(1, 1000) <= (int)(80 * luck);
+        if (chestCarrier || eliteChest) {
+            pickups.push_back({ { position.x + 12.0f, position.y }, 1, GOLD, 14.0f, 0.0f, PickupType::CHEST }); // Trekiste
+            if (!chestCarrier) chestCooldown = 90.0f / luck;
         } else {
             int bonus = xpValue * 2;
             pickups.push_back({ { position.x + 12.0f, position.y }, bonus, XpTierColor(bonus), XpTierRadius(bonus), 15.0f, PickupType::XP });

@@ -214,10 +214,11 @@ void WaveSpawner::update(float deltaTime, Vector2 playerPos, std::vector<std::un
                 if (n >= 12 && i % 11 == 6) type = EnemyType::DRUMMER; // Hele hordens ring går fortere
                 if (ring == 1) type = (i % 2 == 0) ? EnemyType::FOOTMAN : EnemyType::ARCHER;
                 spawnEnemy(type, pos, enemies, enemyTexture, 0.5f); // Hordefiender gir halv XP
-                // Den første er hordens kaptein: en elite som alltid bærer en skattekiste
+                // Den første er hordens kaptein: en elite. Bare annenhver horde (ca. hvert 2. minutt)
+                // har kapteinen en skattekiste, så items forblir sjeldne.
                 if (ring == 0 && i == 0 && !enemies.empty()) {
                     if (!enemies.back()->elite) enemies.back()->makeElite();
-                    enemies.back()->chestCarrier = true;
+                    if (currentWaveIndex % 4 == 3) enemies.back()->chestCarrier = true;
                 }
             }
         }

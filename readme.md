@@ -342,4 +342,18 @@ Notes:
 3) Løperne har et rolig geometrisk mønster i stedet for kroner/liljer.
 4) Skyggen under fontenen ligger nå konsentrisk med kanten.
 
+// 22 oktober – sjeldne items (Crownfall-stil)
+1) Items er MYE sjeldnere, ca. 20 skatter i en hel runde (før 60+). Du må velge hvilke par du satser på:
+   en kombinasjon krever begge items på nivå 5 + en kiste til = 11 skatter, så man rekker 1-2 i en runde.
+   - Kister i slottet: første etter 75 sek, så hvert 150. sek (før 40/80). 10 % sølvkiste (før 20 %)
+   - Hordekapteiner: bare annenhver horde (ca. hvert 2. min) har kiste, og det er en trekiste (før sølv hver gang)
+   - Vanlige elites: 8 % sjanse for trekiste med 90 sek felles nedkjøling (før alltid, 22 sek)
+   - Minibosser slipper sølvkiste (før gull). Skattmesteren er den eneste med gullkiste
+   Firkløver gjør fortsatt alt dette oftere.
+2) 6 nye items (24 totalt, bare 6 plasser): Helgenrelikvie (regen + armor), Rosenkrans (-cooldown + varighet),
+   Krigstromme (fart + skade), Fekthanske (krit + prosjektilfart), Tiggerskål (+gull), Narremaske (XP + område)
+3) 3 nye kombinasjoner (12 totalt): Relikvie+Rosenkrans=Katedralens velsignelse (+1 aegis, +1 HP/s),
+   Tromme+Fekthanske=Kavaleriets marsj (fart, skade og krit), Tiggerskål+Narremaske=Gatekunstnerens hatt
+   (+40 % gull, +15 % XP, +1 reroll)
+
 g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpthread -ldl -lrt -lX11 -lXrandr -lXi -lXinerama -lXcursor -o tlj

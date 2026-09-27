@@ -260,7 +260,7 @@ int main() {
         player.bonusRerolls = 0;
         for (int& l : player.itemLevels) l = 0;
         player.items.clear();
-        worldChestTimer = 40.0f; // Første kiste dukker opp etter 40 sek
+        worldChestTimer = 75.0f; // Første kiste dukker opp etter 75 sek
         player.combos.clear();
         player.critMultiplier = 2.0f;
         sceptersPending = 0;
@@ -779,12 +779,12 @@ int main() {
             if (!inBossArena) {
                 worldChestTimer -= deltaTime;
                 if (worldChestTimer <= 0.0f) {
-                    worldChestTimer = 80.0f / player.luck;
+                    worldChestTimer = 150.0f / player.luck; // Sjelden: items skal være verdt å tenke over
                     float a = GetRandomValue(0, 628) / 100.0f;
                     float d = (float)GetRandomValue(380, 620);
                     Vector2 pos = { player.position.x + cosf(a) * d, player.position.y + sinf(a) * d };
                     ResolvePillarCollision(pos, 40.0f, pos, 0.0f); // Ikke inni pynten eller muren
-                    int tier = GetRandomValue(1, 100) <= (int)(20.0f * player.luck) ? 2 : 1; // Av og til en sølvkiste
+                    int tier = GetRandomValue(1, 100) <= (int)(10.0f * player.luck) ? 2 : 1; // Av og til en sølvkiste
                     pickups.push_back({ pos, tier, GOLD, 14.0f, 0.0f, PickupType::CHEST });
                     VfxShockwave(pos, 80.0f, GOLD);
                 }
