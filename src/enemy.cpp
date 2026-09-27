@@ -64,7 +64,7 @@ void Enemy::drawVfx() const {
 
 void Enemy::makeElite() {
     elite = true;
-    modelScale = 1.45f;
+    modelScale = 1.3f; // Sammen med ENEMY_VISUAL_SCALE: godt over 2x vanlig størrelse
     hp *= 4;
     maxHp = hp;
     damage = (int)(damage * 1.5f);

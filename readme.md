@@ -395,3 +395,11 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
    Narrebjeller 2.6 -> 4.5, Ildsluker 2.4 -> 4.2, Trefork 1 -> 1.6, Ground Slam 2 -> 3.2,
    Dolk 0.4 -> 0.8, osv. Cooldown-reduksjon fra items og shop er begrenset til maks -35 %.
 3) Mindre XP: hvert level krever ca. 40 % mer XP, og hordefiender gir 30 % XP (før 40 %).
+
+// 26 oktober – katapulten er en sjelden storhendelse, ingen skjermristing, større fiender
+1) Katapult: 30 sek cooldown (før 7), men 900 skade per stein. Maks 3 steiner fra levels
+   (før 5), og Kongelig bombardement gir +2 steiner og -15 % cooldown (før +4 og -30 %).
+2) Abilities og eksplosjoner rister ikke lenger skjermen. Bare når du selv blir truffet og ved store
+   boss-øyeblikk, og da bare litt (maks 35 % av det gamle).
+3) Fiendene tegnes 60 % større (før 20 %). Elites er litt mindre forstørret enn før (så de ikke
+   blir like store som minibosser), og minibossene er større (2.9).

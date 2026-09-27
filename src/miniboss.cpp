@@ -23,7 +23,7 @@ void setupMiniboss(Enemy& e, const char* title, int index, float hpMult, float d
     e.hp = e.maxHp = (int)(hpByIndex[index < 3 ? index : 2] * hpMult);
     e.damage = (int)(baseDamage * (1.0f + 0.3f * index) * damageMult);
     e.xpValue = 400 + 300 * index;
-    e.modelScale = 2.3f;
+    e.modelScale = 2.9f; // Tydelig større enn elites
     e.hitRadius *= 2.1f;
     e.knockbackScale = 0.08f;
     e.goldChance = 0.0f;

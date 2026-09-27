@@ -149,7 +149,6 @@ void MeleeWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::uniq
 
     damageEnemiesInRadius(playerPos, radius(), scaledDamage(), color, false, enemies, pickups);
     VfxShockwave(playerPos, radius(), color);
-    AddCameraShake(0.3f);
     effectTimer = 0.3f;
     fireTimer = 0.0f;
 }
@@ -556,7 +555,6 @@ void LightningWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
         Vector3 sky = { pos.x + (float)GetRandomValue(-20, 20), 420.0f, pos.y + (float)GetRandomValue(-20, 20) };
         bolts.push_back({ pos, area(), BOLT_TIME, BOLT_TIME, jaggedLine(sky, ToWorld3D(pos, 0.0f), 8, 16.0f) });
         VfxLightningStrike(pos, area());
-        AddCameraShake(0.12f);
 
         // Kjeden: hopper videre til nye fiender, svakere for hvert hopp
         queueNextJump(pos, dmg * stats.bounceFalloff, stats.bounces, hitIds, enemies);

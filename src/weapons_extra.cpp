@@ -303,7 +303,6 @@ void FrostNovaWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::
         shards.push_back({ { playerPos.x + cosf(a) * d, playerPos.y + sinf(a) * d }, 0.8f, frandf(10.0f, 16.0f), frandf(0, 360) });
     }
     VfxFrost(playerPos, radius());
-    AddCameraShake(0.15f);
     PlaySfxPitch(Sfx::ZAP, 0.6f);
     flashTimer = 0.35f;
     fireTimer = 0.0f;
@@ -366,7 +365,6 @@ void CatapultWeapon::tick(float deltaTime, Vector2 playerPos, std::vector<std::u
             damageEnemiesInRadius(b.target, area(), b.damage, Color{ 255, 190, 110, 255 }, false, enemies, pickups);
             VfxExplosion(b.target, area() * 0.8f);
             VfxShockwave(b.target, area(), Color{ 200, 170, 130, 255 });
-            AddCameraShake(0.22f);
             PlaySfx(Sfx::EXPLOSION);
             boulders[i] = boulders.back();
             boulders.pop_back();

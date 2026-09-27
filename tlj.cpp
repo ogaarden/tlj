@@ -813,7 +813,7 @@ int main() {
                         continue;
                     }
                     c.countdown -= deltaTime;
-                    AddCameraShake(0.05f);
+                    AddCameraShake(0.01f);
                     if (c.countdown > 0.0f) { i++; continue; }
 
                     MinibossKind kind = minibossOrder[minibossesSpawned % minibossOrder.size()];

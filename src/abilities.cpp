@@ -234,7 +234,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
 
     defs.push_back({
         AbilityId::CATAPULT, "Katapult", "Steinblokker faller ned fra himmelen paa fiendene.", Color{ 200, 170, 130, 255 },
-        { .damage = 340.0f, .cooldown = 7.0f, .projectiles = 1, .radius = 520.0f /* rekkevidde */, .area = 70.0f },
+        { .damage = 900.0f, .cooldown = 30.0f, .projectiles = 1, .radius = 520.0f /* rekkevidde */, .area = 70.0f },
         {
             addProjectiles(1, "+1 stein"),
             damageMult(1.3f, "+30% skade"),
@@ -243,7 +243,7 @@ std::vector<AbilityDefinition> buildDefinitions() {
             addProjectiles(1, "+1 stein"),
             damageMult(2.0f, "2x skade"),
             { "+20 eksplosjonsradius", [](AbilityStats& s) { s.area += 20.0f; } },
-            addProjectiles(2, "+2 steiner"),
+            damageMult(1.5f, "+50% skade"),
         }
     });
 
@@ -425,8 +425,8 @@ const std::vector<ScepterData>& scepterUpgrades() {
           [](AbilityStats& s) { s.projectiles += 10; s.pierce += 2; s.damage *= 1.4f; } },
         { { AbilityId::FROST_NOVA, "Evig vinter", "Fiender nesten fryser fast, +60 radius, 2x skade og +2 sek frost", Color{ 220, 245, 255, 255 } },
           [](AbilityStats& s) { s.effect = 0.85f; s.radius += 60.0f; s.damage *= 2.0f; s.duration += 2.0f; } },
-        { { AbilityId::CATAPULT, "Kongelig bombardement", "+4 gullsteiner, +30 eksplosjonsradius, +50% skade, -30% cooldown", Color{ 255, 200, 80, 255 } },
-          [](AbilityStats& s) { s.projectiles += 4; s.area += 30.0f; s.damage *= 1.5f; s.cooldown *= 0.7f; } },
+        { { AbilityId::CATAPULT, "Kongelig bombardement", "+2 gullsteiner, +30 eksplosjonsradius, +50% skade, -15% cooldown", Color{ 255, 200, 80, 255 } },
+          [](AbilityStats& s) { s.projectiles += 2; s.area += 30.0f; s.damage *= 1.5f; s.cooldown *= 0.85f; } },
         { { AbilityId::BELLS, "Dommedagsklokker", "+2 ringer, 2x skade, +80 rekkevidde og kraftig dytt", Color{ 255, 140, 220, 255 } },
           [](AbilityStats& s) { s.projectiles += 2; s.damage *= 2.0f; s.radius += 80.0f; s.effect += 200.0f; } },
         { { AbilityId::SPOTLIGHT, "Primadonna", "+2 straaler, 2x skade, +60 lengde og raskere treff", Color{ 255, 160, 240, 255 } },

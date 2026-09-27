@@ -35,7 +35,6 @@ void SpawnMortarShell(Vector2 from, Vector2 to, float flightTime, float radius, 
 void SpawnExplosion(Vector2 position, float radius, float damage) {
     explosions.push_back({ position, radius, damage, EXPLOSION_ANIM_TIME, false });
     VfxExplosion(position, radius);
-    AddCameraShake(0.45f);
     PlaySfx(Sfx::EXPLOSION);
 }
 

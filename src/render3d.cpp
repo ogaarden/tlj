@@ -112,7 +112,9 @@ Camera3D MakeGameCamera(Vector2 focus, float yawDegrees) {
 }
 
 void AddCameraShake(float amount) {
-    shakeTrauma = fminf(1.0f, shakeTrauma + amount);
+    // Lite og sjeldent: bare når du selv blir truffet og ved store boss-øyeblikk.
+    // Abilities og eksplosjoner rister IKKE skjermen (det ble for mye med mange samtidig).
+    shakeTrauma = fminf(0.35f, shakeTrauma + amount * 0.5f);
 }
 
 void UpdateCameraShake(float deltaTime) {

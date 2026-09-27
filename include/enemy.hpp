@@ -32,7 +32,7 @@ void ClearEnemyShots();
 
 // Fiendene tegnes litt større enn hitboksen tilsier, så de synes (og ser farlige ut) med
 // kameraet så langt unna. Påvirker bare tegningen, ikke treff.
-constexpr float ENEMY_VISUAL_SCALE = 1.2f;
+constexpr float ENEMY_VISUAL_SCALE = 1.6f;
 
 class Enemy {
 private:
