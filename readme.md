@@ -403,3 +403,10 @@ g++ tlj.cpp src/*.cpp -Iinclude -Iraylib/src -Lraylib/src -lraylib -lGL -lm -lpt
    boss-øyeblikk, og da bare litt (maks 35 % av det gamle).
 3) Fiendene tegnes 60 % større (før 20 %). Elites er litt mindre forstørret enn før (så de ikke
    blir like store som minibosser), og minibossene er større (2.9).
+
+// 27 oktober – tanky fiender
+1) Alle vanlige fiender har 2.3x HP (Difficulty::BASE_HP i spawner.cpp), så de rekker å følge etter
+   deg en stund i stedet for å dø med én gang. Eksempler ved start: lakei 92, soldat ca. 600,
+   troll ca. 2500. Skattmesteren er unntatt (han rømmer, så han må kunne tas).
+2) HP stiger raskere med tiden: x1.7 ved 2 min, x3.4 ved 5 min, x8 ved 10 min (før x6.8).
+3) Minibosser 26 000 / 60 000 / 110 000 HP, Kongen 250 000 (før 150 000).

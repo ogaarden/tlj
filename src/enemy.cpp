@@ -408,7 +408,7 @@ Boss::Boss(Vector2 spawnPos, Texture2D tex) {
     position = spawnPos;
     speed = 150.0f;
     // Sluttbossen: skal ta 1-2 minutter med et godt build. Echelon-effekter legges på i tillegg.
-    hp = 150000;
+    hp = 250000;
     maxHp = hp;
     damage = 45;
     xpValue = 0;

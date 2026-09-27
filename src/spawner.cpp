@@ -34,8 +34,13 @@ namespace Difficulty {
         return n >= 6 ? s * 0.85f : s;
     }
 
-    // Fiender blir sterkere jo lenger runden varer (m = minutter)
-    float hpMult(float m)     { return 1.0f + 0.18f * m + 0.04f * m * m; }   // 10 min: x6.8
+    // Alle vanlige fiender tåler så mye at de rekker å følge etter deg en stund (ingen one-shots).
+    // Ganges med HP-en i hver fiendes konstruktør.
+    constexpr float BASE_HP = 2.3f;
+
+    // Fiender blir sterkere jo lenger runden varer (m = minutter). Stiger raskere tidlig enn før,
+    // så levelene dine ikke løper fra fiendene.
+    float hpMult(float m)     { return 1.0f + 0.25f * m + 0.045f * m * m; }  // 2 min: x1.7, 5 min: x3.4, 10 min: x8
     float damageMult(float m) { return 1.0f + 0.14f * m; }                   // 10 min: x2.4
     float speedMult(float m)  { return fminf(1.45f, 1.0f + 0.035f * m); }    // 10 min: +35 %, maks +45 %
 
@@ -392,7 +397,8 @@ void WaveSpawner::spawnEnemy(EnemyType type, Vector2 spawnPos, std::vector<std::
     if (decree == Decree::MUSTER || decree == Decree::DARKNESS) xpMult *= 1.5f;
     float decreeHp = decree == Decree::GOLD_RAIN ? 1.4f : 1.0f;
     float decreeDamage = decree == Decree::BLOOD_MOON ? 1.5f : 1.0f;
-    enemy->applyEchelonModifiers(modifiers.enemyHpMult * Difficulty::hpMult(m) * decreeHp,
+    float baseHp = type == EnemyType::TREASURER ? 1.0f : Difficulty::BASE_HP; // Skattmesteren rømmer, han skal kunne tas
+    enemy->applyEchelonModifiers(modifiers.enemyHpMult * baseHp * Difficulty::hpMult(m) * decreeHp,
                                  modifiers.enemyDamageMult * Difficulty::damageMult(m) * decreeDamage,
                                  modifiers.enemySpeedMult * Difficulty::speedMult(m));
     // Mindre XP per fiende sent i runden (det kommer så mange flere). Tilfeldig avrunding,
